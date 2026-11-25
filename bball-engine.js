@@ -482,7 +482,16 @@ function bbSnapshot(C){const arc=get(C.arc,{})||{},d=today(),day=arc[d]||(arc[d]
   if(ch){Object.keys(arc).sort().slice(0,-(C.sp==='ncaab'?60:120)).forEach(k=>delete arc[k]);set(C.arc,arc);}}
 function bbArchiveFinals(C){const arc=get(C.arc,{})||{},d=today(),day=arc[d];let ch=false;
   if(day)C.games.forEach(g=>{if(g.abstract!=='post'||g.awayScore==null)return;const r=day.rows.find(x=>x.gid===g.id);if(!r||r.final)return;r.final={a:+g.awayScore,h:+g.homeScore,h1a:g.h1a,h1h:g.h1h};ch=true;});
+  try{if(bbArchiveFromRes(C,arc))ch=true;}catch(e){}
   if(ch)set(C.arc,arc);bbRecordResults(C,C.games);if(ch)try{brainLearn(C.sp);}catch(e){}}
+/* v3.5.21 · whole days of the archive never got their finals (the board wasn't open after those games: 49 NBA picks, 225 college
+   ones by Nov 24), so the record, the Brain's history and the Calibration screen were missing them. The engine's own results
+   ledger has nearly all of those finals, by game id: filled from there, the teams checked. */
+function bbArchiveFromRes(C,arc){let R=null;try{R=roGet(C.res,{})||{};}catch(e){}if(!R)return 0;let n=0;
+  Object.keys(arc).forEach(d=>((arc[d]&&arc[d].rows)||[]).forEach(r=>{if(!r||r.final||r.gid==null)return;const x=R[String(r.gid)];if(!Array.isArray(x)||x.length<5)return;
+    const [a,h]=String(r.game||'').split('@');if(x[1]!==a||x[2]!==h)return;const A=+x[3],H=+x[4];if(!isFinite(A)||!isFinite(H)||A+H<=0)return;
+    r.final={a:A,h:H,h1a:x[6]!=null?x[6]:undefined,h1h:x[7]!=null?x[7]:undefined};r.fr=1;n++;}));
+  return n;}
 function bbArchiveBackfill(C,G){const arc=get(C.arc,{})||{};const by={};G.forEach(g=>{by[g.id]=g;});let n=0;
   Object.keys(arc).forEach(d=>(arc[d].rows||[]).forEach(r=>{if(r.final)return;const g=by[String(r.gid)];if(!g||g.abstract!=='post'||g.awayScore==null)return;r.final={a:+g.awayScore,h:+g.homeScore,h1a:g.h1a,h1h:g.h1h};n++;}));
   if(n){set(C.arc,arc);try{brainLearn(C.sp);}catch(e){}}return n;}

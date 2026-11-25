@@ -38,7 +38,8 @@ setTimeout(() => { try {
   T('…a tie (football) with both teams: "Calls it ATL 24–24 CHI"', strip(scoreCall({ game: 'ATL@CHI', sc: { X: [24, 24] } }, 'X')) === 'Calls it ATL 24–24 CHI');
   T('…and 🎯 dead on once it graded exact', /🎯 dead on/.test(scoreCall(g, 'Judge')) && !/dead on/.test(scoreCall(g, 'Coach')));
   T('…nothing when a character has no score call', scoreCall(g, 'Covers') === '' && scoreCall({ game: 'A@B' }, 'X') === '');
-  T('the "Who\'s with it" rows carry it under each character\'s name and confidence', /\$\{scoreCall\(b, c\.v\)\}\$\{sayBadge\(c\.r\)\}/.test(src) && /\.won \.scc\{grid-column:1\/-1/.test(fs.readFileSync(path.join(W, 'desk/app.css'), 'utf8')));
+  /* v68 put the character's quote between the score call and its badge, so the row only has to carry both, in that order */
+  T('the "Who\'s with it" rows carry it under each character\'s name and confidence', /\$\{scoreCall\(b, c\.v\)\}.*\$\{sayBadge\(c\.r\)\}/.test(src) && /\.won \.scc\{grid-column:1\/-1/.test(fs.readFileSync(path.join(W, 'desk/app.css'), 'utf8')));
   T('…and the panel says so when the board has them', /and the final score it calls/.test(src));
   const idx = fs.readFileSync(path.join(W, 'desk/index.html'), 'utf8'), sw = fs.readFileSync(path.join(W, 'desk/sw.js'), 'utf8');
   const v = (idx.match(/app\.js\?v=(\d+)/) || [])[1], cv = (idx.match(/app\.css\?v=(\d+)/) || [])[1];

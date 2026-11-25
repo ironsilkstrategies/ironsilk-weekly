@@ -4311,9 +4311,11 @@ if(typeof window!=='undefined'&&(window.__PAGE_SPORT__==='nfl'||window.__PAGE_SP
 function renderFootballRecord(sport){
   const nfl=sport==='nfl';
   try{fbSnapshot(sport);fbGrade(sport);}catch(e){console.warn('fb grade',e)}
-  const nav=document.getElementById('gradeNav');
-  if(nav)nav.innerHTML=`<button class="on">${nfl?'🏈 NFL':'🏟 CFB'} record</button>`;
+  /* v3.5.21 · a Calibration tab beside the record (spCalHtml in shared.js) */
+  if(typeof spGradeNav==='function')spGradeNav(sport,`${nfl?'🏈 NFL':'🏟 CFB'} record`);
+  else{const nav=document.getElementById('gradeNav');if(nav)nav.innerHTML=`<button class="on">${nfl?'🏈 NFL':'🏟 CFB'} record</button>`;}
   const body=document.getElementById('gradeBody');if(!body)return;
+  if(typeof SPGRADE_TAB!=='undefined'&&SPGRADE_TAB==='calib'&&typeof spCalHtml==='function'){body.innerHTML=spCalHtml(sport);return;}
   const arc=get(nfl?LS.nflarc:'d4.ncaafarc',{});
   const weeks=Object.keys(arc).filter(k=>arc[k]&&Array.isArray(arc[k].rows)).sort().reverse();
   const T={spread:{W:0,L:0,P:0,u:0},total:{W:0,L:0,P:0,u:0},ml:{W:0,L:0,P:0,u:0}};

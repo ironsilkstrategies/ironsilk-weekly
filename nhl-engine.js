@@ -689,8 +689,10 @@ function nhlArchiveFinals(){
   try{brainLearn('nhl')}catch(e){console.warn('nhl brain',e)}
 }
 function renderNHLRecord(){
-  const nav=document.getElementById('gradeNav');if(nav)nav.innerHTML='<button class="on">🏒 NHL record</button>';
+  /* v3.5.21 · a Calibration tab beside the record (spCalHtml in shared.js) */
+  if(typeof spGradeNav==='function')spGradeNav('nhl','🏒 NHL record');else{const nav=document.getElementById('gradeNav');if(nav)nav.innerHTML='<button class="on">🏒 NHL record</button>';}
   const body=document.getElementById('gradeBody');if(!body)return;
+  if(typeof SPGRADE_TAB!=='undefined'&&SPGRADE_TAB==='calib'&&typeof spCalHtml==='function'){body.innerHTML=spCalHtml('nhl');return;}
   const arc=get(NHL_LS.arc,{});const T={ml:{W:0,L:0,P:0,u:0},total:{W:0,L:0,P:0,u:0},spread:{W:0,L:0,P:0,u:0}};let pend=0;
   Object.values(arc).forEach(D=>(D.rows||[]).forEach(r=>(r.picks||[]).forEach(p=>{
     if(!r.final){pend++;return;}const a=r.final.a,h=r.final.h;let res=null;

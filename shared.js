@@ -1890,6 +1890,60 @@ function brainWeight(b,sp,src){
   const pr=BR_CFG[sp].prior[src],s=b.src[src]||{n:0,se:0},n0=8;
   const mse=(n0*pr*pr+s.se)/(n0+s.n);return{w:1/mse,rmse:Math.sqrt(mse),n:Math.round(s.n)};
 }
+/* ═══ v3.5.21 · CALIBRATION FOR EVERY SPORT ═══════════════════════════════════════════════════════════════════════════════════
+   Nov 25, 12:22 AM, Chris: "My calibration machine is only doing baseball for full calibration?!" Every sport was learning through
+   this Brain, out of sight, and replaying every game it has ruled on (196 NBA, 677 college basketball, 356 NHL, 100 NFL, 426 college
+   football, each judged only on the games before it) showed two things wrong with how it learned:
+   · THE WEIGHTS. Each witness was weighed by its own miss alone, and a game's randomness hits the sim and the line together, so the
+     two looked about equally good and the sim got about half the say everywhere. What counts is what a witness adds that the line
+     doesn't already have (Bates & Granger 1969, with the misses' correlation): on basketball and football the sim's misses added
+     nothing, on hockey it reads part of what the line misses. Weighed that way, margin and total apart, replayed game by game:
+     college basketball's margin miss 10.34 → 9.90 points, college football's 10.86 → 10.32, NBA 10.79 → 10.67, NFL 9.11 → 8.99,
+     hockey a wash (2.13 → 2.15 goals; the sim keeps 40% of the margin say and half the total's there).
+   · THE CORRECTIONS. Team memory made the miss bigger in every sport; a league-wide drift correction took the lean out of totals
+     but not the miss. Both keep learning, every graded game scores each one on the numbers frozen at lock (with it vs without it),
+     and each switches on only once it proves it shrinks the miss (60+ games, z ≥ 1.5; off again under 0.5). */
+const BR_CV={dec:0.99,k:30,p0:0.3,cap:0.9};   /* ~100-game memory; starts at the line 70 / witness 30 and needs ~30 games of proof to move halfway */
+const BR_GATE={n:60,on:1.5,off:0.5,dec:0.995};
+const BR_DRIFT_CAP={nba:4,ncaab:4,nhl:0.3,nfl:3,ncaaf:3,mlb:0};   /* MLB's sim carries its own drift correction (d4.drift) */
+/* a witness's share against the line, for margins ('mar') or totals ('tot'): its misses' part the line didn't have, least squares */
+function brainCvW(b,comp,src){const o=((b&&b.cv)||{})[comp];const x=o&&o[src];if(!x||!(x.den>0)||!(x.n>0))return BR_CV.p0;
+  /* the least-squares share, held to 0–100% first (a handful of games can say 300%), then pulled to the prior by n/(n+30) */
+  const raw=Math.max(0,Math.min(1,x.num/x.den)),lam=x.n/(x.n+BR_CV.k);return lam*raw+(1-lam)*BR_CV.p0;}
+function brainCvLearn(b,w,aa,ah){const m=(w||[]).find(x=>x&&x.src==='market');if(!m||m.a==null||m.h==null)return false;let did=false;
+  const C=b.cv||(b.cv={mar:{},tot:{}});C.mar=C.mar||{};C.tot=C.tot||{};const mM=m.h-m.a,mT=m.h+m.a,yM=(ah-aa)-mM,yT=(ah+aa)-mT;
+  (w||[]).forEach(x=>{if(!x||x.src==='market'||x.a==null||x.h==null||!isFinite(+x.a)||!isFinite(+x.h))return;
+    [['mar',(x.h-x.a)-mM,yM],['tot',(x.h+x.a)-mT,yT]].forEach(([c,d,y])=>{const o=C[c][x.src]||(C[c][x.src]={n:0,num:0,den:0});
+      o.n=o.n*BR_CV.dec+1;o.num=o.num*BR_CV.dec+d*y;o.den=o.den*BR_CV.dec+d*d;});did=true;});
+  return did;}
+/* is a correction earning its place? paired misses (with it − without it), recent-weighted; hysteresis so it doesn't flicker */
+function brainGateZ(o){if(!o||!(o.n>0))return 0;const m=o.s/o.n,v=Math.max(1e-9,o.q/o.n-m*m);return -m/Math.sqrt(v/o.n);}
+function brainGateOn(b,k){const o=((b&&b.sh)||{})[k];return!!(o&&o.on);}
+function brainGateAdd(b,k,d){const S=b.sh||(b.sh={});const o=S[k]||(S[k]={n:0,s:0,q:0,on:0,N:0});o.n=o.n*BR_GATE.dec+1;o.s=o.s*BR_GATE.dec+d;o.q=o.q*BR_GATE.dec+d*d;o.N=(o.N||0)+1;
+  const z=Math.max(-99,Math.min(99,brainGateZ(o)));o.z=+z.toFixed(2);o.on=o.N>=BR_GATE.n&&(o.on?z>BR_GATE.off:z>=BR_GATE.on)?1:0;}
+/* the league-wide lean of the totals, half to each side; learned on the projection before any correction */
+function brainDrift(b,sp){const L=b&&b.lg,cap=BR_DRIFT_CAP[sp]||0;if(!L||!(L.n>=40)||!cap)return 0;return Math.max(-cap,Math.min(cap,L.r*L.n/(L.n+40)))/2;}
+/* every graded ruling a sport has kept, oldest first: {d (sortable), lab (day or week), game, J, aa, ah} */
+function brainGraded(sp){const out=[];
+  const push=(d,lab,game,J,F)=>{if(!J||J.a==null||J.h==null||!F||F.a==null||F.h==null||F.a===''||F.h==='')return;const aa=+F.a,ah=+F.h;if(!isFinite(aa)||!isFinite(ah)||!game)return;out.push({d,lab,game,J,aa,ah});};
+  try{if(sp==='nhl'||sp==='nba'||sp==='ncaab'){const arc=roGet(sp==='nhl'?'d4.nhlarc':'d4.'+sp+'arc',{})||{};
+      Object.keys(arc).forEach(d=>((arc[d]||{}).rows||[]).forEach(r=>push(d,d,r.game,r.judge,r.final)));}
+    else if(sp==='nfl'||sp==='ncaaf'){const arc=roGet(sp==='nfl'?LS.nflarc:'d4.ncaafarc',{})||{};
+      Object.keys(arc).forEach(wk=>{const A=arc[wk];if(!A||!Array.isArray(A.rows)||!A.finals||typeof A.finals!=='object')return;
+        const wl=/^w\d{4}-(\d+)$/.test(wk)?'Week '+wk.replace(/^w\d{4}-/,''):wk;
+        A.rows.forEach(r=>{const d=r.pickedAt?new Date(+r.pickedAt).toISOString().slice(0,10):(/^\d{4}-\d{2}-\d{2}$/.test(wk)?wk:'');if(!d)return;push(d,wl,r.game,r.judge,A.finals[r.id]);});});}
+    else if(sp==='mlb'){const L=roGet('d4.mlbjudge',{})||{},arc=roGet(LS.arc,{})||{};
+      Object.keys(L).forEach(d=>{const fin=(arc[d]&&arc[d].finals)||{};Object.entries(L[d]||{}).forEach(([gid,J])=>push(d,d,J&&J.game,J,fin[gid]));});}}catch(e){}
+  out.sort((x,y)=>x.d<y.d?-1:x.d>y.d?1:0);return out;}
+/* first run of v3.5.21: the new weights and the drift learn from everything already graded, so they start where the record is.
+   Nothing graded on this device yet (or the archive not loaded yet) → not marked done, so it tries again next time. */
+function brainCvSeed(sp,b){if(b.cv&&b.cv.seeded)return false;const G=brainGraded(sp);if(!G.length)return false;b.cv={mar:{},tot:{}};b.lg={n:0,r:0};let n=0;
+  G.forEach(x=>{if(brainCvLearn(b,x.J.w,x.aa,x.ah))n++;const L=b.lg;const base=x.J.j0?x.J.j0.a+x.J.j0.h:x.J.a+x.J.h;
+    L.n=Math.min(L.n+1,400);L.r=L.r+(((x.aa+x.ah)-base)-L.r)/Math.min(L.n,60);});
+  b.cv.seeded=1;b.cv.from=n;return true;}
+/* …and as soon as a sport's page opens, not only at its first graded final (today's rulings lock before tonight's finals) */
+try{if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__)setTimeout(()=>{try{const sp=typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:null;
+  if(sp&&BR_CFG[sp]&&!((brainGetRO(sp).cv||{}).seeded)){const b=brainGet(sp);if(brainCvSeed(sp,b))brainPut(sp,b);}}catch(e){}},6000);}catch(e){}
 function brainNorm(z){const t=1/(1+0.2316419*Math.abs(z)),d=0.3989423*Math.exp(-z*z/2);
   const p=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p;}
 function brainProbit(p){let lo=-6,hi=6;for(let i=0;i<60;i++){const m=(lo+hi)/2;if(brainNorm(m)<p)lo=m;else hi=m;}return(lo+hi)/2;}
@@ -1937,15 +1991,30 @@ function brainJudge(g,s,sport){
   const p=typeof predFor==='function'?predFor(sport,k):null;if(p)W.push({src:'pred',a:+p.a,h:+p.h});
   if(!W.length)return null;
   let sw=0,A=0,H=0;W.forEach(x=>{x.wt=brainWeight(b,sport,x.src);sw+=x.wt.w;A+=x.wt.w*x.a;H+=x.wt.w*x.h;});
+  const mk0=W.find(x=>x.src==='market');
+  if(mk0&&W.length>1){
+    /* v3.5.21 · with a line on the board: each witness's share against the line, margins and totals apart (see BR_CV) */
+    const oth=W.filter(x=>x!==mk0),wM={},wT={};oth.forEach(x=>{wM[x.src]=brainCvW(b,'mar',x.src);wT[x.src]=brainCvW(b,'tot',x.src);});
+    [wM,wT].forEach(o=>{const s=Object.values(o).reduce((a,v)=>a+v,0);if(s>BR_CV.cap)Object.keys(o).forEach(k=>{o[k]*=BR_CV.cap/s;});});
+    const mM=mk0.h-mk0.a,mT=mk0.h+mk0.a;let M=mM,T=mT;oth.forEach(x=>{M+=wM[x.src]*((x.h-x.a)-mM);T+=wT[x.src]*((x.h+x.a)-mT);});
+    A=(T-M)/2;H=(T+M)/2;
+    mk0.shm=1-Object.values(wM).reduce((a,v)=>a+v,0);mk0.sht=1-Object.values(wT).reduce((a,v)=>a+v,0);oth.forEach(x=>{x.shm=wM[x.src];x.sht=wT[x.src];});
+    W.forEach(x=>{x.share=(x.shm+x.sht)/2;});
+  }else{
   /* Forecast-combination puzzle (Stock & Watson 2004; Timmermann 2006): estimated
      weights carry estimation error, and equal weights usually win until the sample
-     is large. Shrink each learned share toward 1/n by λ = 30/(30 + games graded). */
+     is large. Shrink each learned share toward 1/n by λ = 30/(30 + games graded).
+     v3.5.21 · only when there's no line to weigh against (the sim alone, or the sim and an uploaded prediction). */
   {const nG=Math.min(...W.map(x=>x.wt.n||0)),lam=30/(30+nG),eq=1/W.length;A=0;H=0;
     W.forEach(x=>{x.share=(1-lam)*(x.wt.w/sw)+lam*eq;A+=x.share*x.a;H+=x.share*x.h;});}
-  const led={wA:A,wH:H};
+  }
+  const led={wA:A,wH:H},j0={a:A,h:H};
   const tm=(ab,f)=>{const r=(b.team[ab]||{})[f];return r&&r.n?r.r*r.n/(r.n+6):0;};
-  const memA=(tm(g.away.abbr,'off')+tm(g.home.abbr,'def'))/2,memH=(tm(g.home.abbr,'off')+tm(g.away.abbr,'def'))/2;
-  A+=memA;H+=memH;
+  /* v3.5.21 · team memory and the league drift are worked out every game, applied only while their gate is open */
+  const memA0=(tm(g.away.abbr,'off')+tm(g.home.abbr,'def'))/2,memH0=(tm(g.home.abbr,'off')+tm(g.away.abbr,'def'))/2;
+  const onMem=brainGateOn(b,'mem'),onDr=brainGateOn(b,'dr'),dr0=brainDrift(b,sport);
+  const memA=onMem?memA0:0,memH=onMem?memH0:0,drA=onDr?dr0:0;
+  A+=memA+drA;H+=memH+drA;led.drA=drA;
   const tr=brainTrendEvidence(g,sport),tU=brainUse(b.trend);
   led.tA=tU*(tr.dTot/2-tr.dMar/2);led.tH=tU*(tr.dTot/2+tr.dMar/2);A+=led.tA;H+=led.tH;
   const mo=brainMoney(g,sport),mU=brainUse(b.money);
@@ -1967,6 +2036,7 @@ function brainJudge(g,s,sport){
   const bias=st=>{const x=(b.box||{})[st];return x&&x.n>=3?Math.max(0.8,Math.min(1.2,x.ratio)):1;};
   return{a:+A.toFixed(sport==='mlb'||sport==='nhl'?2:1),h:+H.toFixed(sport==='mlb'||sport==='nhl'?2:1),final:[fa,fh],sd:+sd.toFixed(1),pHome,close,blowH,blowA,
     witnesses:W,mem:{a:+memA.toFixed(1),h:+memH.toFixed(1)},trend:tr,tU,money:mo,mU,disputes,ledger:{...led,memA,memH},
+    j0:{a:+j0.a.toFixed(2),h:+j0.h.toFixed(2)},memRaw:{a:+memA0.toFixed(2),h:+memH0.toFixed(2)},dr:+dr0.toFixed(2),on:{mem:onMem?1:0,dr:onDr?1:0},
     box:brainBoxFit(AD.box(A,H,bias),fa,fh),boxRaw:AD.box(A,H,()=>1)};
 }
 /* The box table must agree with the headline: football PTS and quarters are
@@ -1979,14 +2049,27 @@ function brainBoxFit(box,fa,fh){if(!box||!box.away)return box;
   return box;}
 /* The part of a ruling that gets locked at kickoff and graded later. */
 function brainLockable(J){return{a:J.a,h:J.h,w:J.witnesses.map(w=>({src:w.src,a:w.a,h:w.h})),
-  tMar:J.tU*J.trend.dMar,tTot:J.tU*J.trend.dTot,money:J.money&&J.money.side||0,box:J.boxRaw};}
+  tMar:J.tU*J.trend.dMar,tTot:J.tU*J.trend.dTot,money:J.money&&J.money.side||0,box:J.boxRaw,
+  /* v3.5.21 · frozen with the ruling so each correction is graded later on exactly what it would have added */
+  ...(J.j0?{j0:J.j0,mem:J.memRaw,dr:J.dr,on:J.on}:{})};}
 /* One learning step from one graded game — shared by every sport. */
 function brainLearnOne(sport,b,game,J,aa,ah,actualBox){
   (J.w||[]).forEach(w=>{const e2=(((w.h-w.a)-(ah-aa))**2+((w.h+w.a)-(ah+aa))**2)/2;
     const s=b.src[w.src]||(b.src[w.src]={n:0,se:0});s.se=s.se*0.985+e2;s.n=s.n*0.985+1;}); // ~66-game memory
+  try{brainCvLearn(b,J.w,aa,ah);}catch(e){}   /* v3.5.21 · the weights against the line */
+  /* v3.5.21 · memory learns what the projection missed BEFORE any memory (it used to chase its own correction), and each
+     correction is scored on the numbers frozen at lock: the miss with it against the miss without it */
+  const j0=J.j0&&isFinite(+J.j0.a)&&isFinite(+J.j0.h)?{a:+J.j0.a,h:+J.j0.h}:null;
+  const dr=j0&&isFinite(+J.dr)?+J.dr:0,drOn=!!(J.on&&J.on.dr);
+  const baseA=j0?j0.a+(drOn?dr:0):J.a,baseH=j0?j0.h+(drOn?dr:0):J.h;
   const [ga,gh]=game.split('@');const upd=(ab,f,res)=>{const T=b.team[ab]||(b.team[ab]={});const o=T[f]||(T[f]={n:0,r:0});
     o.n=Math.min(o.n+1,40);o.r=o.r+(res-o.r)/Math.min(o.n,8);};
-  upd(ga,'off',aa-J.a);upd(gh,'off',ah-J.h);upd(ga,'def',ah-J.h);upd(gh,'def',aa-J.a);
+  upd(ga,'off',aa-baseA);upd(gh,'off',ah-baseH);upd(ga,'def',ah-baseH);upd(gh,'def',aa-baseA);
+  if(j0){const miss=(x,y)=>(Math.abs((y-x)-(ah-aa))+Math.abs((y+x)-(ah+aa)))/2,e0=miss(j0.a,j0.h);
+    const mA=J.mem&&isFinite(+J.mem.a)?+J.mem.a:0,mH=J.mem&&isFinite(+J.mem.h)?+J.mem.h:0;
+    if(mA||mH)brainGateAdd(b,'mem',miss(j0.a+mA,j0.h+mH)-e0);
+    if(dr)brainGateAdd(b,'dr',miss(j0.a+dr,j0.h+dr)-e0);}
+  {const L=b.lg||(b.lg={n:0,r:0});const base=j0?j0.a+j0.h:J.a+J.h;L.n=Math.min(L.n+1,400);L.r=L.r+(((aa+ah)-base)-L.r)/Math.min(L.n,60);}
   const res=(ah-aa)-(J.h-J.a);b.vol.n=Math.min(b.vol.n+1,300);b.vol.v=b.vol.v+(res*res-b.vol.v)/b.vol.n;
   if(Math.abs(J.tMar||0)>=0.05){b.trend.n++;if(Math.sign(J.tMar)===Math.sign(res))b.trend.hit++;}
   if(Math.abs(J.tTot||0)>=0.05){b.trend.n++;if(Math.sign(J.tTot)===Math.sign((ah+aa)-(J.h+J.a)))b.trend.hit++;}
@@ -2002,6 +2085,8 @@ function brainLearnOne(sport,b,game,J,aa,ah,actualBox){
 }
 /* Football: rulings ride on the snapshot rows in d4.nflarc / d4.ncaafarc. */
 function brainLearn(sport){
+  /* v3.5.21 · once per sport: the new weights and the drift start from everything already graded */
+  try{const r=brainGetRO(sport);if(!(r.cv&&r.cv.seeded)){const b0=brainGet(sport);if(brainCvSeed(sport,b0))brainPut(sport,b0);}}catch(e){console.warn('brain seed',e);}
   if(sport==='mlb')return brainLearnMLB();
   if(sport==='nhl'){ // hockey keeps its rows in d4.nhlarc as {gid,game,judge,final}
     const arc=get('d4.nhlarc',{});const b=brainGet('nhl');let ch=false;
@@ -2105,13 +2190,14 @@ function brainBlock(g,s,sport){
       <span style="color:var(--mute)">(${J.a}–${J.h})</span></div>
     <div style="color:var(--chalk-dim)">${sport==='mlb'?'1-run game':sport==='nhl'?'1-goal game':'close ≤'+C.close}: ${pct(J.close)} · ${fav} ${C.label}: ${pct(blow)} · upset: ${pct(upset)}</div>
     <details><summary style="color:var(--mute);cursor:pointer">why</summary>
-      ${J.witnesses.map(w=>`<div>${lab[w.src]}: ${aN} ${w.a.toFixed(dp)}–${w.h.toFixed(dp)} ${hN} · weight ${pct(w.share)} <span style="color:var(--mute)">(±${w.wt.rmse.toFixed(1)} over ${w.wt.n} games)</span></div>`).join('')}
+      ${J.witnesses.map(w=>`<div>${lab[w.src]}: ${aN} ${w.a.toFixed(dp)}–${w.h.toFixed(dp)} ${hN} · weight ${w.shm!=null?`margin ${pct(w.shm)} · total ${pct(w.sht)}`:pct(w.share)} <span style="color:var(--mute)">(±${w.wt.rmse.toFixed(1)} over ${w.wt.n} games)</span></div>`).join('')}
       ${J.disputes.map(d=>`<div style="color:var(--gold)">⚔ ${lab[d.x]} vs ${lab[d.y]}: ${d.dm>0?'+':''}${d.dm} margin, ${d.dt>0?'+':''}${d.dt} total → trusting ${lab[d.lean]} (better record)</div>`).join('')}
-      ${J.mem.a||J.mem.h?`<div>Team memory: ${aN} ${J.mem.a>0?'+':''}${J.mem.a}, ${hN} ${J.mem.h>0?'+':''}${J.mem.h} ${C.unit}</div>`:''}
+      ${J.mem.a||J.mem.h?`<div>Team memory: ${aN} ${J.mem.a>0?'+':''}${J.mem.a}, ${hN} ${J.mem.h>0?'+':''}${J.mem.h} ${C.unit}</div>`
+        :J.memRaw&&(Math.abs(J.memRaw.a)>=0.05||Math.abs(J.memRaw.h)>=0.05)?`<div style="color:var(--mute)">Team memory would say ${aN} ${J.memRaw.a>0?'+':''}${J.memRaw.a.toFixed(1)}, ${hN} ${J.memRaw.h>0?'+':''}${J.memRaw.h.toFixed(1)} — not applied until it proves it shrinks the miss</div>`:''}
       ${J.trend.items.length?`<div>Trends (allowed ${pct(J.tU)} influence):</div>`+J.trend.items.slice(0,6).map(t=>`<div style="color:var(--mute)">· ${t.rec} → really ~${t.real}% · ${t.kind} ${t.eff>=0?'+':''}${(t.eff*J.tU).toFixed(2)} ${C.unit} · ${t.text}</div>`).join(''):''}
       ${J.money?`<div>Money: ${J.money.note} (influence ${pct(J.mU)})</div>`:''}
       ${(()=>{const L=J.ledger;if(!L)return'';const f=x=>(x>=0?'+':'')+x.toFixed(dp);const nz=x=>Math.abs(x)>=0.005;
-        const st=[[`Witnesses (weighted)`,L.wA,L.wH,1],['Team memory',L.memA,L.memH],['Trends',L.tA,L.tH],['Money split',L.mA,L.mH],['Scoring floor',L.fA,L.fH]]
+        const st=[[`Witnesses (weighted)`,L.wA,L.wH,1],['Team memory',L.memA,L.memH],['League drift',L.drA||0,L.drA||0],['Trends',L.tA,L.tH],['Money split',L.mA,L.mH],['Scoring floor',L.fA,L.fH]]
           .filter((r,i)=>i===0||nz(r[1])||nz(r[2]));
         return`<div style="margin-top:4px;color:var(--chalk)"><b>The math</b></div>`+st.map(r=>`<div>${r[0]}: ${aN} ${r[3]?r[1].toFixed(dp):f(r[1])} · ${hN} ${r[3]?r[2].toFixed(dp):f(r[2])}</div>`).join('')+
           `<div style="border-top:1px solid var(--rule)"><b>= ${aN} ${J.a.toFixed(dp)} – ${J.h.toFixed(dp)} ${hN}</b> → called ${J.final[0]}–${J.final[1]}${J.final[0]===Math.round(J.a)&&J.final[1]===Math.round(J.h)?'':' (snapped to a real final score)'}</div>`;})()}
@@ -2132,10 +2218,151 @@ function brainReport(sport){
     <div class="sub">Judge margin error, last 20: <b>${mae(L.slice(0,20).map(x=>x.err))}</b> ${u} · previous 40: ${mae(L.slice(20,60).map(x=>x.err))}</div>
     <div class="sub">Closer than the market's implied margin: <b>${beat}/${vsM.length}</b>${vsM.length?' ('+Math.round(beat/vsM.length*100)+'%)':''}</div>
     <div class="sub">Witness error: ${ws}</div>
+    ${b.cv&&b.cv.seeded?`<div class="sub">Against the line, the sim gets <b>${Math.round(brainCvW(b,'mar','sim')*100)}%</b> of the say on margins and <b>${Math.round(brainCvW(b,'tot','sim')*100)}%</b> on totals</div>`:''}
+    <div class="sub">Team memory ${brainGateOn(b,'mem')?'<b>on</b>':'off'} · league drift ${brainGateOn(b,'dr')?'<b>on</b>':'off'} <span style="color:var(--mute)">(each switches on only once it proves it shrinks the miss)</span></div>
     <div class="sub">Trends earned ${pc(b.trend)} influence (${b.trend.hit}/${b.trend.n} right) · money ${pc(b.money)} (${b.money.hit}/${b.money.n})</div>
     ${Object.keys(b.box||{}).length?`<div class="sub">Box bias: ${Object.entries(b.box).map(([k,v])=>k+' ×'+v.ratio.toFixed(2)).join(' · ')}</div>`:''}
   </div>`;
 }
+
+/* ═══ v3.5.21 · THE CALIBRATION SCREEN, EVERY SPORT ═════════════════════════════════════════════════════════════════════════════
+   The basketball pages' Grades screen read the MLB archive on every tab (renderGrades only ever knew baseball's), and hockey and
+   football had a record and no Calibration at all. Each sport now gets its own, from its own archive and its own Brain:
+   Corrections (the weights against the line, the league drift, team memory, the miss day by day, box corrections) · Confidence (the
+   characters' % against what happened, and the sim's own) · Learned bias (team by team) · System vs Book. MLB keeps its own screen. */
+var SPGRADE_TAB='record',SPCAL_MODE='calib';
+function spGradeNav(sp,recLab){const nav=document.getElementById('gradeNav');if(!nav)return;
+  nav.innerHTML=[['record',recLab],['calib','Calibration']].map(([k,l])=>`<button class="${SPGRADE_TAB===k?'on':''}" onclick="SPGRADE_TAB='${k}';renderGrades()">${l}</button>`).join('');}
+const spMean=a=>a&&a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+const spDp=sp=>sp==='nhl'||sp==='mlb'?2:1;
+function spCalRows(sp){return brainGraded(sp).map(x=>{const J=x.J,w=J.w||[],m=w.find(o=>o&&o.src==='market'),s=w.find(o=>o&&o.src==='sim'),am=x.ah-x.aa,at=x.ah+x.aa;
+  const e=p=>p&&p.a!=null&&p.h!=null&&isFinite(+p.a)&&isFinite(+p.h)?{m:(+p.h-(+p.a))-am,t:(+p.h+(+p.a))-at}:null;
+  return{...x,eJ:e(J),eM:e(m),eS:e(s)};});}
+/* the season replayed game by game, the old weights against the new, each game judged only on the games before it */
+function spCalReplay(sp,R){const C=BR_CFG[sp];if(!C)return null;const src={},bb={cv:{mar:{},tot:{}}};const o={n:0,old:{m:0,t:0},nu:{m:0,t:0},mkt:{m:0,t:0}};
+  R.forEach(x=>{const w=x.J.w||[],m=w.find(q=>q&&q.src==='market'),s=w.find(q=>q&&q.src==='sim');if(!m||!s)return;
+    const am=x.ah-x.aa,at=x.ah+x.aa,mM=m.h-m.a,mT=m.h+m.a,sM=s.h-s.a,sT=s.h+s.a;
+    const wt=k=>{const pr=C.prior[k],q=src[k]||{n:0,se:0};return{w:(8+q.n)/(8*pr*pr+q.se),n:q.n};};
+    const ws=wt('sim'),wm=wt('market'),lam=30/(30+Math.min(ws.n,wm.n)),shS=(1-lam)*ws.w/(ws.w+wm.w)+lam*0.5;
+    const nm=brainCvW(bb,'mar','sim'),nt=brainCvW(bb,'tot','sim');o.n++;
+    o.old.m+=Math.abs(mM+shS*(sM-mM)-am);o.old.t+=Math.abs(mT+shS*(sT-mT)-at);o.nu.m+=Math.abs(mM+nm*(sM-mM)-am);o.nu.t+=Math.abs(mT+nt*(sT-mT)-at);o.mkt.m+=Math.abs(mM-am);o.mkt.t+=Math.abs(mT-at);
+    [['sim',s],['market',m]].forEach(([k,p])=>{const e2=(((p.h-p.a)-am)**2+((p.h+p.a)-at)**2)/2;const q=src[k]||(src[k]={n:0,se:0});q.se=q.se*0.985+e2;q.n=q.n*0.985+1;});
+    brainCvLearn(bb,[m,s],x.aa,x.ah);});
+  if(!o.n)return null;['old','nu','mkt'].forEach(k=>{o[k].m/=o.n;o[k].t/=o.n;});return o;}
+function spGateTxt(sp,b,k){const o=((b&&b.sh)||{})[k],dp=spDp(sp);
+  if(!o||!o.N)return`<b>OFF</b> <span style="color:var(--mute)">· not scored yet: rulings locked from v3.5.21 on carry what it would add, and each one grades it</span>`;
+  const m=o.s/o.n,on=brainGateOn(b,k);
+  return`${on?'<b style="color:var(--win)">ON</b>':'<b>OFF</b>'} · scored on ${o.N} game${o.N===1?'':'s'}: with it the miss ran <b>${m<0?'smaller':'bigger'}</b> by ${Math.abs(m).toFixed(dp)} a game${o.N>=10&&o.z!=null?` (z ${o.z})`:''}`+
+    (o.N<BR_GATE.n?` <span style="color:var(--mute)">· it can switch on after ${BR_GATE.n} games</span>`:on?'':` <span style="color:var(--mute)">· switches on at z ≥ ${BR_GATE.on}</span>`);}
+function spCalGroups(R,max){const M=new Map();R.forEach(x=>{if(!x.eJ)return;let g=M.get(x.lab);if(!g){g={lab:x.lab,d:x.d,m:[],t:[],lm:[]};M.set(x.lab,g);}if(x.d>g.d)g.d=x.d;
+  g.m.push(Math.abs(x.eJ.m));g.t.push(Math.abs(x.eJ.t));if(x.eM)g.lm.push(Math.abs(x.eM.m));});
+  return[...M.values()].sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:0).slice(-(max||10));}
+function spCalCorrections(sp,R,b){const C=BR_CFG[sp],u=C.unit,dp=spDp(sp),f=x=>spSgn(x,dp);let h='';
+  const sm=brainCvW(b,'mar','sim'),st=brainCvW(b,'tot','sim'),cvn=b.cv&&b.cv.mar&&b.cv.mar.sim?Math.round(b.cv.mar.sim.n):0,hasP=!!(b.cv&&b.cv.mar&&b.cv.mar.pred);
+  h+=`<div class="tkt hi"><h3>How the Judge weighs the sim against the line</h3>
+    <div class="sub">Margins: the sim gets <b>${Math.round(sm*100)}%</b> of the say, the line <b>${100-Math.round(sm*100)}%</b> · totals: the sim <b>${Math.round(st*100)}%</b>, the line <b>${100-Math.round(st*100)}%</b>${hasP?` · uploaded predictions: margins ${Math.round(brainCvW(b,'mar','pred')*100)}%, totals ${Math.round(brainCvW(b,'tot','pred')*100)}%`:''}</div>
+    <div class="sub">Learned from whether the sim's disagreements with the line turned out right, recent games counting most${cvn?` (about ${cvn} games of weight)`:' (no graded games yet: it starts at 30% and moves only on proof)'}. A witness that only repeats the line's mistakes earns nothing; one that catches what the line misses earns its share.</div>`;
+  const RP=spCalReplay(sp,R);
+  if(RP&&RP.n>=20)h+=`<div class="sub" style="margin-top:6px">Replayed game by game (each judged only on the games before it), ${RP.n} games: margin miss <b>${RP.old.m.toFixed(dp)}</b> with the old weights → <b>${RP.nu.m.toFixed(dp)}</b> with these · totals ${RP.old.t.toFixed(dp)} → ${RP.nu.t.toFixed(dp)} ${u} <span style="color:var(--mute)">(the line alone: ${RP.mkt.m.toFixed(dp)} / ${RP.mkt.t.toFixed(dp)})</span></div>`;
+  h+=`</div>`;
+  const J=R.filter(x=>x.eJ),tb=J.map(x=>x.eJ.t),last=tb.slice(-50),se=a=>a.length>1?Math.sqrt(a.reduce((s,x)=>s+x*x,0)/a.length-Math.pow(spMean(a),2))/Math.sqrt(a.length):0;
+  const L=b.lg||{n:0,r:0},dr=brainDrift(b,sp);
+  h+=`<div class="tkt"><h3>League drift · every graded game</h3>`+(J.length?`<div class="sub">Across <b>${J.length}</b> graded games the Judge's totals ran <b>${f(spMean(tb))} ${u}</b> ${spMean(tb)>0?'over':'under'} the real total (± ${se(tb).toFixed(dp)})${last.length>=10&&last.length<J.length?` · last ${last.length}: ${f(spMean(last))}`:''} — not one team, the whole engine.</div>
+    <div class="sub">The lean it has learned (recent games count most, measured before any correction): <b>${Math.abs(L.r||0).toFixed(dp)} ${u} ${(L.r||0)<0?'over':'under'}</b>${BR_DRIFT_CAP[sp]&&Math.abs(dr)>=0.005?` → it would ${dr<0?'take':'add'} ${Math.abs(dr*2).toFixed(dp)} ${dr<0?'off':'to'} every total when it's on`:''}.</div>
+    <div class="sub">${BR_DRIFT_CAP[sp]?spGateTxt(sp,b,'dr'):'Not used here: this sport\'s sim corrects its own drift.'}</div>`:`<div class="sub">Starts with the first graded final.</div>`)+`</div>`;
+  const nm=Object.keys(b.team||{}).length;
+  h+=`<div class="tkt"><h3>Team memory</h3><div class="sub">What each team scores and allows against the projection, learned game by game (${nm} team${nm===1?'':'s'}; the table is under Learned bias).</div><div class="sub">${spGateTxt(sp,b,'mem')}</div></div>`;
+  const grp=spCalGroups(R,10);
+  if(grp.length)h+=`<div class="tkt"><div class="mktlab" style="margin-top:0">${sp==='nfl'||sp==='ncaaf'?'Weekly':'Daily'} average miss — is it shrinking?</div>
+    <ol style="list-style:none;padding-left:0">${grp.map((g,i)=>{const p=grp[i-1],mm=spMean(g.m),pm=p?spMean(p.m):null;const ar=p?(mm<pm?'↓':mm>pm?'↑':'→'):'',ac=p?(mm<pm?'var(--win)':mm>pm?'var(--rust)':'var(--mute)'):'var(--mute)';
+      return`<li>${txtEsc(g.lab)} <span class="m">n=${g.m.length}</span> <span class="pp">margin ${mm.toFixed(dp)}</span> <span class="m">total ${spMean(g.t).toFixed(dp)}${g.lm.length?` · the line ${spMean(g.lm).toFixed(dp)}`:''}</span> <span style="color:${ac}">${ar}</span></li>`;}).join('')}</ol>
+    <div class="sub" style="margin-top:6px">Single ${sp==='nfl'||sp==='ncaaf'?'weeks':'days'} bounce; a run of ↓ means the corrections are helping, a run of ↑ means something is fighting them. "The line" is the same games' miss for the market's own margin.</div></div>`;
+  const bx=Object.entries(b.box||{}).filter(([k,o])=>o&&o.n>=3);
+  if(bx.length)h+=`<div class="sbar"><h2>Active corrections</h2><div class="ln"></div></div><div class="tkt"><ol style="list-style:none;padding-left:0">${bx.map(([k,o])=>{const E=(b.boxErr||{})[k];
+    return`<li>${BOX_LAB[k]||k} <span class="m">n=${o.n}${E&&E.n>=3?` · grade ${boxLetter(E.ape)}, off ${Math.round(E.ape*100)}% avg`:''}</span> <span class="pp" style="color:${Math.abs(o.ratio-1)<0.05?'var(--win)':'var(--gold)'}">×${Math.max(0.8,Math.min(1.2,o.ratio)).toFixed(2)}</span></li>`;}).join('')}</ol>
+    <div class="sub">The predicted box multiplies each stat by what it has actually run against the real box (held between ×0.80 and ×1.20).</div></div>`;
+  return h;}
+/* the system picks (the sim's best-EV side per market) with the % the sim stated and whether it won */
+function spSysPicks(sp){const out=[];
+  try{if(sp==='nfl'||sp==='ncaaf'){const arc=roGet(sp==='nfl'?LS.nflarc:'d4.ncaafarc',{})||{};
+      Object.values(arc).forEach(A=>{if(!A||!Array.isArray(A.rows))return;A.rows.forEach(r=>{if(r.v!==2||!r.graded||!r.res||!r.picks)return;
+        Object.entries(r.res).forEach(([m,x])=>{const p=r.picks[m];if(!p||p.p==null||x==='P'||!isFinite(+p.p))return;out.push({m,p:+p.p,hit:x==='W'?1:0});});});});}
+    else{const arc=roGet(sp==='nhl'?'d4.nhlarc':'d4.'+sp+'arc',{})||{};
+      Object.values(arc).forEach(D=>((D&&D.rows)||[]).forEach(r=>{if(!r.final||r.final.a==null||r.final.h==null)return;const a=+r.final.a,h=+r.final.h;
+        (r.picks||[]).forEach(p=>{if(!p||p.p==null||!isFinite(+p.p))return;let res=null;
+          if(p.m==='ml')res=a===h?null:(p.side==='home')===(h>a);
+          else if(p.m==='total'){const t=a+h;res=t===+p.line?null:(p.side==='over')===(t>+p.line);}
+          else if(p.m==='spread'){const mg=(p.side==='home'?h-a:a-h)+(+p.line);res=mg===0?null:mg>0;}
+          if(res!=null)out.push({m:p.m,p:+p.p,hit:res?1:0});});}));}}catch(e){}
+  return out;}
+function spBucketRows(rows,pOf){const B=[[0,0.5],[0.5,0.55],[0.55,0.6],[0.6,0.65],[0.65,0.7],[0.7,0.8],[0.8,1.01]];
+  return B.map(([lo,hi])=>{const S=rows.filter(x=>{const p=pOf(x);return p>=lo&&p<hi;});if(S.length<5)return'';const pr=spMean(S.map(pOf)),ac=S.filter(x=>x.hit).length/S.length,off=(ac-pr)*100;
+    const col=Math.abs(off)<=6?'var(--win)':Math.abs(off)<=12?'var(--gold)':'var(--rust)';   /* a big gap shows red, not grey */
+    return`<li>said <b>${lo===0?'under 50':Math.round(lo*100)+'–'+Math.min(100,Math.round(hi*100))}%</b> <span class="m">n=${S.length}</span> → won <span class="pp" style="color:${col}">${Math.round(ac*100)}%</span> <span class="m">${off>0?'+':''}${Math.round(off)}</span></li>`;}).join('');}
+function spCalConf(sp){const ML={ml:'Moneyline',spread:sp==='nhl'?'Puck line':'Spread',total:'Total'};let h='';
+  const V=roGet(VOICES_KEY,[])||[];const all=V.filter(x=>x&&x.sp===sp&&x.graded&&x.hit!=null&&!x.push&&CHARS[x.voice]&&confOf(x)!=null);
+  const br=S=>S.length?S.reduce((a,x)=>a+Math.pow((x.hit?1:0)-confOf(x),2),0)/S.length:null;
+  h+=`<div class="tkt hi"><h3>The characters' % — did it come true?</h3><div class="sub">Every graded call's confidence (the number the 70% rule reads) against what happened, ${(typeof CAL_LAB!=='undefined'&&CAL_LAB[sp])||sp.toUpperCase()} only. ${all.length?`${all.length} graded calls · Brier ${br(all).toFixed(3)} (0.250 is a coin flip; lower is sharper).`:'No graded calls yet.'}</div>
+    <div class="sub" style="color:var(--mute)">The % is calibrated per market on every sport's graded calls together. Split by sport, the walk-forward test (Oct 24–Nov 24, 16,091 calls) made the 60%+ calls less accurate and the official picks lose more, so it stays pooled.</div></div>`;
+  ['ml','spread','total'].forEach(m=>{const S=all.filter(x=>x.market===m);if(S.length<10)return;const said=spMean(S.map(confOf)),won=S.filter(x=>x.hit).length/S.length;
+    h+=`<div class="tkt"><div class="mktlab" style="margin-top:0">${ML[m]} · ${S.length} calls · said ${Math.round(said*100)}%, won ${Math.round(won*100)}%</div><ol style="list-style:none;padding-left:0">${spBucketRows(S,confOf)}</ol></div>`;});
+  const P=spSysPicks(sp);
+  h+=`<div class="sbar"><h2>The sim's own %</h2><div class="ln"></div><div class="ct mono">${P.length}</div></div>`;
+  if(!P.length)h+=`<div class="tkt"><div class="sub">No graded system picks yet.</div></div>`;
+  ['ml','spread','total'].forEach(m=>{const S=P.filter(x=>x.m===m);if(S.length<10)return;const said=spMean(S.map(x=>x.p)),won=S.filter(x=>x.hit).length/S.length;let bw=null;try{bw=blendWeight(sp,m);}catch(e){}
+    h+=`<div class="tkt"><div class="mktlab" style="margin-top:0">${ML[m]} · system picks · said ${Math.round(said*100)}%, won ${Math.round(won*100)}%</div><ol style="list-style:none;padding-left:0">${spBucketRows(S,x=>x.p)}</ol>
+      ${bw?`<div class="sub">The characters' % keeps <b>${Math.round(bw.w*100)}%</b> of the sim's own number here and takes the rest from the market's price (fit on ${bw.n} graded calls).</div>`:''}</div>`;});
+  return h;}
+const spSgn=(x,dp)=>{const v=+(+x).toFixed(dp)||0;return(v>0?'+':'')+v.toFixed(dp);};
+function spCalTeams(sp,R,b){const dp=spDp(sp),f=x=>spSgn(x,dp),T={};
+  R.forEach(x=>{if(!x.eJ)return;const[a,hm]=String(x.game).split('@');const add=(t,p,ac,op,oac)=>{if(!t)return;const o=T[t]||(T[t]={n:0,sc:0,al:0});o.n++;o.sc+=p-ac;o.al+=op-oac;};
+    add(a,+x.J.a,x.aa,+x.J.h,x.ah);add(hm,+x.J.h,x.ah,+x.J.a,x.aa);});
+  const mem=(ab,k)=>{const r=((b.team||{})[ab]||{})[k];return r&&r.n?r.r*r.n/(r.n+6):0;},on=brainGateOn(b,'mem');
+  /* biggest misses first, shrunk by n/(n+8) so four wild games don't outrank twenty steady ones */
+  const MIN=sp==='nfl'||sp==='ncaaf'?3:4,sz=o=>(Math.abs(o.sc)+Math.abs(o.al))/o.n*o.n/(o.n+8);const tk=Object.keys(T).filter(t=>T[t].n>=MIN).sort((x,y)=>sz(T[y])-sz(T[x])).slice(0,40);
+  let h=`<div class="tkt hi"><h3>How it learns a team</h3><div class="sub">Every graded game: what the Judge projected each team to score, against what it scored, and what it projected the other side to score against them. Team memory learns the same misses (shrunk by n/(n+6), so one blowout can't rewrite a team) and is <b>${on?'ON':'OFF'}</b> right now — ${on?'it has proven it shrinks the miss.':'these are what it has learned, not what is applied, until it proves it shrinks the miss (see Corrections).'}</div></div>`+
+    sbar('Team bias',tk.length);
+  h+=tk.length?`<div class="tkt"><table class="boxtbl"><tr><th>Team</th><th>Games</th><th>Scores</th><th>Allows</th><th>Memory</th></tr>${tk.map(t=>{const o=T[t],sc=o.sc/o.n,al=o.al/o.n,big=sp==='nhl'?0.4:3;
+      const col=v=>v>big?'var(--rust)':v<-big?'var(--cold)':'var(--mute)';const ma=mem(t,'off'),md=mem(t,'def');
+      return`<tr><td>${txtEsc(t)}</td><td>${o.n}</td><td style="color:${col(sc)}">${f(sc)}</td><td style="color:${col(al)}">${f(al)}</td><td${on?' class="hi"':' style="color:var(--mute)"'}>${f(ma)} / ${f(md)}</td></tr>`;}).join('')}</table>
+    <div class="sub" style="margin-top:6px">Scores / Allows: projected minus actual, per game (positive = the Judge had them too high). Memory: what it would add to their own score / to their opponent's.</div></div>`
+    :`<div class="empty">Needs ${MIN}+ graded games per team.</div>`;
+  return h;}
+function spCalBook(sp,R,b){const u=BR_CFG[sp].unit,dp=spDp(sp);const S=R.filter(x=>x.eJ&&x.eM),L50=S.slice(-50);
+  if(!S.length)return`<div class="tkt"><div class="sub">No graded games with a line yet.</div></div>`;
+  const mae=(A,k,c)=>{const v=A.filter(x=>x[k]).map(x=>Math.abs(x[k][c]));return v.length?spMean(v).toFixed(dp):'—';};
+  const row=(lab,k)=>`<tr><td>${lab}</td><td>${mae(S,k,'m')}</td><td>${mae(S,k,'t')}</td><td>${mae(L50,k,'m')}</td><td>${mae(L50,k,'t')}</td></tr>`;
+  const closer=S.filter(x=>Math.abs(x.eJ.m)<Math.abs(x.eM.m)-1e-9).length,tie=S.filter(x=>Math.abs(Math.abs(x.eJ.m)-Math.abs(x.eM.m))<=1e-9).length;
+  let h=`<div class="tkt hi"><h3>System vs the book</h3><div class="sub">Average miss in ${u}, every graded game with a line (${S.length}) and the last ${L50.length}. Lower is better.</div>
+    <table class="boxtbl"><tr><th></th><th>Margin</th><th>Total</th><th>Margin, last ${L50.length}</th><th>Total, last ${L50.length}</th></tr>${row('Judge','eJ')}${row('The line','eM')}${row('Sim alone','eS')}</table>
+    <div class="sub" style="margin-top:6px">The Judge's margin closer than the line's: <b>${closer}</b> of ${S.length - tie} (${S.length - tie?Math.round(closer/(S.length - tie)*100):0}%)${tie?` · ${tie} dead even`:''}.</div></div>`;
+  const grp=spCalGroups(S,8);
+  if(grp.length>1)h+=`<div class="tkt"><div class="mktlab" style="margin-top:0">Margin miss by ${sp==='nfl'||sp==='ncaaf'?'week':'day'}: Judge vs the line</div><ol style="list-style:none;padding-left:0">${grp.map(g=>{const j=spMean(g.m),l=spMean(g.lm);
+    return`<li>${txtEsc(g.lab)} <span class="m">n=${g.m.length}</span> <span class="pp" style="color:${j<l?'var(--win)':j>l?'var(--rust)':'var(--mute)'}">${j.toFixed(dp)}</span> <span class="m">vs ${l.toFixed(dp)}</span></li>`;}).join('')}</ol></div>`;
+  return h;}
+function spCalHtml(sp){if(!BR_CFG[sp])return'';const modes=[['calib','Corrections'],['conf','Confidence'],['learn','Learned bias'],['book','System vs Book']];
+  if(!modes.some(m=>m[0]===SPCAL_MODE))SPCAL_MODE='calib';
+  let h=`<div class="subnav">${modes.map(([k,l])=>`<button class="${SPCAL_MODE===k?'on':''}" onclick="SPCAL_MODE='${k}';renderGrades()">${l}</button>`).join('')}</div>`;
+  let R=[],b=null;try{R=spCalRows(sp);b=brainGetRO(sp);}catch(e){console.warn('calibration',e);}
+  if(SPCAL_MODE==='conf'){try{return h+spCalConf(sp);}catch(e){console.warn('calibration conf',e);return h+'<div class="empty">Confidence calibration unavailable.</div>';}}
+  if(!R.length&&SPCAL_MODE!=='calib')return h+`<div class="empty">No graded rulings yet — the Judge locks its call at ${sp==='nhl'?'puck drop':sp==='nfl'||sp==='ncaaf'?'kickoff':'tip-off'} and grades it at the final.</div>`;
+  try{if(SPCAL_MODE==='learn')return h+spCalTeams(sp,R,b);if(SPCAL_MODE==='book')return h+spCalBook(sp,R,b);return h+spCalCorrections(sp,R,b);}
+  catch(e){console.warn('calibration',e);return h+'<div class="empty">Calibration unavailable right now.</div>';}}
+/* basketball's own record (the Grades screen used to show baseball's on every tab) */
+function renderBballRecord(sp){spGradeNav(sp,sp==='nba'?'🏀 NBA record':'🏀 CBB record');
+  const body=document.getElementById('gradeBody');if(!body)return;
+  if(SPGRADE_TAB==='calib'){body.innerHTML=spCalHtml(sp);return;}
+  const arc=roGet('d4.'+sp+'arc',{})||{};const T={ml:{W:0,L:0,P:0,u:0},spread:{W:0,L:0,P:0,u:0},total:{W:0,L:0,P:0,u:0}};let pend=0;
+  Object.values(arc).forEach(D=>((D&&D.rows)||[]).forEach(r=>(r.picks||[]).forEach(p=>{const b=T[p.m];if(!b)return;if(!r.final||r.final.a==null){pend++;return;}const a=+r.final.a,h=+r.final.h;let res=null;
+    if(p.m==='ml')res=a===h?null:(p.side==='home')===(h>a);else if(p.m==='total'){const t=a+h;res=t===+p.line?null:(p.side==='over')===(t>+p.line);}else{const m=(p.side==='home'?h-a:a-h)+(+p.line);res=m===0?null:m>0;}
+    const pr=amerOk(p.price);if(res===null)b.P++;else if(res){b.W++;b.u+=pr!=null?amerProfit(pr):amerProfit(-110);}else{b.L++;b.u-=1;}})));
+  const lab={ml:'Moneyline',spread:'Spread',total:'Total'};
+  let h=`<div class="tkt hi"><h3>System picks — the sim's best-EV side per market (≥2% EV, locked pregame)</h3>`+
+    Object.entries(T).map(([k,b])=>`<div class="sub">${lab[k]}: <b>${b.W}-${b.L}${b.P?'-'+b.P:''}</b> · ${b.u>=0?'+':''}${b.u.toFixed(2)}u</div>`).join('')+
+    (pend?`<div class="sub" style="color:var(--mute)">${pend} pick${pend>1?'s':''} waiting on finals</div>`:'')+
+    `<div class="sub" style="color:var(--mute)">Calibration (top) shows how the sim's % held up and how the Judge weighs it against the line.</div></div>`;
+  try{h+=voicesReport(sp);}catch(e){}try{h+=brainReport(sp);}catch(e){}try{h+=intelReport(sp);}catch(e){}
+  body.innerHTML=h;}
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3226,7 +3453,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261124g',DESK_VER='3.5.20';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261125a',DESK_VER='3.5.21';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -15252,6 +15479,8 @@ async function renderGrades(force){
   /* Football pages show their own sport's record — this function only ever
      read the MLB archive, which is why NFL displayed MLB's record. */
   if(ACTIVE_SPORT==='nhl'&&typeof renderNHLRecord==='function'){try{renderNHLRecord()}catch(e){console.warn('nhl record',e)}return;}
+  /* v3.5.21 · basketball read the MLB archive on every Grades tab — its record and its Calibration are its own now */
+  if(ACTIVE_SPORT==='nba'||ACTIVE_SPORT==='ncaab'){try{renderBballRecord(ACTIVE_SPORT)}catch(e){console.warn('bball record',e)}return;}
   if((ACTIVE_SPORT==='nfl'||ACTIVE_SPORT==='ncaaf')&&typeof renderFootballRecord==='function'){
     try{renderFootballRecord(ACTIVE_SPORT)}catch(e){console.warn('football record',e)}
     return;
