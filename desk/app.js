@@ -435,9 +435,14 @@ const DDJ = -110, ddDec = p => (p > 0 ? 1 + p / 100 : 1 + 100 / -p), dd$ = n => 
 function ddLegOf(g, mk, side) { const ln = g.ln || {}; if (mk === 'ml') { const p = side === 'away' ? ln.mlA : ln.mlH; return fin(p) ? { price: p, pick: `${side === 'away' ? g.a.ab : g.h.ab} ML` } : null; }
   if (mk === 'spread') { if (!fin(ln.line) || !ln.fav) return null; const team = side === 'away' ? g.a.ab : g.h.ab; const line = team === ln.fav ? -Math.abs(ln.line) : Math.abs(ln.line); return { price: fin(side === 'home' ? ln.spH : ln.spA) ? (side === 'home' ? ln.spH : ln.spA) : DDJ, line, pick: `${team} ${line > 0 ? '+' : ''}${line}` }; }
   if (mk === 'total') return fin(ln.tot) ? { price: fin(side === 'over' ? ln.ov : ln.un) ? (side === 'over' ? ln.ov : ln.un) : DDJ, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` } : null; return null; }
-function ddBtns(g) { if (!(g.t > Date.now() + 60e3) || !g.ln) return ''; const on = (mk, sd) => S.dd.some(l => l.k === g.k && l.mk === mk && l.side === sd);
+function ddGrid(g) { if (!(g.t > Date.now() + 60e3) || !g.ln) return ''; const on = (mk, sd) => S.dd.some(l => l.k === g.k && l.mk === mk && l.side === sd);
   const btn = (mk, sd) => { const L = ddLegOf(g, mk, sd); return L ? `<button type="button" class="ddb${on(mk, sd) ? ' on' : ''}" data-act="ddpick" data-k="${esc(g.k)}" data-mk="${mk}" data-side="${sd}"><b>${esc(L.pick)}</b><small>${esc(odds(L.price))}</small></button>` : '<span></span>'; };
-  return `<div class="g-sec"><h4>Play it with Desk Dollars</h4><p class="g-note">Per game: moneyline or spread, plus the total. ${g.sp === 'nhl' ? 'Hockey parlays: moneyline + total, or the puck line alone (puck line + total takes an SGP). ' : ''}An SGP needs both picks in every game. No ticket pays over 10,000x.</p><div class="ddgrid"><span class="ddh">Moneyline</span><span class="ddh">Spread</span><span class="ddh">Total</span>${btn('ml', 'away')}${btn('spread', 'away')}${btn('total', 'over')}${btn('ml', 'home')}${btn('spread', 'home')}${btn('total', 'under')}</div></div>`; }
+  return `<div class="ddgrid"><span class="ddh">Moneyline</span><span class="ddh">Spread</span><span class="ddh">Total</span>${btn('ml', 'away')}${btn('spread', 'away')}${btn('total', 'over')}${btn('ml', 'home')}${btn('spread', 'home')}${btn('total', 'under')}</div>`; }
+/* v71 · Nov 25, 2:02 PM, Chris: "all open games … with the odds already ready to pick before you click the game". Every game that hasn't
+   started carries its D$ prices on its row; the open card keeps them with the rules, and the sheet says the rules once up top. */
+const DD_RULE = 'Per game: moneyline or spread, plus the total. An SGP needs both picks in every game. No ticket pays over 10,000x.';
+function ddBtns(g) { const G = ddGrid(g); return G ? `<div class="g-sec"><h4>Play it with Desk Dollars</h4><p class="g-note">${g.sp === 'nhl' ? DD_RULE.replace('total. ', 'total. Hockey parlays: moneyline + total, or the puck line alone (puck line + total takes an SGP). ') : DD_RULE}</p>${G}</div>` : ''; }
+const ddRow = g => { const G = ddGrid(g); return G ? `<div class="g-dd">${G}</div>` : ''; };
 function ddSlipBar() { if (!S.dd.length) return ''; const sgp = S.ddMode === 'sgp', dec = ddTicketDec(S.dd, S.ddMode), st = +(store.get('ddstake') || 25); const W = AC.me && AC.me.wallet;
   const per = {}; S.dd.forEach(l => { per[l.k] = (per[l.k] || 0) + 1; }); const thin = sgp && Object.values(per).some(n => n < 2), over = dec > 10000;
   const nhlPair = !sgp && S.dd.some(l => l.sp === 'nhl' && l.mk === 'spread' && per[l.k] > 1);
@@ -1005,7 +1010,7 @@ function gameHtml(g, i) {
       ${g.q && g.q.title ? `<div class="ask"><b>${esc(g.q.title)}</b><span>${esc((g.q.opts || []).join(' or '))}? Make your case in the members’ chat.</span><button type="button" class="btn foil" data-go="chat">Open the chat</button></div>` : ''}</div>`;
   }
   return `<div class="game ${(i || 0) % 2 ? 'zb' : 'za'}${open ? ' g-open' : ''}${b && b.picks && b.picks.length ? ' g-has' : ''}"><button type="button" data-act="game" data-k="${esc(g.k)}" aria-expanded="${open}">${t}
-    <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${b && !open ? `<div class="g-bp" data-act="game" data-k="${esc(g.k)}">${callsMode(F) ? callRowsHtml(b, F) : boardPicksHtml(b, rowF(F), heavy, false)}${halfRowHtml(b, F)}</div>` : ''}${more}</div>`;
+    <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${b && !open ? `<div class="g-bp" data-act="game" data-k="${esc(g.k)}">${callsMode(F) ? callRowsHtml(b, F) : boardPicksHtml(b, rowF(F), heavy, false)}${halfRowHtml(b, F)}</div>` : ''}${open ? '' : ddRow(g)}${more}</div>`;
 }
 /* the rows with no filter on show the strongest colored picks (unanimous, supreme, strong); any strength, bet type or Forecast filter shows what passes it */
 /* v64 · Nov 23, Chris: "I also think the pick bars should be visible before a game expands". Every colored pick shows on its game's row
@@ -1070,6 +1075,7 @@ function viewSlate() {
     ${bOn ? filterBarHtml(B, inSp, BF) : ''}
     <div class="paper"><div class="sheet-h"><b>${esc(shortDay(D.d))}</b><span>Lines as of ${esc(clock(SL.ts))}${stale ? ', waiting on a refresh' : ''}</span></div>
       ${bOn && B.fc ? '<p class="fc-key">🌦 <b>The Forecast</b> on each pick, that kind of bet over the last 7 days: ☀️ working · 🌤 warm · ⛅ even · 🌥 cooling · 🌧 not working · ⛈ broken</p>' : ''}
+      ${games.some(g => g.t > Date.now() + 60e3 && g.ln) ? `<p class="fc-key dd-key">🎟 <b>Desk Dollars</b>: tap a price on any game that hasn’t started to put it on a ticket. ${DD_RULE}</p>` : ''}
       ${body || '<div class="blank"><b>Nothing on the board</b><p>No games with lines for this day yet.</p></div>'}
       <div class="sheet-f">The number beside a team is its Power Rank.${D.more ? ` ${D.more} more college games are on the full board; these are the ones worth a look.` : ''} Lines can move. This sheet never shows the desk’s sealed picks.</div></div></div>
     <div>${ranks}</div></div>${ddSlipBar()}${footHtml()}`;

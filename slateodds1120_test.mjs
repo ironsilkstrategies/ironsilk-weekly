@@ -26,7 +26,7 @@ T('no priced call at all: nothing to show (no made-up line)', L === null && lnTe
 T('a sheet line the sheet already had still reads the same', strip(lnText({ fav: 'UVU', line: 4.5, tot: 149.5, mlA: -180, mlH: 150 }, G('UVU', 'ECU'))) === 'UVU −4.5 O/U 149.5');
 /* wiring */
 T('the Slate row uses the sheet\'s line first, then the board\'s', /const LN = g\.ln \|\| lnFromBoard\(g\.b\), ln = `<div class="g-ln">\$\{lnText\(LN, g\)\}<\/div>`;/.test(src));
-T('D$ still plays only off the sheet\'s full line (the rebuilt one is display only)', /function ddBtns\(g\) \{ if \(!\(g\.t > Date\.now\(\) \+ 60e3\) \|\| !g\.ln\) return '';/.test(src) && !/ddLegOf[^\n]*lnFromBoard/.test(src));
+T('D$ still plays only off the sheet\'s full line (the rebuilt one is display only)', /function ddGrid\(g\) \{ if \(!\(g\.t > Date\.now\(\) \+ 60e3\) \|\| !g\.ln\) return '';/.test(src) && /function ddBtns\(g\) \{ const G = ddGrid\(g\);/.test(src) && !/ddLegOf[^\n]*lnFromBoard/.test(src));
 T('no line, no listing: a pick or a call without a real price never shows on the board', /\.filter\(c => fin\(c\.price\) && !isHeavy\(m, c\.price\)\)/.test(src) && /\.filter\(p => fin\(p\.price\) && !isHeavy\(p\.m, p\.price\)\)/.test(src));
 /* v52 · Nov 21: "took the option to select over and unders and the spread away." A college game past the sheet's 14 now comes on the
    sheet as a LITE entry (teams + its real line); the Slate hands that line (and the sheet's key) to the board's row, so its spread and

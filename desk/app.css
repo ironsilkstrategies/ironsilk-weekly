@@ -710,6 +710,7 @@ body.embed .view{padding-bottom:20px}
 .ddb{appearance:none;border:1.5px solid rgba(27,42,33,.22);background:#fffaf0;border-radius:10px;padding:9px 4px;display:grid;gap:3px;cursor:pointer;color:#1b2a21}
 .ddb b{font:700 13px/1.1 var(--text)}.ddb small{font:600 12px/1 var(--text);color:#7a5a00}
 .ddb.on{background:#1b2a21;border-color:#1b2a21;color:#f4ecd8}.ddb.on small{color:#f0cd6a}
+.g-dd{padding:2px 16px 14px}.g-dd .ddb{padding:7px 4px;gap:2px}.g-dd .ddb b{font-size:12.5px}.g-dd .ddb small{font-size:11.5px}.g-dd .ddh{font-size:9.5px}   /* v71 · the D$ prices on every open game's row */
 .ddslip small{display:block;margin-top:3px}.ddslip input{width:76px;font:600 16px var(--text);padding:3px 6px;border-radius:6px;border:1px solid #E9C25A;background:#000;color:#f0cd6a}
 .wallet{background:linear-gradient(160deg,#16261d,#0b1410);border:1px solid rgba(233,194,90,.5);border-radius:16px;padding:16px;margin:4px 0 18px}
 .w-top{display:grid;gap:2px}.w-lab{font:700 11px/1 var(--text);text-transform:uppercase;letter-spacing:.1em;color:var(--cream-3)}

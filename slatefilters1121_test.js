@@ -44,7 +44,8 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: {}, days: [{ d: day
       rt.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
     await p.addInitScript(x => { try { localStorage.setItem('tdp.guide', JSON.stringify({ at: Date.now(), n: 2 })); localStorage.setItem('tdp.intro', '1'); if (x) localStorage.setItem('tdp.bf', x); } catch (e) { } }, bf ? JSON.stringify(bf) : '');
     await p.goto('https://desk.test/desk/#slate', { waitUntil: 'load' }); await p.waitForTimeout(1000);
-    const rows = () => p.$$eval('#v-slate .game', els => els.map(e => e.innerText.replace(/\s+/g, ' ').trim()));
+    /* v71: a game's row text without its D$ prices (the market's own lines, on every open game since v71 — not anyone's call) */
+    const rows = () => p.$$eval('#v-slate .game', els => els.map(e => { const d = [...e.querySelectorAll('.g-dd')]; d.forEach(x => { x.style.display = 'none'; }); const t = e.innerText.replace(/\s+/g, ' ').trim(); d.forEach(x => { x.style.display = ''; }); return t; }));
     return { p, ctx, errs, rows, text: () => p.evaluate(() => document.querySelector('#v-slate').innerText) };
   }
   let v = await visit(FEED), rows = await v.rows(), t = await v.text();
