@@ -18,6 +18,24 @@ var SAFE_MODE=false;
   window.addEventListener('pagehide',settle);
   if(SAFE_MODE)document.addEventListener('DOMContentLoaded',()=>{const d=document.createElement('div');d.style.cssText='position:fixed;left:8px;right:8px;top:8px;z-index:99999;background:#3b2a06;color:#fde68a;border:1px solid #f5c542;border-radius:10px;padding:8px 10px;font:600 12px system-ui';
     d.innerHTML='🛟 Safe mode — the page kept restarting, so the heavy extras are paused for 10 minutes. Picks and grading still work. <u onclick="this.parentNode.remove()">OK</u>';document.body.appendChild(d);setTimeout(()=>d.remove(),12000);});}catch(e){}})();
+/* ══ v3.5.18 · TYPING WINS ══════════════════════════════════════════════════════════════════════════════
+   Nov 24, 7:33 PM, Chris: "it's not letting me type by prices in the machine". During games My Bets repainted itself every 20 seconds
+   (and again whenever a sport's live pass or a box score landed), the ticket sheet every 20 s, Today every 30 s, the boards on their
+   own clocks, and a repaint builds fresh boxes: the stake box being typed in vanished mid-number and the keyboard dropped. While a box
+   on the page has the keyboard those timed repaints wait, and the one that was held runs the moment the box lets go. A repaint you
+   cause yourself (a box that redraws as you type in it, a tap) still runs at once.
+   …and an iPhone zooms the page in when a box under 16px gets the keyboard (the stake boxes are 15px): on iOS the page keeps its own
+   scale while typing. Pinching to zoom still works there; iOS ignores the cap for fingers. */
+function deskTyping(){try{if(typeof document==='undefined')return false;const a=document.activeElement;if(!a||a===document.body||a===document.documentElement)return false;const t=a.tagName;
+  return t==='TEXTAREA'||t==='SELECT'||!!a.isContentEditable||(t==='INPUT'&&!/^(button|submit|reset|checkbox|radio|range|file|color|image)$/i.test(a.type||''));}catch(e){return false;}}
+var DESK_EVT_EL=null;var DESK_HELD=new Map();
+/* hold a repaint of `root` while a box inside it has the keyboard, unless that box's own typing asked for it */
+function deskHold(name,fn,root){try{if(!root||!deskTyping())return false;const a=document.activeElement;if(DESK_EVT_EL&&DESK_EVT_EL===a)return false;if(!root.contains(a))return false;DESK_HELD.set(name,fn);return true;}catch(e){return false;}}
+(function(){try{if(typeof document==='undefined'||typeof window==='undefined')return;
+  ['input','change','keydown','keyup'].forEach(t=>document.addEventListener(t,e=>{const el=e.target;DESK_EVT_EL=el;setTimeout(()=>{if(DESK_EVT_EL===el)DESK_EVT_EL=null;},0);},true));
+  document.addEventListener('focusout',()=>setTimeout(()=>{if(!DESK_HELD.size||deskTyping())return;const F=[...DESK_HELD.values()];DESK_HELD.clear();F.forEach(f=>{try{f();}catch(e){}});},200),true);
+  const ua=(typeof navigator!=='undefined'&&navigator.userAgent)||'';
+  if(/iP(hone|ad|od)/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)){const m=document.querySelector('meta[name="viewport"]');if(m&&!/maximum-scale/.test(m.content))m.content+=',maximum-scale=1';}}catch(e){}})();
 /* ══ v2.80.3 · THE FREEZE RECORDER ══════════════════════════════════════════════════════════════════════
    A heartbeat ticks every second. When a tick lands 2.5 s+ late while the page is on screen, the screen was stuck:
    it's written down — how long, which page and tab, the last thing tapped, the last timed step. A page that dies on
@@ -634,7 +652,15 @@ const PST_STATS={
 PST_STATS.ncaab=PST_STATS.nba;
 const PST_COUNT=new Set(['g','a','s','h','hr','rbi','r','bb','tb','k','ha','er','ptd','rtd','wtd','td','rec','fg3','stl','blk','pint','cmp','att','car','sk','tkl','dint','to','bs','ht','sv','ga','sb','kpts','fgm']);
 function pstDb(sp){if(!PST_MEM[sp]){const R=pstUnpack(get(PST_KEY(sp),null));PST_MEM[sp]=R&&R.p?R:{p:{},fed:{}};}return PST_MEM[sp];}
-function pstSave(sp,cap){const D=pstDb(sp);const ids=Object.keys(D.p);const MAX=cap||PST_CAP[sp]||1500;
+/* v3.5.18 · a night of finals rewrote the whole season table on every box: 1.3 MB of player numbers (football), 0.8 MB (college
+   hoops), the scouting ledger beside it, again for each of the 60–150 games that went final — and the backup sent every copy up. The
+   tables live in memory; the copy on disk is written once the boxes stop landing for a few seconds (at once when the page is left). */
+const PST_SOON={},SCOUT_SOON={};
+function pstSaveSoon(sp){clearTimeout(PST_SOON[sp]);PST_SOON[sp]=setTimeout(()=>{delete PST_SOON[sp];try{pstSave(sp);}catch(e){}},4000);}
+function scoutSaveSoon(sp){clearTimeout(SCOUT_SOON[sp]);SCOUT_SOON[sp]=setTimeout(()=>{delete SCOUT_SOON[sp];try{scoutSave(sp);}catch(e){}},4000);}
+function pstFlushSoon(){Object.keys(PST_SOON).forEach(sp=>{try{pstSave(sp);}catch(e){}});Object.keys(SCOUT_SOON).forEach(sp=>{try{scoutSave(sp);}catch(e){}});}
+if(typeof window!=='undefined'&&typeof document!=='undefined'){window.addEventListener('pagehide',pstFlushSoon);document.addEventListener('visibilitychange',()=>{if(document.hidden)pstFlushSoon();});}
+function pstSave(sp,cap){clearTimeout(PST_SOON[sp]);delete PST_SOON[sp];const D=pstDb(sp);const ids=Object.keys(D.p);const MAX=cap||PST_CAP[sp]||1500;
   if(ids.length>MAX){ids.sort((a,b)=>(D.p[a].n||0)-(D.p[b].n||0)).slice(0,ids.length-MAX).forEach(k=>delete D.p[k]);}
   const fk=Object.keys(D.fed);if(fk.length>4000)fk.slice(0,fk.length-4000).forEach(k=>delete D.fed[k]);
   try{set(PST_KEY(sp),pstPack(D));}catch(e){console.warn('pstat save',e);}}
@@ -689,7 +715,7 @@ function pstatFeed(sp,eventId,box){
       if(!pstNum(r.MIN)&&!pstNum(r.PTS))return;const x=L(r.name,team);if(!x)return;
       Object.assign(x.v,{pts:pstNum(r.PTS),reb:pstNum(r.REB),ast:pstNum(r.AST),fg3:pstNum(String(r['3PT']||'').split('-')[0]),stl:pstNum(r.STL),blk:pstNum(r.BLK),to:pstNum(r.TO),min:pstNum(String(r.MIN||'').split(':')[0])});}));}
   const all=Object.values(lines);if(!all.length)return 0;
-  const gday=box.date?tdDay(box.date):today();all.forEach(x=>pstAdd(sp,x.name,x.team,x.v,eventId,gday));D.fed[eventId]=1;pstSave(sp);
+  const gday=box.date?tdDay(box.date):today();all.forEach(x=>pstAdd(sp,x.name,x.team,x.v,eventId,gday));D.fed[eventId]=1;pstSaveSoon(sp);
   try{if(!box.date)throw 0;const LK='d4.pstlast.'+sp,last=get(LK,{})||{};const d=tdDay(box.date);all.forEach(x=>{const k=pstId(x.name);if(!last[k]||last[k].d<=d)last[k]={d,v:x.v};});
     const ks=Object.keys(last);if(ks.length>3000)ks.slice(0,ks.length-3000).forEach(k=>delete last[k]);set(LK,last);}catch(e){}
   return all.length;
@@ -797,12 +823,18 @@ async function espnRange(url,opt){opt=opt||{};url=String(url);const map=opt.map|
       if(opt.enough){try{if(opt.enough(out))stop=true;}catch(e){}}}};
   await Promise.all(Array.from({length:Math.max(1,Math.min(opt.conc||3,days.length))},worker));
   return{events:out,ok:covered.length>0,split:true,calls,covered};}
-let PST_BF_BUSY=false;
+let PST_BF_BUSY=false;const PST_BF_AT={};
+/* v3.5.18 · the walk restarted from the season's first day on every page load: once every final had been fed, nothing told it to stop,
+   so each open of a page walked 45 days of scoreboards for its sport and for every sport with a ticket pending (college hoops alone,
+   0.8–3 MB a day: 50+ MB pulled and read on each load, right when the page is busiest). Caught up last time: only the days since. */
+function bfScanFrom(cur,from,end,at){const caught=cur&&cur.remaining===0&&cur.last&&cur.last>=from&&cur.last<=end;
+  if(!caught)return from;if(cur.last===end&&Date.now()-(at||0)<30*60e3)return null;const d=dayShift(cur.last,-1);return d>from?d:from;}
 async function pstatBackfill(sp,maxBoxes){
   if(PST_BF_BUSY||!FBP_ESPN[sp])return 0;PST_BF_BUSY=true;let done=0;
   try{const D=pstDb(sp);const cur=D.bf||{};const end=today();
     const from=cur.from||dayShift(end,-(PST_BF_DAYS[sp]||45));
-    const url=FBP_ESPN[sp]+'/scoreboard?dates='+from.replace(/-/g,'')+'-'+end.replace(/-/g,'')+espnQ(sp,sp==='ncaab'?1500:null);
+    const scan=bfScanFrom(cur,from,end,PST_BF_AT[sp]);if(!scan)return 0;
+    const url=FBP_ESPN[sp]+'/scoreboard?dates='+scan.replace(/-/g,'')+'-'+end.replace(/-/g,'')+espnQ(sp,sp==='ncaab'?1500:null);
     /* finals only, preseason never feeds a player's numbers; each event boiled down to its id and teams */
     const R=await espnRange(url,{tag:'pst',newestFirst:true,cap:PST_BF_DAYS[sp]||45,map:ev=>((ev.status||{}).type||{}).state==='post'&&!(ev.season&&+ev.season.type===1)
         ?{id:String(ev.id),t:(((ev.competitions||[])[0]||{}).competitors||[]).map(c=>String((c.team||{}).abbreviation||'').toUpperCase())}:null,
@@ -816,7 +848,8 @@ async function pstatBackfill(sp,maxBoxes){
         const box=sp==='nhl'?fbpParseHockey(s):sp==='mlb'?fbpParseBaseball(s):(sp==='nba'||sp==='ncaab')?fbpParseBasketball(s):fbpParseBox(s);
         if(box){box.state='post';box.date=(((s.header||{}).competitions||[])[0]||{}).date||null;}pstatFeed(sp,id,box);done++;}catch(e){}
       await new Promise(r=>setTimeout(r,600));}
-    D.bf={from,last:end,remaining:Math.max(0,ids.length-done)};pstSave(sp);
+    const bf0=JSON.stringify(cur);D.bf={from,last:end,remaining:Math.max(0,ids.length-done)};PST_BF_AT[sp]=Date.now();
+    if(done||JSON.stringify(D.bf)!==bf0)pstSave(sp);   /* v3.5.18 · nothing new: no rewrite */
   }finally{PST_BF_BUSY=false;}
   return done;
 }
@@ -851,7 +884,7 @@ const SCOUT_MEM={};
 function scoutDb(sp){if(!SCOUT_MEM[sp]){const R=get(SCOUT_KEY(sp),null);SCOUT_MEM[sp]=R&&R.v===1?R:{v:1,p:{},t:{},fed:{},bf:null};
     if(sp==='nfl'||sp==='ncaaf'){try{const C=get('d4.fbbox',{})||{};Object.entries(C).forEach(([k,o])=>{const[s,id]=k.split(':');if(s===sp&&o&&o.final&&o.box)scoutFeed(sp,id,{...o.box,state:'post'},true);});}catch(e){}}}
   return SCOUT_MEM[sp];}
-function scoutSave(sp){const D=scoutDb(sp);const ids=Object.keys(D.p),cap=SCOUT_CAP[sp]||1500;
+function scoutSave(sp){clearTimeout(SCOUT_SOON[sp]);delete SCOUT_SOON[sp];const D=scoutDb(sp);const ids=Object.keys(D.p),cap=SCOUT_CAP[sp]||1500;
   if(ids.length>cap)ids.sort((a,b)=>D.p[a].n-D.p[b].n).slice(0,ids.length-cap).forEach(k=>delete D.p[k]);
   const fk=Object.keys(D.fed);if(fk.length>3000)fk.slice(0,fk.length-3000).forEach(k=>delete D.fed[k]);
   try{set(SCOUT_KEY(sp),D);}catch(e){console.warn('scout save',e);}SCOUT_BOARD[sp]=null;}
@@ -894,7 +927,7 @@ function scoutFeed(sp,eventId,box,quiet){if(!SCOUT_SP.includes(sp)||!box||box.st
   tms.forEach((tm,i)=>{const o=tms[1-i];const R=D.t[tm]||(D.t[tm]={n:0,f:{},a:{}});R.n++;
     Object.entries(T[tm]).forEach(([k,v])=>{R.f[k]=Math.round(((R.f[k]||0)+v)*100)/100;});
     Object.entries(T[o]).forEach(([k,v])=>{R.a[k]=Math.round(((R.a[k]||0)+v)*100)/100;});});
-  D.fed[eventId]=1;if(!quiet)scoutSave(sp);return 1;}
+  D.fed[eventId]=1;if(!quiet)scoutSaveSoon(sp);return 1;}
 const scRole=R=>{const e=Object.entries(R.rc||{}).sort((a,b)=>b[1]-a[1])[0];return e?e[0]:null;};
 const scPer=(R,k)=>(R.s[k]||0)/Math.max(1,R.n);
 /* the categories — v(record) → number; hi = bigger is better; bust = the bottom 5% means something */
@@ -1038,10 +1071,11 @@ function scoutProbation(){try{const V=roGet(VOICES_KEY,[],60e3)||[];let w=0,n=0,
   const r=(w+20*0.5)/(n+20);const ok=n>=40&&r>=0.53&&u>=0;PROB_OK.Scout=ok;
   if(ok&&!VOTER_ORDER.includes('Scout'))VOTER_ORDER.splice(Math.max(0,VOTER_ORDER.indexOf('Power')+1),0,'Scout');return{w,n,u,r,ok};}catch(e){return{w:0,n:0,u:0,r:0.5,ok:false};}}
 /* backfill: walk the season's finals for this page's sport (preseason skipped), a few boxes per pass */
-const SCOUT_BF_DAYS={nfl:120,ncaaf:75,nhl:60,nba:30,ncaab:30};let SCOUT_BF_BUSY=false,SCOUT_SESSION=0;
+const SCOUT_BF_DAYS={nfl:120,ncaaf:75,nhl:60,nba:30,ncaab:30};let SCOUT_BF_BUSY=false,SCOUT_SESSION=0;const SCOUT_BF_AT={};
 async function scoutBackfill(sp,max){if(SCOUT_BF_BUSY||!FBP_ESPN[sp]||!SCOUT_SP.includes(sp))return 0;SCOUT_BF_BUSY=true;let done=0;
-  try{const D=scoutDb(sp);const end=today(),from=dayShift(end,-(SCOUT_BF_DAYS[sp]||60));
-    const url=FBP_ESPN[sp]+'/scoreboard?dates='+from.replace(/-/g,'')+'-'+end.replace(/-/g,'')+espnQ(sp,sp==='ncaab'?1500:null);
+  try{const D=scoutDb(sp);const end=today(),from=dayShift(end,-(SCOUT_BF_DAYS[sp]||60)),cur=D.bf||{};
+    const scan=bfScanFrom(cur,from,end,SCOUT_BF_AT[sp]);if(!scan)return 0;   /* v3.5.18 · caught up: only the days since the last walk */
+    const url=FBP_ESPN[sp]+'/scoreboard?dates='+scan.replace(/-/g,'')+'-'+end.replace(/-/g,'')+espnQ(sp,sp==='ncaab'?1500:null);
     const R=await espnRange(url,{tag:'scout',newestFirst:true,cap:SCOUT_BF_DAYS[sp]||60,map:ev=>((ev.status||{}).type||{}).state==='post'&&!(ev.season&&+ev.season.type===1)?{id:String(ev.id)}:null,
       enough:L=>L.reduce((n,x)=>n+(D.fed[x.id]?0:1),0)>=(max||8)*3});
     const ids=R.events.map(x=>x.id).filter(id=>!D.fed[id]);
@@ -1050,7 +1084,7 @@ async function scoutBackfill(sp,max){if(SCOUT_BF_BUSY||!FBP_ESPN[sp]||!SCOUT_SP.
         const box=sp==='nhl'?fbpParseHockey(s):(sp==='nba'||sp==='ncaab')?fbpParseBasketball(s):fbpParseBox(s);
         if(box){box.state='post';box.date=(((s.header||{}).competitions||[])[0]||{}).date||null;scoutFeed(sp,id,box,true);try{pstatFeed(sp,id,box);}catch(e){}}done++;}catch(e){}
       await new Promise(r=>setTimeout(r,500));}
-    D.bf={from,last:end,remaining:Math.max(0,ids.length-done)};scoutSave(sp);}
+    const bf0=JSON.stringify(cur);D.bf={from,last:end,remaining:Math.max(0,ids.length-done)};SCOUT_BF_AT[sp]=Date.now();if(done||JSON.stringify(D.bf)!==bf0)scoutSave(sp);}
   finally{SCOUT_BF_BUSY=false;}return done;}
 async function scoutBackfillLoop(){try{const sp=window.__PAGE_SPORT__||(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'');if(!SCOUT_SP.includes(sp)||SCOUT_SESSION>=48)return;
   const n=await scoutBackfill(sp,8);SCOUT_SESSION+=n;if((scoutDb(sp).bf||{}).remaining&&SCOUT_SESSION<48)setTimeout(scoutBackfillLoop,45e3);}catch(e){}}
@@ -2561,7 +2595,10 @@ function vlogSig(sp){try{const G=sportGames(sp)||[],S=sportSims(sp)||{};let ids=
     return[today(),dropHash(ids),st(shots),st(INTEL_KEY),st('d4.preds'),typeof CONF_KEY!=='undefined'?st(CONF_KEY):'',typeof CONF_FLOOR_KEY!=='undefined'?st(CONF_FLOOR_KEY):''].join('|');}catch(e){return'';}}
 function voicesLog(sp,force){const sig=vlogSig(sp);const L=VLOG_SIG[sp];
   if(!force&&sig&&L&&L.sig===sig&&Date.now()-L.ts<5*60e3)return 0;
-  const own=scTxBegin();try{const n=voicesLog0(sp);VLOG_SIG[sp]={sig:vlogSig(sp),ts:Date.now()};return n;}finally{if(own)scTxEnd();try{scoreCallsReconcile();}catch(e){}}}   /* v3.5.14 · then every pre-game score agrees with its picks */
+  const own=scTxBegin();try{const n=voicesLog0(sp);VLOG_SIG[sp]={sig:vlogSig(sp),ts:Date.now()};return n;}finally{try{scoreCallsReconcile(VLOG_V);}catch(e){}VLOG_V=null;if(own)scTxEnd();}}
+/* v3.5.18 · the check right after a pass reads the ledger the pass just held and the score calls still open in its transaction: it was
+   parsing the 10 MB ledger and the 1.3 MB score calls a second time, on every pass of every sport, and writing the score calls twice */
+var VLOG_V=null;   /* v3.5.14 · then every pre-game score agrees with its picks */
 function voicesLog0(sp){
   const G=sportGames(sp);
   const S=sportSims(sp);
@@ -2581,7 +2618,7 @@ function voicesLog0(sp){
       const i=idx[c.id];if(i!=null){if(!pre||V[i].graded||V[i].lk)return;if(JSON.stringify(V[i])===JSON.stringify(c))return;V[i]=c;}else if(pre){idx[c.id]=V.length;V.push(c);}else return;n++;});   /* v2.51 · an unchanged call isn't a write */
   });
   /* v3.1.4 · the trim runs even when nothing new came in, so a no-line call logged before the update leaves the ledger now */
-  const T=voicesTrim(V);if(n||T.length!==V.length){set(VOICES_KEY,T);}return n;
+  const T=voicesTrim(V);if(n||T.length!==V.length){set(VOICES_KEY,T);}VLOG_V=T;return n;
 }
 
 /* ══ v2.70 · EVERY CHARACTER CALLS A FINAL SCORE ═══════════════════════════════════════════════════════
@@ -2658,13 +2695,15 @@ function scoreCallsLog0(sp,g,s,calls){const SC=scoreCallsFor(sp,g,s,calls);try{h
    and never recomputed before tip-off (a score call is only refreshed on that sport's own pass). Now, on every chores pass and before
    every publish, each score call for a game that hasn't started is checked against all of that character's calls on that game that
    day and bent to agree. Graded calls, and games already under way, stay exactly as they were made. */
-function scoreCallsReconcile(){try{const L=get(SCORECALL_KEY,{})||{},t=today(),last=dayShift(t,6),V=roGet(VOICES_KEY,[],10e3)||[],now=Date.now();
+function scoreCallsReconcile(Vin){try{const tx=SC_TX,L=tx?tx.L:(roGet(SCORECALL_KEY,{})||{}),t=today(),last=dayShift(t,6),V=Vin||roGet(VOICES_KEY,[],10e3)||[],now=Date.now();const fx=[];
     const VI=new Map();V.forEach(c=>{if(!c)return;const d=String(c.date).slice(0,10);if(d<t||d>last)return;const k=c.sp+'|'+c.game+'|'+d+'|'+c.voice;const a=VI.get(k);if(a)a.push(c);else VI.set(k,[c]);});
     const ST=new Map(),startOf=(sp,g)=>{const k=sp+'|'+g;if(!ST.has(k)){let v=NaN;try{v=Date.parse(typeof deskGameStart==='function'?deskGameStart(sp,g):'');}catch(e){}ST.set(k,v);}return ST.get(k);};
     let n=0;for(const id of Object.keys(L)){const x=L[id];if(!x||x.graded)continue;const d=String(x.date).slice(0,10);if(d<t||d>last)continue;
       const C=VI.get(x.sp+'|'+x.game+'|'+d+'|'+x.voice);if(!C||!C.length)continue;const st=startOf(x.sp,x.game);if(!(st>now||(isNaN(st)&&d>t)))continue;   /* (pre-game only) */
-      const y=scAgree(x.sp,{a:+x.a,h:+x.h},C);if(y&&(y.a!==+x.a||y.h!==+x.h)){L[id]={...x,a:y.a,h:y.h,fixed:(x.fixed||0)+1};n++;}}
-    if(n){set(SCORECALL_KEY,L);try{SC_TRUST_C=null;}catch(e){}}return n;}catch(e){console.warn('score reconcile',e);return 0;}}
+      const y=scAgree(x.sp,{a:+x.a,h:+x.h},C);if(y&&(y.a!==+x.a||y.h!==+x.h)){fx.push([id,y.a,y.h]);n++;}}
+    /* read-only until something needs fixing (the cached copy is shared): then the open transaction's copy, or a fresh one to save */
+    if(n){const M=tx?L:(get(SCORECALL_KEY,{})||{});fx.forEach(([id,a,h])=>{const x=M[id];if(x)M[id]={...x,a,h,fixed:(x.fixed||0)+1};});
+      if(tx)tx.dl++;else set(SCORECALL_KEY,M);try{SC_TRUST_C=null;}catch(e){}}return n;}catch(e){console.warn('score reconcile',e);return 0;}}
 function gradeScoreCalls(){const L=get(SCORECALL_KEY,{})||{};let n=0;
   Object.values(L).forEach(x=>{if(x.graded)return;let R=null;try{R=finalsFor(x.sp,x.game,String(x.date).slice(0,10),false);}catch(e){}if(!R)return;const fa=+R.a,fh=+R.h;
     x.graded=1;x.fa=fa;x.fh=fh;x.exact=x.a===fa&&x.h===fh?1:0;x.mar=(x.h-x.a)===(fh-fa)?1:0;x.tot=(x.a+x.h)===(fa+fh)?1:0;x.win=fa===fh?null:((x.h>x.a)===(fh>fa)?1:0);x.err=Math.abs(x.a-fa)+Math.abs(x.h-fh);n++;});
@@ -3187,7 +3226,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261124d',DESK_VER='3.5.17';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261124e',DESK_VER='3.5.18';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -9122,7 +9161,7 @@ let TICKETS_LIVE_TIMER=null;
 function ticketsLiveLoop(){
   if(TICKETS_LIVE_TIMER)clearInterval(TICKETS_LIVE_TIMER);
   TICKETS_LIVE_TIMER=setInterval(()=>{
-    if(document.hidden)return;
+    if(document.hidden||deskTyping())return;   /* v3.5.18 · a box has the keyboard: the next tick */
     const v=document.getElementById('v-tickets');
     if(!v||!v.classList.contains('on'))return;
     if(Date.now()-TK_SCROLL_T<2500&&TK_SCROLL_T>TK_TAP_T)return;   /* mid-scroll: catch it on the next tick */
@@ -12813,6 +12852,7 @@ if(typeof window!=='undefined'){window.addEventListener('scroll',()=>{TK_SCROLL_
   window.addEventListener('pointerdown',()=>{TK_TAP_T=Date.now();},{passive:true});}
 function tkKey(){return[TICKETTAB,typeof BUILD_MODE!=='undefined'?BUILD_MODE:'',typeof MINE_VIEW!=='undefined'?MINE_VIEW:'',typeof OUTSIDE_MODE!=='undefined'?OUTSIDE_MODE:'',typeof ATR_TAB!=='undefined'?ATR_TAB:''].join('|');}
 function renderTickets(){
+  if(deskHold('tickets',renderTickets,document.getElementById('v-tickets')))return;   /* v3.5.18 · a stake being typed: right after */
   const key=tkKey(),same=key===TK_LAST_KEY;
   if(same&&Date.now()-TK_SCROLL_T<1500&&TK_SCROLL_T>TK_TAP_T){clearTimeout(TK_DEFER);TK_DEFER=setTimeout(renderTickets,1600);return;}   /* you're scrolling — refresh after */
   clearTimeout(TK_DEFER);
@@ -13964,6 +14004,7 @@ async function loadESPN(){
     });
     if(anyLive&&!LIVE_POLL){
       LIVE_POLL=setInterval(async()=>{
+        if(deskTyping())return;   /* v3.5.18 · the next poll */
         const stillLive=GAMES.some(g=>g.abstract==='Live');
         if(!stillLive){clearInterval(LIVE_POLL);LIVE_POLL=null;return;}
         await loadESPN();
@@ -19296,7 +19337,7 @@ function charPropLines(v,PC){if(!CPROP_VOICES.includes(v))return'';let F={fav:[]
     +(F.fade.length?`<div class="mono" style="font-size:9.5px;color:var(--cold)">🧊 Stopped trusting: ${F.fade.map(nm).join(' · ')}</div>`:'');}
 let TODAY_LIVE_TIMER=null;
 function todayLiveLoop(){if(TODAY_LIVE_TIMER)return;
-  TODAY_LIVE_TIMER=setInterval(async()=>{if(document.hidden)return;const v=document.getElementById('v-today');if(!v||!v.classList.contains('on'))return;
+  TODAY_LIVE_TIMER=setInterval(async()=>{if(document.hidden||deskTyping())return;const v=document.getElementById('v-today');if(!v||!v.classList.contains('on'))return;
     try{await mgRefresh(false);}catch(e){}renderToday(true);},30000);}
 /* v2.86.9 · ONE pick row wherever a pick is shown across sports — Today's card and the ⏰ by-time view draw the exact same row
    (tier, price, brain %, edge, blend, EV, stake, live win %, characters, hot line, price read, rules, ✓ on a ticket).
@@ -19592,7 +19633,7 @@ function renderMyGames(){
 }
 function mgLoop(){
   if(MG_TIMER)clearInterval(MG_TIMER);
-  const tick=async()=>{const v=document.getElementById('v-mine');if(!v||!v.classList.contains('on')||document.hidden)return;
+  const tick=async()=>{const v=document.getElementById('v-mine');if(!v||!v.classList.contains('on')||document.hidden||deskTyping())return;
     await mgRefresh();renderMyGames();};
   MG_TIMER=setInterval(tick,45e3);
 }
@@ -21533,7 +21574,7 @@ function openTicketSheet(id){const t=(get(LS.locked,[])||[]).find(x=>String(x.id
     ov.onclick=ev=>{if(ev.target===ov)closeTicketSheet();};document.body.appendChild(ov);}
   ov.innerHTML=`<div id="tkSheetIn" style="background:var(--panel,#12151c);width:min(100vw,620px);max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:14px 14px 22px;border:1px solid var(--rule)">${ticketSheetHtml(t)}</div>`;
   document.body.style.overflow='hidden';clearInterval(TK_SHEET_T);
-  TK_SHEET_T=setInterval(()=>{const inn=document.getElementById('tkSheetIn');const t2=(get(LS.locked,[])||[]).find(x=>String(x.id)===TK_SHEET);if(!inn||!t2){closeTicketSheet();return;}const y=inn.scrollTop;inn.innerHTML=ticketSheetHtml(t2);inn.scrollTop=y;},20000);}
+  TK_SHEET_T=setInterval(()=>{if(deskTyping())return;const inn=document.getElementById('tkSheetIn');const t2=(get(LS.locked,[])||[]).find(x=>String(x.id)===TK_SHEET);if(!inn||!t2){closeTicketSheet();return;}const y=inn.scrollTop;inn.innerHTML=ticketSheetHtml(t2);inn.scrollTop=y;},20000);}
 function closeTicketSheet(){clearInterval(TK_SHEET_T);TK_SHEET=null;const ov=document.getElementById('tkSheet');if(ov)ov.remove();document.body.style.overflow='';}
 
 /* ── CHARACTER PROPS, LIVE ────────────────────────────────────────────────
@@ -21879,7 +21920,7 @@ function bmWire(){const svg=document.getElementById('bmSvg');if(!svg)return;
     const k=n.getAttribute('data-k'),id=n.getAttribute('data-id');
     if(BMAP.sel&&BMAP.sel.type===k&&BMAP.sel.id===id){if(k==='t'){openTicketSheet(id);return;}BMAP.sel=null;bmPaint();return;}
     BMAP.sel={type:k,id};bmPaint();setTimeout(()=>{const d=document.getElementById('bmDetail');if(d&&d.scrollIntoView)d.scrollIntoView({behavior:'smooth',block:'nearest'});},40);});
-  clearInterval(BMAP.T);BMAP.T=setInterval(()=>{if(document.hidden||TICKETTAB!=='elimmap'){if(TICKETTAB!=='elimmap')clearInterval(BMAP.T);return;}if(Date.now()-TK_SCROLL_T<2000)return;bmPaint();},30000);}
+  clearInterval(BMAP.T);BMAP.T=setInterval(()=>{if(deskTyping())return;if(document.hidden||TICKETTAB!=='elimmap'){if(TICKETTAB!=='elimmap')clearInterval(BMAP.T);return;}if(Date.now()-TK_SCROLL_T<2000)return;bmPaint();},30000);}
 if(typeof document!=='undefined'&&!document.getElementById('bmCss')){const st=document.createElement('style');st.id='bmCss';
   st.textContent='@keyframes bmPulse{0%{opacity:.9;stroke-width:2}70%{opacity:0;stroke-width:6}100%{opacity:0}}.bm-pulse{animation:bmPulse 1.8s ease-out infinite;transform-box:fill-box;transform-origin:center}@keyframes bmFlow{to{stroke-dashoffset:-16}}.bm-flow{stroke-dasharray:6 4;animation:bmFlow 1s linear infinite}.bm-node{transition:opacity .25s}';
   (document.head||document.documentElement).appendChild(st);}

@@ -110,19 +110,19 @@ async function getJSON(url, wait = 9000) {
 const stateOf = x => (!x ? '' : x.hidden ? 'h' : x.push ? 'p' : x.hit === true ? 'w' : x.hit === false ? 'l' : 'o');
 async function loadFeed(force) {
   const got = (await Promise.all(CFG.feeds.map(u => getJSON(u)))).filter(j => j && typeof j === 'object' && fin(j.generated));
-  if (!got.length) { S.feedErr = !S.feed; if (S.tab === 'today' || S.tab === 'receipts') render(); return; }
+  if (!got.length) { S.feedErr = !S.feed; if (S.tab === 'today' || S.tab === 'receipts') whenFree(render); return; }
   const F = got.sort((a, b) => b.generated - a.generated)[0];
-  if (S.feed && S.feed.generated >= F.generated) { if (force) render(); if (!S.liveAt) liveTick(); return; }
+  if (S.feed && S.feed.generated >= F.generated) { if (force) whenFree(render); if (!S.liveAt) liveTick(); return; }
   S.feed = noHeavy(F); S.feedErr = false; store.set('feed', S.feed);
-  render(); liveTick();
+  whenFree(render); liveTick();
 }
 async function loadSlate() {
   const got = (await Promise.all(CFG.slates.map(u => getJSON(u)))).filter(j => j && j.v === 1 && Array.isArray(j.days));
-  if (!got.length) { S.slateErr = !S.slate; if (S.tab === 'slate') render(); return; }
+  if (!got.length) { S.slateErr = !S.slate; if (S.tab === 'slate') whenFree(render); return; }
   const SL = got.sort((a, b) => b.ts - a.ts)[0];
   if (S.slate && S.slate.ts >= SL.ts) return;
   S.slate = SL; S.slateErr = false; store.set('slate', SL);
-  if (S.tab === 'slate') { render(); slateLive(); }
+  if (S.tab === 'slate') { whenFree(render); slateLive(); }
 }
 /* live scores for open picks and the slate, straight from ESPN's public scoreboard */
 async function scores(sps, ymd) {
@@ -170,7 +170,20 @@ function withGame(p) { if (!p || p.game || !p.team || !p.sp) return p; const t =
   const k = K.find(k => S.live[k].ymd === td) || K.find(k => S.live[k].state !== 'post');
   return k ? { ...p, game: k.slice(p.sp.length + 1) } : p; }
 const castPicks = () => ((S.feed && S.feed.characters) || []).flatMap(c => (c.picks || []).filter(p => p && p.sp && p.hit == null && !p.push));
-let rpT = 0; const liveRepaint = () => { clearTimeout(rpT); rpT = setTimeout(() => { if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || (S.tab === 'cast' && !(document.activeElement && document.activeElement.id === 'castSel'))) render(); else if (S.tab === 'challenges') runsRepaint(); else if (S.tab === 'me') betsRepaint(); runDot(); }, 120); };
+/* v67 · Nov 24, 7:34 PM, Chris: "Trying to put a price on the box". Every score refresh repainted the whole tab (every 30 s during
+   games, and again as each league's scores landed), the slip's stake box with it: the box being typed in was swapped for a fresh one
+   mid-number, the keyboard dropped and the number went back. A repaint the page makes on its own now waits while a box on the page has
+   the keyboard and runs the moment the box lets go. (Taps and tab changes still repaint at once.) */
+const typing = () => { const a = document.activeElement; if (!a || a === document.body || a === document.documentElement) return false; const t = a.tagName;
+  return t === 'TEXTAREA' || t === 'SELECT' || !!a.isContentEditable || (t === 'INPUT' && !/^(button|submit|reset|checkbox|radio|range|file|color|image)$/i.test(a.type || '')); };
+const HELD = new Set();
+const whenFree = fn => { if (typing()) { HELD.add(fn); return false; } HELD.delete(fn); fn(); return true; };
+document.addEventListener('focusout', () => setTimeout(() => { if (!HELD.size || typing()) return; const F = [...HELD]; HELD.clear(); F.forEach(f => { try { f(); } catch (e) { /* a repaint that failed waits for the next one */ } }); }, 160), true);
+/* …and an iPhone zooms the whole page in when a box under 16px gets the keyboard (the stake box zoomed the Slate in). On iOS only, the
+   page keeps its own scale while typing; pinching to zoom still works there, iOS ignores the cap for fingers. */
+try { if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) { const m = document.querySelector('meta[name="viewport"]'); if (m && !/maximum-scale/.test(m.content)) m.content += ',maximum-scale=1'; } } catch (e) { /* no viewport tag: nothing to hold */ }
+const repaintLive = () => { if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || S.tab === 'cast') render(); else if (S.tab === 'challenges') runsRepaint(); else if (S.tab === 'me') betsRepaint(); };
+let rpT = 0; const liveRepaint = () => { clearTimeout(rpT); rpT = setTimeout(() => { whenFree(repaintLive); runDot(); }, 120); };
 /* v62 · the run cards follow the scores on their own (the rest of the Challenges page — its search box, its filters — stays put) */
 function runsRepaint() { const g = $('#v-challenges .rgrid'); if (!g) return; const f = document.activeElement, sel = f && f.closest && f.closest('.runcard') ? f.dataset.change && f.dataset.rid : null; if (sel) return; g.innerHTML = liveRuns().map(runCard).join(''); }
 /* …and the Compete tab wears a live dot while a run's ticket is in play */
@@ -197,13 +210,13 @@ async function liveTick() {
   await Promise.all([...by].map(([d, sps]) => scores([...sps], d)));
   liveRepaint();
   await boxes([...items, ...cast.map(withGame)]); /* player props: their box scores, now that the scoreboard has each game's id (the cast's props find their game by team) */
-  if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || (S.tab === 'cast' && !(document.activeElement && document.activeElement.id === 'castSel'))) render();
+  if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || S.tab === 'cast') whenFree(render);
 }
 async function slateLive() {
   const SL = S.slate, D = SL && SL.days[S.slateDay]; if (!D || D.d !== deskDay()) return;
   const now = Date.now(), sps = [...new Set(D.games.filter(g => g.t <= now + 5 * 60e3).map(g => g.sp))]; if (!sps.length) return;
   await scores(sps, D.d.replace(/-/g, ''));
-  if (S.tab === 'slate') render();
+  if (S.tab === 'slate') whenFree(render);
 }
 /* the page grades a finished game itself, so a result never waits on the next publish */
 /* once this phone has graded a pick, it stays graded (the feed's own grade always wins). Without this, a grade made from a live
@@ -2152,7 +2165,8 @@ document.addEventListener('click', async e => {
   else if (act === 'chat-invite') chatMod({ act: 'invite', uses: 25 }, j => { CH.invite = j.code; const n = $('#chatInv'); if (n) n.innerHTML = `New code: <code>${esc(j.code)}</code> (25 uses)`; });
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.guide) closeGuide(); });
-document.addEventListener('input', e => { if (e.target.id === 'ddStake') { const v = +e.target.value || 0, dec = ddTicketDec(S.dd, S.ddMode), n = $('#ddPays'); if (n) n.textContent = dd$(v * dec); } });
+/* v67 · the stake keeps every keystroke: a repaint (a leg added, the score refresh after you leave the box) shows what you typed */
+document.addEventListener('input', e => { if (e.target.id === 'ddStake') { const v = +e.target.value || 0, dec = ddTicketDec(S.dd, S.ddMode), n = $('#ddPays'); if (n) n.textContent = dd$(v * dec); if (v > 0) store.set('ddstake', v); } });
 /* v62 · Quick Pick: the stake moves what it pays and where the run lands */
 document.addEventListener('input', e => { if (e.target.id !== 'qpStake') return; const Q = qpState(); if (!Q || !Q.legs.length) return; const v = Math.max(0, +e.target.value || 0), dec = ddTicketDec(Q.legs, 'parlay');
   const a = $('#qpPays'), b = $('#qpAfter'); if (a) a.textContent = dd$(v * dec); if (b) b.textContent = dd$(Q.r.bal - v + v * dec); });
@@ -2184,7 +2198,7 @@ setInterval(() => { if (!document.hidden) loadFeed(); }, 120e3);
 (function liveLoop() { const anyLive = Object.values(S.live || {}).some(v => v && v.state === 'in');
   setTimeout(() => { if (!document.hidden) { liveTick(); if (S.tab === 'slate') slateLive();
     /* v62 · a run with a ticket out: the account refreshes every 2 minutes while you watch, so a settled ticket moves the run's bankroll */
-    if ((S.tab === 'challenges' || S.tab === 'me') && AC.me && (AC.me.bets || []).some(b => b.status === 'open') && Date.now() - (AC.at || 0) > 120e3) acctLoad(); } liveLoop(); }, anyLive ? 30e3 : S.liveAt ? 60e3 : 10e3); })();
+    if ((S.tab === 'challenges' || S.tab === 'me') && AC.me && (AC.me.bets || []).some(b => b.status === 'open') && Date.now() - (AC.at || 0) > 120e3 && !typing()) acctLoad(); } liveLoop(); }, anyLive ? 30e3 : S.liveAt ? 60e3 : 10e3); })();
 setInterval(() => { if (!document.hidden && S.tab === 'slate') loadSlate(); }, 600e3);
 
 /* ── Pull to refresh (Chris, Nov 15: "the pull down refresh is not available yet on the public app"). A home-screen app on iPhone

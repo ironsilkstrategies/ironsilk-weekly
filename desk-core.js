@@ -2564,5 +2564,5 @@ if(typeof document!=='undefined'&&!(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_E
   if(sl&&typeof MutationObserver!=='undefined')new MutationObserver(()=>{if(!slotMode())return;clearTimeout(SLOT_MO_T);SLOT_MO_T=setTimeout(()=>{
     try{const here=window.__PAGE_SPORT__;if(here&&(sportGames(here)||[]).length)todaySnapshot();}catch(e){}slotRender0();},900);}).observe(sl,{childList:true});
   /* live: scores and states every 45 s while the view is on screen */
-  if(!SLOT_TIMER)SLOT_TIMER=setInterval(()=>{try{if(document.hidden||!slotMode())return;const g=document.getElementById('v-games');if(g&&g.classList.contains('on'))slotRender();}catch(e){}},45000);
+  if(!SLOT_TIMER)SLOT_TIMER=setInterval(()=>{try{if(document.hidden||!slotMode()||(typeof deskTyping==='function'&&deskTyping()))return;const g=document.getElementById('v-games');if(g&&g.classList.contains('on'))slotRender();}catch(e){}},45000);
 }catch(e){console.warn('slot mode',e);}});

@@ -105,7 +105,9 @@ const txt = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
   /* Dec 4: a birth; the heir's card on the desk */
   fgo('2026-12-04'); F('wombRun(true);GEN_TAB="home";genRender()'); await wait(300);
   const bt4 = txt(F(`document.getElementById('genView').innerHTML`)), kc = txt(FJ(`(()=>{const el=[...document.querySelectorAll('#genView .life')].find(el=>/to graduate/i.test(el.textContent));return el?el.innerHTML:'';})()`));
-  T('🍼 on the desk: the newborn\'s card counts down to graduation (rookie day 0 of 21, % to graduate, earliest graduation Sat, Dec 26)', /On the desk/.test(bt4) && /Rookie · day 0 of 21/.test(kc) && /to graduate/i.test(kc) && /Earliest graduation Sat, Dec 26/.test(txt(kc)) && /Born to The Simulator and The Judge/.test(kc), txt(kc).slice(0, 500));
+  /* v3.5.14 · the debut day counts (Nov 23, the Grinder's 3–0 first day didn't move its bars): born Dec 4 is day 1 of 21, so the earliest
+     graduation is Fri, Dec 25 (it was day 0 and Sat, Dec 26) */
+  T('🍼 on the desk: the newborn\'s card counts down to graduation (rookie day 1 of 21, % to graduate, earliest graduation Fri, Dec 25)', /On the desk/.test(bt4) && /Rookie · day 1 of 21/.test(kc) && /to graduate/i.test(kc) && /Earliest graduation Fri, Dec 25/.test(txt(kc)) && /Born to The Simulator and The Judge/.test(kc), txt(kc).slice(0, 500));
   T('…and the header counts it ("1 heir on the desk")', /1 heir on the desk/.test(bt4), bt4.slice(0, 200));
   f.close();
 

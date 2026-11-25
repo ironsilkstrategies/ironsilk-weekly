@@ -368,7 +368,7 @@ async function refreshNFLLiveScores(){
       if(home){const sc=home.score;g.homeScore=sc!=null&&sc!==''?+sc:g.homeScore;}
     });
     const anyNotFinal=NFL_GAMES.some(g=>g.abstract!=='post');
-    if(anyNotFinal&&!NFL_LIVE_POLL)NFL_LIVE_POLL=setInterval(refreshNFLLiveScores,90000);
+    if(anyNotFinal&&!NFL_LIVE_POLL)NFL_LIVE_POLL=setInterval(()=>{if(typeof deskTyping==='function'&&deskTyping())return;refreshNFLLiveScores();},90000);
     if(!anyNotFinal&&NFL_LIVE_POLL){clearInterval(NFL_LIVE_POLL);NFL_LIVE_POLL=null;}
     /* Propagate any finals into the shared cross-sport store so the unified
        tabs (Eval, Record, Money, System scorecard) and locked-ticket grading
@@ -3406,7 +3406,7 @@ async function refreshNCAAFLiveScores(){
        loaded week hasn't reached its final state yet, not just while
        something is mid-play. */
     const anyNotFinal=NCAAF_GAMES.some(g=>g.abstract!=='post');
-    if(anyNotFinal&&!NCAAF_LIVE_POLL)NCAAF_LIVE_POLL=setInterval(refreshNCAAFLiveScores,90000);
+    if(anyNotFinal&&!NCAAF_LIVE_POLL)NCAAF_LIVE_POLL=setInterval(()=>{if(typeof deskTyping==='function'&&deskTyping())return;refreshNCAAFLiveScores();},90000);
     if(!anyNotFinal&&NCAAF_LIVE_POLL){clearInterval(NCAAF_LIVE_POLL);NCAAF_LIVE_POLL=null;}
     if(typeof syncFinalsToShared==='function'){try{syncFinalsToShared()}catch(e){}}
     if(changed&&ACTIVE_SPORT==='ncaaf'&&typeof renderNCAAF==='function')renderNCAAF();

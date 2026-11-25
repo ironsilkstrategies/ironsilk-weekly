@@ -523,7 +523,7 @@ function bbRender(sp,keepFocus){const C=bbC(sp);const el=document.getElementById
 const BB_LIVE_T={},BB_LIVE_BUSY={},BB_FULL_AT={};
 /* v3.5.10 · one pull at a time; today's games every 45 seconds, the full schedule every 10 minutes */
 function bbLiveLoop(sp){const C=bbC(sp);if(BB_LIVE_T[sp])clearInterval(BB_LIVE_T[sp]);BB_FULL_AT[sp]=Date.now();
-  BB_LIVE_T[sp]=setInterval(async()=>{if(document.hidden||(typeof ACTIVE_SPORT!=='undefined'&&ACTIVE_SPORT!==sp)||BB_LIVE_BUSY[sp])return;
+  BB_LIVE_T[sp]=setInterval(async()=>{if(document.hidden||(typeof ACTIVE_SPORT!=='undefined'&&ACTIVE_SPORT!==sp)||BB_LIVE_BUSY[sp])return;if(typeof deskTyping==='function'&&deskTyping()&&!(document.activeElement&&document.activeElement.id==='bbQ-'+sp))return;
     if(!C.games.some(g=>g.abstract==='in'||(g.abstract==='pre'&&Date.parse(g.start)-Date.now()<15*60e3)))return;
     const full=Date.now()-(BB_FULL_AT[sp]||0)>10*60e3;if(full)BB_FULL_AT[sp]=Date.now();
     BB_LIVE_BUSY[sp]=true;try{const q=document.activeElement&&document.activeElement.id==='bbQ-'+sp;await bbLoadSchedule(C,!full).catch(()=>{});bbRender(sp,q);}finally{BB_LIVE_BUSY[sp]=false;}},45e3);}

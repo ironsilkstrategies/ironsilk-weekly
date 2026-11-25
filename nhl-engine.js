@@ -735,7 +735,7 @@ function renderNHL(){
 let NHL_LIVE_TIMER=null;
 function nhlLiveLoop(){
   if(NHL_LIVE_TIMER)clearInterval(NHL_LIVE_TIMER);
-  NHL_LIVE_TIMER=setInterval(async()=>{if(document.hidden||ACTIVE_SPORT!=='nhl')return;
+  NHL_LIVE_TIMER=setInterval(async()=>{if(document.hidden||ACTIVE_SPORT!=='nhl'||(typeof deskTyping==='function'&&deskTyping()))return;
     if(!NHL_GAMES.some(g=>g.abstract==='in'||(g.abstract==='pre'&&Date.parse(g.start)-Date.now()<15*60e3)))return;
     await loadNHLSchedule();renderNHL();},45e3);
 }
