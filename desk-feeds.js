@@ -86,11 +86,20 @@ function feedStoreProps(data){if(!data||!data.ev)return 0;const P={},H={};let n=
     Object.entries(H).forEach(([k,h])=>{const g=cur.g[k]||(cur.g[k]={});if(!g.ml&&h.ml){g.ml=h.ml;g.src='dk';ch++;}if(!g.sp&&h.sp){g.sp=h.sp;g.src='dk';ch++;}});if(ch)set(HALFLN_KEY,cur);}catch(e){}
   return n;}
 function feedPropsIdx(){if(FEED_PROPS)return FEED_PROPS;FEED_PROPS=get(FEED_PROPS_K,null)||{P:{},H:{}};return FEED_PROPS;}
+/* v3.5.23 · the 1st-half / 1st-period lines feed (Action Network's v2 scoreboard, DraftKings' numbers): every sport, the half total
+   with its over and under named, the 3-way draw where hockey has one. Today's games, under anything the day's own paste gave. */
+function feedStoreHalves(data){if(!data||!data.g)return 0;const d=today();let ch=0;
+  try{const LN=get(HALFLN_KEY,null);const cur=LN&&LN.d===d?LN:{d,g:{}};
+    Object.entries(data.g).forEach(([k,h])=>{if(!h||h.d!==d)return;const g=cur.g[k]||(cur.g[k]={});
+      ['ml','sp','ou'].forEach(m=>{if(!g[m]&&h[m]){g[m]=h[m];g.src=g.src||'an';ch++;}});if(h.ml&&h.ml.d&&g.ml&&!g.ml.d){g.ml.d=h.ml.d;ch++;}});
+    if(ch)set(HALFLN_KEY,cur);}catch(e){}
+  return ch;}
 /* DraftKings' price on "<player> <thr>+ <stat>", when the board has that exact milestone */
 function feedPropPrice(sp,player,k,thr){try{const L=feedPropsIdx().P[sp+'|'+feedName(player)+'|'+k];if(!L)return null;const m=L.find(x=>+x[0]===+thr);return m?{price:m[1],lines:L.map(x=>x[0]).sort((a,b)=>a-b)}:{price:null,lines:L.map(x=>x[0]).sort((a,b)=>a-b)};}catch(e){return null;}}
 /* the background pass: fetch, merge, then stamp the CLV of every graded call that was waiting for its close */
 async function feedsTick(force){if(FEED_BUSY)return null;if(typeof DESK_BG_EVAL!=='undefined'&&DESK_BG_EVAL)return null;FEED_BUSY=true;
-  try{try{const pd=await feedFetch('props',force);if(pd)feedStoreProps(pd);}catch(e){}
+  try{try{const hd=await feedFetch('halves',force);if(hd)feedStoreHalves(hd);}catch(e){}
+    try{const pd=await feedFetch('props',force);if(pd)feedStoreProps(pd);}catch(e){}
     try{const td=await feedFetch('teams',force);if(td&&typeof dogStoreTeams==='function')dogStoreTeams(td);}catch(e){}
     try{const cd=await feedFetch('coach',force);if(cd&&typeof coachStore==='function')coachStore(cd);}catch(e){}
     try{const od=await feedFetch('oracle',force);if(od&&typeof oracleStore==='function')oracleStore(od);}catch(e){}
@@ -103,7 +112,10 @@ function feedHealth(){const c=get(FEED_KEY('closes'),null);if(!c)return{st:'neve
 function feedBoardHtml(){const H=feedHealth();const ico={ok:'🟢',stale:'🟡',down:'🔴',never:'⚪'}[H.st]||'⚪';
   let prl='';try{const c=get(FEED_PROPS_K,null);if(c&&c.P)prl=`<div class="mono" style="font-size:10.5px">🎯 DraftKings props — ${Object.keys(c.P).length} player stat ladders · 1st-half lines for ${Object.keys(c.H||{}).length} games${c.ts?' · '+Math.max(0,Math.round((Date.now()-Date.parse(c.ts))/60e3))+' min old':''}</div>`;}catch(e){}
   let fin='';try{const c=get(FEED_FIN_K,null);if(c&&c.L)fin=`<div class="mono" style="font-size:10.5px">🧾 Finals for grading — ${c.L.length} from the last 10 days · ${c.x||0} double-checked against NHL.com / NBA.com / NCAA.com${c.bad?` · <b style="color:var(--gold)">${c.bad} disagree</b>`:''}</div>`;}catch(e){}
-  return`<div class="tkt"><h3 style="margin:0 0 4px">📡 The feeds</h3><div class="mono" style="font-size:10.5px">${ico} Closing lines (DraftKings, every final) — ${txtEsc(H.lab)}</div>${fin}${prl}<div class="sub" style="font-size:10px">Built off the phone every hour from public ESPN data, scores checked against the leagues' own feeds; read in the background, never synced.</div></div>`;}
+  /* v3.5.23 · the 1st-half / 1st-period lines the characters' half calls run on, by sport */
+  let hl='';try{const LN=get(HALFLN_KEY,null);if(LN&&LN.d===today()&&LN.g){const by={};Object.keys(LN.g).forEach(k=>{const sp=k.split('|')[0];by[sp]=(by[sp]||0)+1;});
+      const lab={nba:'NBA',ncaab:'CBB',nhl:'NHL',nfl:'NFL',ncaaf:'CFB'};if(Object.keys(by).length)hl=`<div class="mono" style="font-size:10.5px">🕐 1st-half lines today — ${Object.entries(by).map(([k,n])=>`${lab[k]||k} ${n}`).join(' · ')}</div>`;}}catch(e){}
+  return`<div class="tkt"><h3 style="margin:0 0 4px">📡 The feeds</h3><div class="mono" style="font-size:10.5px">${ico} Closing lines (DraftKings, every final) — ${txtEsc(H.lab)}</div>${fin}${prl}${hl}<div class="sub" style="font-size:10px">Built off the phone every hour from public ESPN data, scores checked against the leagues' own feeds; read in the background, never synced.</div></div>`;}
 if(typeof bookViewHtml==='function'&&typeof window!=='undefined'&&!window.__FEED_BV__){window.__FEED_BV__=1;const BV2=bookViewHtml;
   bookViewHtml=function(){const h=BV2();try{const i=h.indexOf('<div class="tkt"><h3 style="margin:0 0 4px">Today\'s story');return i>=0?h.slice(0,i)+feedBoardHtml()+h.slice(i):h+feedBoardHtml();}catch(e){return h;}};}
 try{if(typeof AP_STEPS!=='undefined'&&!AP_STEPS.some(s=>s[0]==='feeds')){const i=AP_STEPS.findIndex(s=>s[0]==='voices');

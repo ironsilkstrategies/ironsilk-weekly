@@ -3007,18 +3007,98 @@ async function halfLinesRefresh(){if(typeof fetch==='undefined'||typeof location
     if((m=l.match(/^(H1SPREAD|P1PL):\s*.+?\s+([+\-]?[\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*.+?\s+([+\-]?[\d.]+)\s*\(([+\-]\d+)\)/i)))G.sp={a:{line:+m[2],price:+m[3]},h:{line:+m[4],price:+m[5]}};
     else if((m=l.match(/^(H1ML|P1ML):\s*.+?\s+([+\-]\d+)\s*\/\s*.+?\s+([+\-]\d+)/i)))G.ml={a:{price:+m[2]},h:{price:+m[3]}};
     else if((m=l.match(/^(H1OU|P1OU):\s*o([\d.]+)\s*\(([+\-]\d+)\)\s*\/\s*u([\d.]+)\s*\(([+\-]\d+)\)/i)))G.ou={line:+m[2],o:+m[3],u:+m[5]};});
+  /* v3.5.23 · merged, not written over: this ran at every page open and wiped the day's feed lines (the feed itself is read at
+     most every 30 minutes, so they didn't come back) — the paste wins a market it has, the feed keeps the rest */
+  try{const LN=get(HALFLN_KEY,null);if(LN&&LN.d===d&&LN.g)Object.entries(LN.g).forEach(([k,o])=>{const p=out.g[k];if(!p){out.g[k]=o;return;}['ml','sp','ou'].forEach(mk=>{if(!p[mk]&&o[mk])p[mk]=o[mk];});});}catch(e){}
   set(HALFLN_KEY,out);}
-function halfCallsLog(sp,g,calls,scores){const F=HALF_FRAC[sp];if(!F)return 0;const LN=get(HALFLN_KEY,null);const gl=g.away.abbr+'@'+g.home.abbr;
+/* ═══ v3.5.23 · THE HALF MODEL ══════════════════════════════════════════════════════════════════════════════════════════════
+   Nov 25, Chris: "All of it… X1000." The old half call was each character's final score cut in half (49% of the total, half the
+   margin) and a side picked by the sign — the same side as its game pick 88-91% of the time, and in hockey it backed a team on a
+   3-way moneyline whenever it led the period by 0.05 goals, as if a tied period weren't the likeliest single result.
+   Now every half is PRICED, from each character's own game read:
+   · how a half relates to the game starts where the books put it (NBA half spreads ≈ 0.56 of the game's margin and totals about
+     half; college 0.53 / 0.47; hockey's 1st period ~30% of the goals) and moves only on a long graded record — 1,000 games to
+     move halfway on margins (the 196 graded NBA halves say 0.66: not enough to overrule the books). The spread of outcomes is
+     learned the same way (about ±10 points a half).
+   · hockey's 1st period is two Poisson scorelines (each team ~30% of its goals): win, DRAW, loss — the 3-way moneyline, the
+     ±0.5 puck line and the period total are all read off the same scoreline, and the draw can be the call.
+   · each side's chance is held against the price: the model's chance pulled to the market's no-vig chance by a weight each sport
+     and market earns from graded half calls (it starts at 20%, the same prior as the game-line Blend). The call is the side worth
+     more at its price — on a 3-way board only a result its own read rates above the market's chance, so no call at all when it
+     sees no team (and no draw) worth backing.
+   Tested before shipping (walk-forward, every graded game with a half): team fast-start/slow-start profiles moved the half miss
+   by hundredths either way (NBA worse, college a hair better), so they're not in it. Pricing NBA half spreads off the full-game
+   line went 31-30 in 97 games. And replaying 2,800 graded half calls, the bigger a character's read disagreed with the half
+   line, the worse it did (about −19% a bet where it saw the most value, −4.5% — the vig — where it agreed with the line). So the
+   % shown is anchored to the market until a character's half reads earn more, and nothing goes official without the record.
+   The model is honest structure, not a found edge. */
+const HALF_M0={nba:{km:0.56,kt:0.50,sm:10.5,st:11.5},ncaab:{km:0.53,kt:0.47,sm:10,st:10.5},nfl:{km:0.55,kt:0.5,sm:9.5,st:9.5},ncaaf:{km:0.55,kt:0.51,sm:12,st:11},nhl:{kt:0.30}};
+const HALF_K={km:1000,kt:300,s:30};   /* pseudo-games at the books' ratio: the market's own estimate outweighs a short record */
+const halfImp=p=>{p=+p;return!isFinite(p)||!p?null:p>0?100/(p+100):(-p)/((-p)+100);};
+const halfDec=p=>{p=+p;return p>0?1+p/100:1+100/(-p);};
+function halfFair2(x,y){const a=halfImp(x),b=halfImp(y);if(a==null||b==null)return[null,null];return[a/(a+b),b/(a+b)];}
+/* a 3-way board (hockey's 1st period): with the draw's price, the three normalized; without it, ~7% overround assumed */
+function halfFair3(pr,w3){if(!w3){const[a,h]=halfFair2(pr.a,pr.h);return{a,h,d:null};}const ia=halfImp(pr.a),ih=halfImp(pr.h);if(ia==null||ih==null)return{a:null,h:null,d:null};
+  const id=pr.d!=null?halfImp(pr.d):Math.max(0.15,1.07-ia-ih),S=ia+ih+id;return{a:ia/S,h:ih/S,d:id/S};}
+/* every graded game with a half and the line's full-game read at lock: {M,T (line's margin/total), m1,t1 (the half's)} */
+function halfGraded(sp){const out=[];
+  try{if(sp==='nba'||sp==='ncaab'||sp==='nhl'){const arc=roGet(sp==='nhl'?'d4.nhlarc':'d4.'+sp+'arc',{})||{},f=sp==='nhl'?['p1a','p1h']:['h1a','h1h'];
+      Object.keys(arc).forEach(d=>((arc[d]||{}).rows||[]).forEach(r=>{const F=r.final,J=r.judge;if(!F||F[f[0]]==null||F[f[1]]==null||!J)return;const m=(J.w||[]).find(w=>w&&w.src==='market');if(!m)return;
+        const a1=+F[f[0]],h1=+F[f[1]];if(!isFinite(a1)||!isFinite(h1))return;out.push({d,M:m.h-m.a,T:m.h+m.a,m1:h1-a1,t1:a1+h1});}));}
+    else if(sp==='nfl'||sp==='ncaaf'){const arc=roGet(sp==='nfl'?LS.nflarc:'d4.ncaafarc',{})||{},AF=roGet('d4.allfinals',{})||{};
+      Object.keys(arc).forEach(wk=>{const A=arc[wk];if(!A||!Array.isArray(A.rows))return;A.rows.forEach(r=>{const J=r.judge;if(!J)return;const m=(J.w||[]).find(w=>w&&w.src==='market');if(!m)return;
+        const F=AF[sp+':'+r.game];if(!F||F.h1a==null||F.h1h==null)return;const dd=r.pickedAt?new Date(+r.pickedAt).toISOString().slice(0,10):null;
+        if(dd&&F.d&&Math.abs(Date.parse(F.d)-Date.parse(dd))>4*864e5)return;out.push({d:F.d||dd,M:m.h-m.a,T:m.h+m.a,m1:+F.h1h-(+F.h1a),t1:+F.h1a+(+F.h1h)});});});}}catch(e){}
+  return out;}
+let HALF_MC={};
+function halfModel(sp){const P=HALF_M0[sp];if(!P)return null;const d=today(),c=HALF_MC[sp];if(c&&c.d===d)return c.m;
+  const G=halfGraded(sp),n=G.length;const m={...P,n};
+  if(n){const sMM=G.reduce((s,x)=>s+x.M*x.M,0),sMm=G.reduce((s,x)=>s+x.M*x.m1,0),sT=G.reduce((s,x)=>s+x.T,0),sT1=G.reduce((s,x)=>s+x.t1,0);
+    if(P.km!=null&&sMM>0){const avg=sMM/n;m.km=(sMm+HALF_K.km*avg*P.km)/(sMM+HALF_K.km*avg);}
+    if(sT>0){const avg=sT/n;m.kt=(sT1+HALF_K.kt*avg*P.kt)/(sT+HALF_K.kt*avg);}
+    if(P.sm!=null){const rm=G.reduce((s,x)=>s+Math.pow(x.m1-m.km*x.M,2),0),rt=G.reduce((s,x)=>s+Math.pow(x.t1-m.kt*x.T,2),0);
+      m.sm=Math.sqrt((rm+HALF_K.s*P.sm*P.sm)/(n+HALF_K.s));m.st=Math.sqrt((rt+HALF_K.s*P.st*P.st)/(n+HALF_K.s));}}
+  HALF_MC[sp]={d,m};return m;}
+/* one character's half, from its own final-score call (a, h): the half's scoreline and each side's chance */
+function halfRead(sp,HM,a,h){if(!HM)return null;
+  if(sp==='nhl'){const la=Math.max(0.02,HM.kt*a),lh=Math.max(0.02,HM.kt*h),P=[];const po=(l,k)=>{let f=1;for(let i=2;i<=k;i++)f*=i;return Math.exp(-l)*Math.pow(l,k)/f;};
+    let pA=0,pH=0,pD=0;for(let i=0;i<=10;i++)for(let j=0;j<=10;j++){const p=po(la,i)*po(lh,j);P.push([i,j,p]);if(i>j)pA+=p;else if(j>i)pH+=p;else pD+=p;}
+    /* strict on both sides: an integer line can push, and a push is neither side's win */
+    const sum=f=>P.reduce((s,[i,j,p])=>s+(f(i,j)?p:0),0);
+    return{ha:la,hh:lh,pA,pH,pD,cover:hl=>sum((i,j)=>j-i+hl>0),coverA:hl=>sum((i,j)=>j-i+hl<0),over:L=>sum((i,j)=>i+j>L),under:L=>sum((i,j)=>i+j<L)};}
+  const mh=HM.km*(h-a),th=HM.kt*(a+h),Z=x=>brainNorm(x);
+  return{ha:(th-mh)/2,hh:(th+mh)/2,pH:Z(mh/HM.sm),pA:1-Z(mh/HM.sm),pD:0,cover:hl=>Z((mh+hl)/HM.sm),coverA:hl=>1-Z((mh+hl)/HM.sm),over:L=>Z((th-L)/HM.st),under:L=>1-Z((th-L)/HM.st)};}
+/* how much of the model's chance each sport+market has earned against the market's, from graded half calls (Brier, like the Blend) */
+let HALF_BW={};
+function halfBlendW(sp,mk){const k=sp+'|'+mk,d=today(),c=HALF_BW[k];if(c&&c.d===d)return c.w;let w=0.2,n=0;
+  try{const S=Object.values(roGet(HALF_KEY,{})||{}).filter(x=>x&&x.sp===sp&&x.graded&&x.hit!=null&&x.p!=null&&x.m!=null&&String(x.mk||'').slice(2)===mk);n=S.length;
+    if(n){let best=null;for(let i=0;i<=20;i++){const ww=i/20;let b=0;S.forEach(x=>{const q=x.m+ww*(x.p-x.m);b+=Math.pow((x.hit?1:0)-q,2);});if(!best||b<best[1])best=[ww,b];}w=(n*best[0]+25*0.2)/(n+25);}}catch(e){}
+  HALF_BW[k]={d,w,n};return w;}
+function halfCallsLog(sp,g,calls,scores){if(!HALF_FRAC[sp])return 0;const LN=get(HALFLN_KEY,null);const gl=g.away.abbr+'@'+g.home.abbr;
   const ln=LN&&LN.d===today()?LN.g[sp+'|'+gl]:null;if(!ln)return 0;const d=(calls[0]&&calls[0].date)||today();if(d!==today())return 0;
-  const L=SC_TX?SC_TX.H:(get(HALF_KEY,{})||{});let n=0;const tag=halfTag(sp),pre=sp==='nhl'?'p1':'h1';
-  scores.forEach(x=>{const tot=(x.a+x.h)*F[0],mar=(x.h-x.a)*F[1],ha=(tot-mar)/2,hh=(tot+mar)/2;const put=(mk,side,line,price,pick)=>{const id=[sp,gl,d,x.voice,mk].join('|');const o=L[id];
-      if(o&&(o.graded||o.side===side&&o.line===line))return;L[id]={sp,game:gl,date:d,voice:x.voice,mk,side,line,price,pick,pa:+ha.toFixed(2),ph:+hh.toFixed(2)};n++;};
-    if(ln.ml&&Math.abs(mar)>=0.05){const sd=mar>0?'home':'away';put(pre+'ml',sd,null,ln.ml[sd==='home'?'h':'a'].price,`${tag} ${sd==='home'?g.home.abbr:g.away.abbr} ML`);
-      /* v3.5.22 · 3-way or 2-way, from the two prices (3-way books leave room for the draw: well short of 100%) */
-      try{const id=[sp,gl,d,x.voice,pre+'ml'].join('|'),o=L[id],ip=p=>{p=+p;return p>0?100/(p+100):(-p)/((-p)+100);},pa=ln.ml.a&&ln.ml.a.price,ph=ln.ml.h&&ln.ml.h.price;
-        if(o&&!o.graded&&pa!=null&&ph!=null&&isFinite(+pa)&&isFinite(+ph))o.w3=ip(pa)+ip(ph)<0.97?1:0;}catch(e){}}
-    if(ln.sp){const hl=ln.sp.h.line,m=mar+hl;if(Math.abs(m)>=0.1){const sd=m>0?'home':'away',o=ln.sp[sd==='home'?'h':'a'];put(pre+'spread',sd,o.line,o.price,`${tag} ${sd==='home'?g.home.abbr:g.away.abbr} ${o.line>0?'+':''}${o.line}`);}}
-    if(ln.ou&&Math.abs(tot-ln.ou.line)>=0.1){const sd=tot>ln.ou.line?'over':'under';put(pre+'total',sd,ln.ou.line,sd==='over'?ln.ou.o:ln.ou.u,`${tag} ${sd==='over'?'Over':'Under'} ${ln.ou.line}`);}});
+  const L=SC_TX?SC_TX.H:(get(HALF_KEY,{})||{});let n=0;const tag=halfTag(sp),pre=sp==='nhl'?'p1':'h1',HM=halfModel(sp),A=g.away.abbr,Hm=g.home.abbr;
+  const r4=v=>v==null||!isFinite(v)?null:+v.toFixed(4),sg=v=>(v>0?'+':'')+v;
+  scores.forEach(x=>{const R=isFinite(+x.a)&&isFinite(+x.h)?halfRead(sp,HM,+x.a,+x.h):null;if(!R)return;
+    const put=(mk,b,w3)=>{const id=[sp,gl,d,x.voice,mk].join('|');const o=L[id];if(o&&(o.graded||o.side===b.side&&o.line===(b.line==null?null:b.line)&&o.price===b.price))return;
+      L[id]={sp,game:gl,date:d,voice:x.voice,mk,side:b.side,line:b.line==null?null:b.line,price:b.price,pick:b.pick,pa:+R.ha.toFixed(2),ph:+R.hh.toFixed(2),
+        p:r4(b.p),q:r4(b.q),m:r4(b.m),ev:r4(b.ev),...(w3!=null?{w3}:{})};n++;};
+    /* worth: on a 3-way board, only a side the character's own read rates at least as likely as the market does (q ≥ m) */
+    const best=(mk,opts,worth)=>{const w=halfBlendW(sp,mk);let b=null;opts.forEach(o=>{if(o.price==null||!isFinite(+o.price)||!+o.price||o.p==null||!isFinite(o.p))return;
+        const q=o.m!=null&&isFinite(o.m)?o.m+w*(o.p-o.m):o.p,ev=q*halfDec(o.price)-1;if(worth&&o.m!=null&&q<o.m-1e-9)return;if(!b||ev>b.ev)b={...o,price:+o.price,q,ev};});return b;};
+    if(ln.ml&&ln.ml.a&&ln.ml.h){const pr={a:+ln.ml.a.price,h:+ln.ml.h.price,d:ln.ml.d&&isFinite(+ln.ml.d.price)?+ln.ml.d.price:null};
+      const w3=sp==='nhl'&&(pr.d!=null||(halfImp(pr.a)||0)+(halfImp(pr.h)||0)<0.97),M=halfFair3(pr,w3);
+      /* a 2-way board (the feed's consensus 1st-period line, +115 / −150) refunds a tied period, so each side's chance is counted on
+         the periods that aren't tied, the same footing as the market's de-vigged pair — raw, both sides read ~30% low in hockey */
+      const nt=!w3&&R.pD>0&&R.pA+R.pH>0?R.pA+R.pH:1;
+      const opts=[{side:'away',price:pr.a,pick:`${tag} ${A} ML`,p:R.pA/nt,m:M.a},{side:'home',price:pr.h,pick:`${tag} ${Hm} ML`,p:R.pH/nt,m:M.h}];
+      if(w3&&pr.d!=null)opts.push({side:'draw',price:pr.d,pick:`${tag} Draw`,p:R.pD,m:M.d});
+      const b=best('ml',opts,w3);if(b)put(pre+'ml',b,sp==='nhl'?(w3?1:0):null);}
+    if(ln.sp&&ln.sp.a&&ln.sp.h&&isFinite(+ln.sp.h.line)&&isFinite(+ln.sp.a.line)){const hl=+ln.sp.h.line,al=+ln.sp.a.line,pH=R.cover(hl),[mH,mA]=halfFair2(ln.sp.h.price,ln.sp.a.price);
+      const b=best('spread',[{side:'home',line:hl,price:ln.sp.h.price,pick:`${tag} ${Hm} ${sg(hl)}`,p:pH,m:mH},{side:'away',line:al,price:ln.sp.a.price,pick:`${tag} ${A} ${sg(al)}`,p:R.coverA(hl),m:mA}]);
+      if(b)put(pre+'spread',b);}
+    if(ln.ou&&isFinite(+ln.ou.line)){const t=+ln.ou.line,[mO,mU]=halfFair2(ln.ou.o,ln.ou.u);
+      const b=best('total',[{side:'over',line:t,price:ln.ou.o,pick:`${tag} Over ${t}`,p:R.over(t),m:mO},{side:'under',line:t,price:ln.ou.u,pick:`${tag} Under ${t}`,p:R.under(t),m:mU}]);
+      if(b)put(pre+'total',b);}});
   if(n){if(SC_TX)SC_TX.dh++;else set(HALF_KEY,L);}return n;}
 /* v3.5.22 · Nov 25, Chris: "Why am I not seeing any characters making 1st half bets?" Tracing it turned this up: DraftKings'
    1st-period moneyline is THREE-way (the draw is its own outcome, so both teams are plus money), and a tied period LOSES either
@@ -3030,14 +3110,21 @@ function gradeHalfCalls(){const L=get(HALF_KEY,{})||{};let n=0;
   Object.values(L).forEach(x=>{if(x.graded){if(x.hit==null&&halfIs3way(x)&&x.fa!=null&&x.fh!=null&&+x.fa===+x.fh){x.hit=false;x.units=vUnits(x,false);x.w3fix=1;n++;}return;}
     let R=null;try{R=finalsFor(x.sp,x.game,String(x.date).slice(0,10),false);}catch(e){}if(!R)return;
     const p1=x.sp==='nhl';const a=p1?R.p1a:R.h1a,h=p1?R.p1h:R.h1h;if(a==null||h==null)return;let hit=null;const A=+a,H=+h;
-    if(/ml$/.test(x.mk)){if(A!==H)hit=(x.side==='home')===(H>A);else if(halfIs3way(x))hit=false;}
+    if(/ml$/.test(x.mk)){if(x.side==='draw')hit=A===H;else if(A!==H)hit=(x.side==='home')===(H>A);else if(halfIs3way(x))hit=false;}
     else if(/spread$/.test(x.mk)){const m=(x.side==='home'?H-A:A-H)+x.line;if(m!==0)hit=m>0;}
     else{const t=A+H;if(t!==x.line)hit=(x.side==='over')===(t>x.line);}
     x.graded=1;x.fa=A;x.fh=H;x.hit=hit;if(hit!=null)x.units=vUnits(x,hit);n++;});
   if(n)set(HALF_KEY,L);return n;}
-function halfRecord(sp,voice,mk){const r={w:0,l:0,u:0};Object.values(roGet(HALF_KEY,{})||{}).forEach(x=>{if(!x.graded||x.hit==null||x.sp!==sp||x.voice!==voice||x.mk!==mk)return;x.hit?r.w++:r.l++;r.u+=x.units||0;});r.n=r.w+r.l;r.p=r.n?r.w/r.n:null;r.ok=r.n>=HALF_OK.n&&r.p>=HALF_OK.p&&r.u>0;return r;}
+/* v3.5.23 · every record from one pass over the ledger (each game card and the public board ask for dozens; each used to walk all 4,000+) */
+let HALF_RI=null;
+function halfRecIdx(){const L=roGet(HALF_KEY,{})||{};if(HALF_RI&&HALF_RI.L===L)return HALF_RI.M;const M=new Map();
+  Object.values(L).forEach(x=>{if(!x||!x.graded||x.hit==null)return;const k=x.sp+'|'+x.voice+'|'+x.mk;let r=M.get(k);if(!r)M.set(k,r={w:0,l:0,u:0});x.hit?r.w++:r.l++;r.u+=x.units||0;});
+  HALF_RI={L,M};return M;}
+function halfRecord(sp,voice,mk){const o=halfRecIdx().get(sp+'|'+voice+'|'+mk)||{w:0,l:0,u:0};const r={w:o.w,l:o.l,u:o.u};r.n=r.w+r.l;r.p=r.n?r.w/r.n:null;r.ok=r.n>=HALF_OK.n&&r.p>=HALF_OK.p&&r.u>0;return r;}
 /* today's half calls, official first */
-function halfToday(){const d=today();return Object.values(roGet(HALF_KEY,{})||{}).filter(x=>x.date===d&&CHARS[x.voice]).map(x=>{const R=halfRecord(x.sp,x.voice,x.mk);return{...x,rec:R,official:halfOfficial(R,x)};});}
+let HALF_TD=null;
+function halfToday(){const d=today(),L=roGet(HALF_KEY,{})||{};if(HALF_TD&&HALF_TD.L===L&&HALF_TD.d===d)return HALF_TD.v;
+  const v=Object.values(L).filter(x=>x&&x.date===d&&CHARS[x.voice]).map(x=>{const R=halfRecord(x.sp,x.voice,x.mk);return{...x,rec:R,official:halfOfficial(R,x)};});HALF_TD={L,d,v};return v;}
 function halfCardHtml(){const T=halfToday();if(!T.length)return'';const nm=v=>(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');
   const off=T.filter(x=>x.official);const by={};T.forEach(x=>{const k=x.sp+'|'+x.pick+'|'+x.game;(by[k]=by[k]||{x,v:[]}).v.push(x.voice);});
   const top=Object.values(by).sort((a,b)=>b.v.length-a.v.length).slice(0,6);
@@ -3050,6 +3137,27 @@ function halfRecordsHtml(sp){const L=Object.values(roGet(HALF_KEY,{})||{}).filte
   return`<div class="tkt"><h3>🕐 Half / 1st-period records</h3><div class="sub">Official once a character goes ${HALF_OK.n}+ calls at ${Math.round(HALF_OK.p*100)}%+ in profit in that sport and market.</div>
     ${Object.keys(by).length?`<table class="mono" style="width:100%;font-size:11px;margin-top:6px"><tr style="color:var(--mute)"><td></td><td>ML</td><td>Spread</td><td>O/U</td></tr>${Object.entries(by).map(([v,r])=>`<tr><td><b>${txtEsc(nm(v))}</b></td><td>${cell(r.ml)}</td><td>${cell(r.spread)}</td><td>${cell(r.total)}</td></tr>`).join('')}</table>`:'<div class="sub" style="margin-top:6px">Starts grading tonight.</div>'}</div>`;}
 if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__)setTimeout(()=>{halfLinesRefresh().catch(()=>{});},1500);
+/* v3.5.23 · the half on every game card (each sport's board, under the Perfect SGP): the half's lines, then every character's call
+   by market and pick — its record in that sport and market on each chip, the market-anchored %, ✅ only once it's proven — and
+   ✓ / ✗ once the half is graded. The time-slot board had a one-line version; the sport boards had nothing. */
+function halfGameHtml(sp,g){try{if(!g||!g.away||!g.home||!HALF_FRAC[sp])return'';const gl=g.away.abbr+'@'+g.home.abbr,A=g.away.abbr,H=g.home.abbr;
+  const T=(halfToday()||[]).filter(x=>x.sp===sp&&x.game===gl);if(!T.length)return'';
+  const tag=sp==='nhl'?'1st period':'1st half',lab={ml:sp==='nhl'?'Moneyline (3-way)':'Moneyline',spread:sp==='nhl'?'Puck line':'Spread',total:'Total'};
+  let lnTxt='';try{const LN=get(HALFLN_KEY,null),ln=LN&&LN.d===today()?LN.g[sp+'|'+gl]:null;if(ln){const P=[];if(ln.sp&&ln.sp.h)P.push(`${txtEsc(H)} ${ln.sp.h.line>0?'+':''}${ln.sp.h.line} (${tcSgn(ln.sp.h.price)})`);
+      if(ln.ou)P.push(`O/U ${ln.ou.line}`);if(ln.ml&&ln.ml.a&&ln.ml.h)P.push(`ML ${txtEsc(A)} ${tcSgn(ln.ml.a.price)} / ${txtEsc(H)} ${tcSgn(ln.ml.h.price)}${ln.ml.d?` / draw ${tcSgn(ln.ml.d.price)}`:''}`);
+      if(P.length)lnTxt=`<div class="mono" style="font-size:10px;color:var(--mute);margin:4px 0">Lines: ${P.join(' · ')}</div>`;}}catch(e){}
+  const by={};T.forEach(x=>{const m=String(x.mk||'').slice(2);const M=by[m]||(by[m]={});(M[x.pick]=M[x.pick]||[]).push(x);});
+  const body=['ml','spread','total'].filter(m=>by[m]).map(m=>`<div class="mktlab" style="margin:6px 0 2px">${lab[m]}</div>`+Object.entries(by[m]).sort((a,b)=>b[1].length-a[1].length).map(([pick,L])=>{
+      const pr=L.find(x=>x.price!=null),off=L.some(x=>x.official),qs=L.map(x=>x.q).filter(v=>v!=null&&isFinite(v)),q=qs.length?qs.reduce((a,b)=>a+b,0)/qs.length:null;const x0=L[0];
+      const res=x0.graded?(x0.hit===true?' <b style="color:var(--win)">✓</b>':x0.hit===false?' <b style="color:var(--rust)">✗</b>':' <span class="mono">push</span>'):'';
+      const chips=L.slice().sort((a,b)=>(b.official-a.official)||(((b.rec&&b.rec.w)||0)-((a.rec&&a.rec.w)||0))).map(x=>{const c=CHARS[x.voice]||{},R=x.rec||{};
+        return`<span class="hs-chip" style="color:${c.color};border-color:${c.color}" title="${txtEsc(charName(x.voice))}: ${R.w||0}-${R.l||0} on ${tag} ${lab[m].toLowerCase()}s in this sport">${c.chip||''} <span class="mono" style="font-size:9px">${R.n?`${R.w}-${R.l}`:'new'}</span></span>`;}).join('');
+      return`<div style="padding:4px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(pick)}</b>${pr?` <span class="mono" style="color:var(--gold)">${tcSgn(pr.price)}</span>`:''}${res}
+        <span class="mono" style="font-size:9.5px;color:var(--mute)"> · ${L.length} character${L.length===1?'':'s'}${q!=null?` · ${Math.round(q*100)}% at the price`:''}${off?' · ✅ official':''}</span><div class="hs-row" style="justify-content:flex-start">${chips}</div></div>`;}).join('')).join('');
+  return`<details class="tkt" style="margin:6px 0;border-left:3px solid #7cc4ff"><summary><b>🕐 ${tag}</b> <span class="mono" style="font-size:10px;color:var(--mute)">${T.length} call${T.length===1?'':'s'} from the characters' own reads</span></summary>
+    ${lnTxt}${body}<div class="sub" style="font-size:10px;margin-top:4px">Each character's ${tag} call comes from its own read of the game, priced against the ${tag} line${sp==='nhl'?' (the draw counts: a tied period loses either team)':''}. The % leans on the market until a character's ${tag} record says it knows more. Official only once a character goes ${HALF_OK.n}+ at ${Math.round(HALF_OK.p*100)}%+ in profit in this market and reads 70%+.</div></details>`;}catch(e){return'';}}
+if(typeof window!=='undefined'&&typeof sgpCardHtml==='function'&&!window.__HALF_CARD__){window.__HALF_CARD__=1;const SG0=sgpCardHtml;
+  sgpCardHtml=function(sp,g,s){let h='';try{h=SG0(sp,g,s)||'';}catch(e){}return h+halfGameHtml(sp,g);};}
 
 /* ══ THE CHARACTER BRAIN ═════════════════════════════════════════════════════
    Learns from every graded character call: how often each character hits, per
@@ -3463,7 +3571,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261125b',DESK_VER='3.5.22';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261125c',DESK_VER='3.5.23';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /

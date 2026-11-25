@@ -1205,3 +1205,5 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .tbc em{font-style:normal;font-weight:500;font-size:11px;color:var(--ink-2);margin-right:2px}
 .tbc.up{color:var(--win)}.tbc.dn{color:var(--loss)}.tbc.none{color:var(--ink-3);font-weight:500}
 .tb3 tr.now th{box-shadow:inset 3px 0 0 var(--brass)}
+/* v69 · the characters' 1st-half calls on a game's row */
+.g-half{font-size:11.5px;color:var(--ink-2);padding:5px 0 0;line-height:1.4}.g-half b{color:var(--ink);font-weight:700}.g-half small{color:var(--ink-3)}

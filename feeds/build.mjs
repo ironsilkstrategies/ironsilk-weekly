@@ -464,14 +464,22 @@ async function orCBS(G,D){const out=[];D.cbs={};
       if(ca+ch>=3){out.push({g:f.g,v:{xp:{a:ca,h:ch}}});n++;}}
     D.cbs[sp]=n;}
   return out;}
-/* the betting public: Action Network's ticket and money splits (home / over %) */
+/* the betting public: Action Network's ticket and money splits (home / over %). Their v1 scoreboard died (404, every period) in
+   Nov 2026, so this source sat empty; v2 carries the same splits per side, as bet_info.{tickets,money}.percent on the consensus
+   book's (15) full-game markets — checked against a live NBA board, Nov 25: each pair sums to 100. Football boards are by week. */
+const AN_DIV={ncaab:'&division=D1',ncaaf:'&division=FBS'},AN_WEEK={nfl:1,ncaaf:1};
+function anPub(x){const B=(x.markets||{})['15']||{},E=B.event||B.game;if(!E)return null;
+  const pc=(arr,side,k)=>{const o=(arr||[]).find(o=>o&&o.side===side&&!o.is_alt_market);const v=o&&o.bet_info&&o.bet_info[k]?o.bet_info[k].percent:null;return v==null||!isFinite(+v)?null:+v;};
+  const two=(arr,s1,s2,k)=>{const a=pc(arr,s1,k),b=pc(arr,s2,k);return a==null||b==null||a+b<=0?null:a;};
+  const p={ml:two(E.moneyline,'home','away','tickets'),sp:two(E.spread,'home','away','tickets'),ou:two(E.total,'over','under','tickets'),mlm:two(E.moneyline,'home','away','money'),spm:two(E.spread,'home','away','money'),oum:two(E.total,'over','under','money')};
+  return Object.values(p).some(v=>v!=null)?p:null;}
 async function orPublic(G,D){const out=[];D.an={g:0};
-  for(const sp of Object.keys(OR_SP)){const days=[...new Set(G.filter(g=>g.sp===sp&&g.state==='pre').map(g=>g.d.replace(/-/g,'')))].slice(0,4);
-    for(const d of days){let j;try{j=await getJSON(`https://api.actionnetwork.com/web/v1/scoreboard/${sp}?period=game&bookIds=15,30&date=${d}`,BROWSER);D.calls++;}catch(e){D.an.err=String(e.message||e).slice(0,60);break;}
-      for(const x of (j.games||[])){const T={};(x.teams||[]).forEach(t=>T[t.id]=t);const ta=T[x.away_team_id],th=T[x.home_team_id];if(!D.an.ex)D.an.ex={k:Object.keys(x).slice(0,30),t:(x.teams||[]).slice(0,1).map(t=>Object.keys(t).slice(0,12).join(',')+' '+(t.full_name||t.display_name)),o:Object.keys((x.odds||[])[0]||{}).filter(k=>/public|money|ticket/.test(k)).slice(0,12),aw:x.away_team_id,hm:x.home_team_id};if(!ta||!th)continue;D.an.g++;
+  for(const sp of Object.keys(OR_SP)){const S=G.filter(g=>g.sp===sp&&g.state==='pre');if(!S.length)continue;
+    const days=AN_WEEK[sp]?['']:[...new Set(S.map(g=>g.d.replace(/-/g,'')))].slice(0,4);
+    for(const d of days){let j;try{j=await getJSON(`https://api.actionnetwork.com/web/v2/scoreboard/${sp}?bookIds=15,30${AN_DIV[sp]||''}${d?'&date='+d:''}`,BROWSER);D.calls++;}catch(e){D.an.err=String(e.message||e).slice(0,60);break;}
+      for(const x of (j.games||[])){if(x.status&&x.status!=='scheduled')continue;const T={};(x.teams||[]).forEach(t=>T[t.id]=t);const ta=T[x.away_team_id],th=T[x.home_team_id];if(!ta||!th)continue;D.an.g++;
         const f=orFind(G,sp,ta.full_name||ta.display_name||'',th.full_name||th.display_name||'',x.start_time);if(!f||f.s1!=='a')continue;
-        const o=(x.odds||[]).find(o=>o&&(o.ml_home_public!=null||o.spread_home_public!=null))||null;if(!o){D.an.nul=(D.an.nul||0)+1;continue;}const n=v=>v==null||!isFinite(+v)?null:+v;
-        out.push({g:f.g,v:{pub:{ml:n(o.ml_home_public),sp:n(o.spread_home_public),ou:n(o.total_over_public),mlm:n(o.ml_home_money),spm:n(o.spread_home_money),oum:n(o.total_over_money)}}});}}}
+        const pub=anPub(x);if(!pub){D.an.nul=(D.an.nul||0)+1;continue;}out.push({g:f.g,v:{pub}});}}}
   return out;}
 /* discovery: which prediction sites the worker can read, and how their pages are shaped (removed once each has an adapter) */
 const OR_PROBE_V=4,OR_PROBE=[['covers','ncaab','https://contests.covers.com/consensus/topconsensus/ncaab/overall'],['covers','ncaaf','https://contests.covers.com/consensus/topconsensus/ncaaf/overall'],['cbs','nba','https://www.cbssports.com/nba/expert-picks/']];
@@ -572,6 +580,29 @@ async function buildComps(diag){const S=read('season.json')||{g:{}};const C=read
    projected score the public models land near, TheDesk Power Rankings and the worker's question for each game. Built
    from feeds this run already made (oracle, season, coach) by the same code the worker's posts use (autopilot/megaphone.mjs),
    so the app's Slate tab and the social posts always say the same thing. Public sports data only, never a pick. */
+/* v3.5.23 · HALVES — the 1st-half lines (1st period in hockey) for every game on the next slates: spread, total (over and under
+   named) and moneyline, from Action Network's public v2 scoreboard (book 15, then 30). Nov 25, Chris: "Why am I not seeing any
+   characters making 1st half bets?" — ESPN's DraftKings board, the only source until now, carries NFL half lines with no prices
+   and nothing at all for college basketball, and its half totals don't say which price is the over: the NFL, every college game
+   and nearly every half total never got a call. Pregame lines only; each game keyed by ESPN's codes through the Oracle's slate. */
+const HV_SP={nba:{p:'firsthalf'},ncaab:{p:'firsthalf',q:'&division=D1'},nhl:{p:'firstperiod'},nfl:{p:'firsthalf',wk:1},ncaaf:{p:'firsthalf',q:'&division=FBS',wk:1}};
+const HV_URL=(sp,c,d)=>`https://api.actionnetwork.com/web/v2/scoreboard/${sp}?bookIds=15,30&periods=${c.p}${c.q||''}${d?'&date='+d:''}`;
+async function buildHalves(diag){const now=+process.env.FEEDS_NOW||Date.now();const D={calls:0,sp:{},err:[]};const G=await orSlate(now,D);
+  const out={v:1,ts:new Date(now).toISOString(),g:{}};
+  for(const [sp,c] of Object.entries(HV_SP)){let n=0;const urls=c.wk?[HV_URL(sp,c)]:[0,1].map(b=>HV_URL(sp,c,etDay(now+b*864e5).replace(/-/g,'')));
+    for(const u of urls){let j;try{j=await getJSON(u,BROWSER);D.calls++;}catch(e){D.err.push(sp+' '+String(e.message||e).slice(0,60));continue;}
+      for(const x of (j.games||[])){if(x.status&&x.status!=='scheduled')continue;const T={};(x.teams||[]).forEach(t=>{T[t.id]=t;});const ta=T[x.away_team_id],th=T[x.home_team_id];if(!ta||!th)continue;
+        const f=orFind(G,sp,ta.full_name||ta.display_name||'',th.full_name||th.display_name||'',x.start_time);if(!f)continue;
+        const M=x.markets||{};const B=(M['15']||{})[c.p]||(M['30']||{})[c.p];if(!B)continue;
+        const live=a=>(a||[]).filter(o=>o&&!o.is_live&&!o.is_alt_market&&o.line_status!=='suspended'&&isFinite(+o.odds)&&+o.odds!==0);
+        const flip=f.s1!=='a';const sd=o=>{const s=o.side==='home'?'h':o.side==='away'?'a':o.side==='draw'?'d':null;return s&&flip&&s!=='d'?(s==='h'?'a':'h'):s;};
+        const h={};live(B.moneyline).forEach(o=>{const s=sd(o);if(s)(h.ml=h.ml||{})[s]={price:+o.odds};});
+        live(B.spread).forEach(o=>{const s=sd(o);if(s&&s!=='d'&&isFinite(+o.value))(h.sp=h.sp||{})[s]={line:+o.value,price:+o.odds};});
+        const tt=live(B.total),ov=tt.find(o=>o.side==='over'),un=tt.find(o=>o.side==='under');if(ov&&un&&+ov.value===+un.value&&isFinite(+ov.value))h.ou={line:+ov.value,o:+ov.odds,u:+un.odds};
+        if(h.ml&&!(h.ml.a&&h.ml.h))delete h.ml;if(h.sp&&!(h.sp.a&&h.sp.h&&h.sp.a.line===-h.sp.h.line))delete h.sp;if(!h.ml&&!h.sp&&!h.ou)continue;
+        out.g[sp+'|'+f.g.a.ab+'@'+f.g.h.ab]={d:f.g.d,st:f.g.st,...h,src:'an'};n++;}}
+    D.sp[sp]=n;}
+  fs.writeFileSync(path.join(OUT,'halves.json'),JSON.stringify(out));D.n=Object.keys(out.g).length;D.err=D.err.slice(0,8);diag.halves=D;return out;}
 async function buildSlate(diag){const now=+process.env.FEEDS_NOW||Date.now();const oracle=read('oracle.json'),season=read('season.json'),coach=read('coach.json');
   if(!oracle||!oracle.g){diag.slate={skip:'no oracle feed'};return;}
   const Mega=await import(new URL('../autopilot/megaphone.mjs',import.meta.url).href);
@@ -596,10 +627,11 @@ async function main(){const now=+process.env.FEEDS_NOW||Date.now();const prev=re
   if(!FIX||process.env.FEEDS_ORACLE){try{await buildOracle(diag,games);}catch(e){diag.oracle={fail:String(e.message||e).slice(0,120)};}}
   if(!FIX||process.env.FEEDS_COMPS){try{await buildComps(diag);}catch(e){diag.comps={fail:String(e.message||e).slice(0,120)};}}
   if(!FIX||process.env.FEEDS_SLATE){try{await buildSlate(diag);}catch(e){diag.slate={fail:String(e.message||e).slice(0,120)};}}
+  if(!FIX||process.env.FEEDS_HALVES){try{await buildHalves(diag);}catch(e){diag.halves={fail:String(e.message||e).slice(0,120)};}}
   log.verify=diag;
   log.calls=calls;const n=Object.keys(games).length;
   fs.writeFileSync(path.join(OUT,'closes.json'),JSON.stringify({v:1,ts:log.ts,n,games}));
-  const idx=read('index.json')||{v:1,runs:[]};idx.v=1;idx.ts=log.ts;idx.files={...(idx.files||{}),closes:{ts:log.ts,n},...(diag.props&&diag.props.ev!=null?{props:{ts:log.ts,n:diag.props.ev}}:{}),...(diag.teams&&diag.teams.teams!=null?{teams:{ts:log.ts,n:diag.teams.teams}}:{}),...(diag.hist&&diag.hist.teams!=null?{historian:{ts:log.ts,n:diag.hist.teams}}:{}),...(diag.coach&&diag.coach.games!=null?{coach:{ts:log.ts,n:diag.coach.games}}:{}),...(diag.oracle&&diag.oracle.games!=null?{oracle:{ts:log.ts,n:diag.oracle.games}}:{}),...(diag.comps&&diag.comps.have?{comps:{ts:log.ts,n:Object.values(diag.comps.have).reduce((a,b)=>a+b,0)}}:{})};idx.runs=[log,...(idx.runs||[])].slice(0,12);
+  const idx=read('index.json')||{v:1,runs:[]};idx.v=1;idx.ts=log.ts;idx.files={...(idx.files||{}),closes:{ts:log.ts,n},...(diag.props&&diag.props.ev!=null?{props:{ts:log.ts,n:diag.props.ev}}:{}),...(diag.teams&&diag.teams.teams!=null?{teams:{ts:log.ts,n:diag.teams.teams}}:{}),...(diag.hist&&diag.hist.teams!=null?{historian:{ts:log.ts,n:diag.hist.teams}}:{}),...(diag.coach&&diag.coach.games!=null?{coach:{ts:log.ts,n:diag.coach.games}}:{}),...(diag.oracle&&diag.oracle.games!=null?{oracle:{ts:log.ts,n:diag.oracle.games}}:{}),...(diag.comps&&diag.comps.have?{comps:{ts:log.ts,n:Object.values(diag.comps.have).reduce((a,b)=>a+b,0)}}:{}),...(diag.halves&&diag.halves.n!=null?{halves:{ts:log.ts,n:diag.halves.n}}:{})};idx.runs=[log,...(idx.runs||[])].slice(0,12);
   fs.writeFileSync(path.join(OUT,'index.json'),JSON.stringify(idx));
   console.log(`feeds: +${log.added} finals, ${n} kept, ${calls} requests, ${log.errors.length} errors`);}
 main().catch(e=>{console.error('feeds failed',e);process.exit(1);});

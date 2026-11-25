@@ -1556,6 +1556,10 @@ function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=ne
      graded dead on. */
   const SCI=new Map();try{Object.values(roGet(SCORECALL_KEY,{},30e3)||{}).forEach(x=>{if(!x||!shownV(x.voice))return;const day=String(x.date).slice(0,10);if(day<d||day>last)return;
     if(!isFinite(+x.a)||!isFinite(+x.h))return;const k=x.sp+'|'+x.game+'|'+day;let o=SCI.get(k);if(!o)SCI.set(k,o={});o[x.voice]=x.graded&&x.exact?[+x.a,+x.h,1]:[+x.a,+x.h];});}catch(e){}
+  /* v3.5.23 · Nov 25, Chris: "All of it… X1000." Every character's 1st-half (1st-period) call rides with the game too: pick, price,
+     the % at that price (market-anchored), its record in that sport and market, official only once proven, ✓/✗ once graded. */
+  const HI=new Map();try{Object.values(roGet(HALF_KEY,{},30e3)||{}).forEach(x=>{if(!x||!shownV(x.voice))return;const day=String(x.date).slice(0,10);if(day<d||day>last)return;
+    const k=x.sp+'|'+x.game+'|'+day;const a=HI.get(k);if(a)a.push(x);else HI.set(k,[x]);});}catch(e){}
   const games=R.all.filter(g=>g.day>=d&&g.day<=last).sort((a,b)=>a.t-b.t||a.sp.localeCompare(b.sp)).map(g=>{
     const picks=g.picks.filter(x=>x&&x.pick&&!x.suspect&&!x.incoherent&&!pubHeavy({m:btMarket(x.m),price:x.price,pick:x.pick})).map(x=>({m:btMarket(x.m),sd:x.sd,pick:x.pick,price:x.price!=null?+x.price:null,
         p:r3(x.fz&&x.fz.cf!=null?x.fz.cf:slotPickP(x)),tier:String(x.color||'').trim(),unan:!!x.unan,off:(()=>{try{return!!tfPlayable(x,g.sp);}catch(e){return false;}})(),
@@ -1570,7 +1574,9 @@ function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=ne
     /* v3.5.19 · the game's own numbers once a game, for every character's quote to draw on (the total's line from its total calls) */
     const tl=(()=>{const L=(VI.get(g.sp+'|'+g.game+'|'+g.day)||[]).find(c=>mkNorm(c.market)==='total'&&pubLineOf(c)!=null);return L?pubLineOf(L):null;})();
     const fx=(()=>{try{return pubGameFacts(g.sp,g.game,tl);}catch(e){return'';}})();
-    return{sp:g.sp,game:g.game,gl:gameLabel(g.sp,g.game),start:g.start,day:g.day,st:g.st,picks,calls,...(Object.keys(sc).length?{sc}:{}),...(fx?{fx}:{})};}).filter(g=>g.picks.length||Object.keys(g.calls).length);
+    const half={};(HI.get(g.sp+'|'+g.game+'|'+g.day)||[]).forEach(x=>{const m=String(x.mk||'').slice(2);if(m!=='ml'&&m!=='spread'&&m!=='total')return;let R=null;try{R=halfRecord(x.sp,x.voice,x.mk);}catch(e){}
+      (half[m]=half[m]||[]).push({v:use(x.voice),s:x.side,pick:x.pick,price:x.price!=null?+x.price:null,p:x.q!=null?r3(x.q):null,o:(()=>{try{return halfOfficial(R,x)?1:0;}catch(e){return 0;}})(),w:R?R.w:0,l:R?R.l:0,hit:x.graded?(x.hit==null?null:x.hit):null});});
+    return{sp:g.sp,game:g.game,gl:gameLabel(g.sp,g.game),start:g.start,day:g.day,st:g.st,picks,calls,...(Object.keys(sc).length?{sc}:{}),...(fx?{fx}:{}),...(Object.keys(half).length?{half}:{})};}).filter(g=>g.picks.length||Object.keys(g.calls).length||g.half);
   const fc=pubForecast();
   return{d,games,cast,heavy:typeof BT_HEAVY!=='undefined'?BT_HEAVY:-500,...(fc?{fc}:{})};}
 /* v3.1.7 · Nov 21, Chris: "can the forecast emoji be on game picks on the slate so I know if I should stay away or it's working?"

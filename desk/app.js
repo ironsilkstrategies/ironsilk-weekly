@@ -851,6 +851,29 @@ function whoOnHtml(b) {
   }
   return out.join('');
 }
+/* v69 · Nov 25, Chris: "All of it… X1000." Every character's 1st-half call (1st period in hockey) on the Slate: the pick and price,
+   who's on it with its record on that kind of half bet, ✓/✗ once the half is graded. Official only once a character proves it. */
+const HALF_MK = { ml: 'Moneyline', spread: 'Spread', total: 'Total' }, halfTag = sp => sp === 'nhl' ? '1st period' : '1st half', hpk = k => String(k).replace(/(^|\s)-(\d)/g, '$1−$2');
+function halfOnHtml(b) {
+  const H = b && b.half; if (!H) return ''; const out = [];
+  for (const m of ['ml', 'spread', 'total']) {
+    const C = H[m]; if (!C || !C.length) continue; const by = {}; for (const c of C) (by[c.pick] = by[c.pick] || []).push(c);
+    const pk = Object.keys(by).sort((x, y) => by[y].length - by[x].length), n0 = by[pk[0]].length;
+    out.push(`<div class="won"><div class="won-h"><b>${b.sp === 'nhl' && m === 'spread' ? 'Puck line' : HALF_MK[m]}</b><span>${pk.length === 1 ? `All ${C.length} agree` : `${n0}–${C.length - n0} split`}</span></div>${pk.map((k, i) => {
+      const L = by[k].sort((x, y) => (y.o - x.o) || ((y.w - y.l) - (x.w - x.l))), pr = L.find(c => c.price != null), r = L[0].hit;
+      return `<div class="won-side${i ? ' vs' : ''}"><div class="won-pk">${r === true ? '<b class="hitw">✓</b> ' : r === false ? '<b class="hitl">✗</b> ' : ''}${esc(hpk(k))}${pr ? ' ' + esc(odds(pr.price)) : ''} <small>${L.length} ${i ? 'against' : pk.length === 1 ? 'on it' : 'with'}</small></div><ul>${L.map(c => { const q = castOf(c.v);
+        return `<li style="--c:${q.color}"><span class="who">${esc(q.name)}${c.o ? ' <em>official</em>' : ''}</span><span class="cp">${c.w + c.l ? `${c.w}-${c.l}` : 'new'}</span></li>`; }).join('')}</ul></div>`; }).join('')}</div>`);
+  }
+  return out.join('');
+}
+/* the row before it opens: each half market's most-backed call, one line */
+function halfRowHtml(b) {
+  const H = b && b.half; if (!H) return ''; const P = [];
+  for (const m of ['ml', 'spread', 'total']) { const C = H[m]; if (!C || !C.length) continue; const by = {}; for (const c of C) (by[c.pick] = by[c.pick] || []).push(c);
+    const k = Object.keys(by).sort((x, y) => by[y].length - by[x].length)[0], L = by[k], r = L[0].hit;
+    P.push(`${r === true ? '✓ ' : r === false ? '✗ ' : ''}<b>${esc(hpk(k.replace(/^(1H|P1) /, '')))}</b> <small>${L.length} on it${L.some(c => c.o) ? ', official' : ''}</small>`); }
+  return P.length ? `<div class="g-half">🕐 ${halfTag(b.sp)}: ${P.join(' · ')}</div>` : '';
+}
 function boardPicksHtml(b, F, heavy, all) {
   const P = (b.picks || []).filter(p => all || pickOkB(b, p, F, heavy)); if (!P.length) return '';
   return `<div class="bpicks">${P.map(p => { const L2 = { sp: b.sp, game: b.game, pick: p.pick, price: p.price, p: p.p, start: b.start, hit: p.hit, push: p.push }, X = legState(L2), q = X.st === 'live' ? liveQ(L2) : null; return `<div class="bp bp-${X.st} t-${p.unan ? 'unan' : TIER[p.tier] ? p.tier : 'none'}">${X.st !== 'o' ? `<span class="mkk ${X.st}">${markOf(X.st)}</span>` : ''}${tierTag(p)}<span class="bp-pk">${esc(bigOf(b.sp, b.game, p.pick))}${p.price != null ? ' ' + esc(odds(p.price)) : ''}</span>${fcBadge(pickFc(b, p))}${q != null ? `<span class="bp-p lvq ${q >= (p.p || 0) ? 'up' : 'dn'}">${pct(q)}% live</span>` : X.st === 'w' ? '<span class="bp-p g w">Hit</span>' : X.st === 'l' ? '<span class="bp-p g l">Missed</span>' : p.p != null ? `<span class="bp-p">${pct(p.p)}%</span>` : ''}<button type="button" class="bp-tk" data-act="trackpick" data-sp="${esc(b.sp)}" data-game="${esc(b.game)}" data-pick="${esc(p.pick)}" data-price="${p.price != null ? esc(String(p.price)) : ''}" data-start="${esc(b.start || '')}" aria-label="Track ${esc(p.pick)}" title="Track it">＋</button>${all && (p.by || []).length ? `<small class="bp-by">by ${p.by.map(v => esc(castOf(v).name)).join(', ')}</small>` : ''}</div>`; }).join('')}</div>`;
@@ -970,11 +993,11 @@ function gameHtml(g, i) {
     if (g.venue) rows.push(['Where', esc(g.venue)]);
     if (g.note) rows.push(['In the news', esc(g.note)]);
     const bp = b ? boardPicksHtml(b, F, heavy, true) : '', wo = b ? whoOnHtml(b) : '';
-    more = `<div class="g-more">${ddBtns(g)}${bp ? `<div class="g-sec"><h4>The desk’s colored picks</h4>${bp}</div>` : ''}${wo ? `<div class="g-sec"><h4>Who’s with it, who’s against it</h4><p class="g-note">Every character’s call, how sure it is${g.b && g.b.sc ? ' and the final score it calls' : ''}. 👑 marks the character ranked #1 in that kind of bet (it has the say); 🧊 marks the worst (it shouldn’t have one).</p>${wo}</div>` : ''}${fcGameHtml(b)}${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>` : ''}
+    more = `<div class="g-more">${ddBtns(g)}${bp ? `<div class="g-sec"><h4>The desk’s colored picks</h4>${bp}</div>` : ''}${wo ? `<div class="g-sec"><h4>Who’s with it, who’s against it</h4><p class="g-note">Every character’s call, how sure it is${g.b && g.b.sc ? ' and the final score it calls' : ''}. 👑 marks the character ranked #1 in that kind of bet (it has the say); 🧊 marks the worst (it shouldn’t have one).</p>${wo}</div>` : ''}${b && b.half ? `<div class="g-sec"><h4>The ${halfTag(b.sp)}</h4><p class="g-note">Every character’s ${halfTag(b.sp)} call from its own read, with its record on that kind of bet. None is official until a character proves it there: 20+ graded, 57%+, in profit and 70% sure.</p>${halfOnHtml(b)}</div>` : ''}${fcGameHtml(b)}${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>` : ''}
       ${g.q && g.q.title ? `<div class="ask"><b>${esc(g.q.title)}</b><span>${esc((g.q.opts || []).join(' or '))}? Make your case in the members’ chat.</span><button type="button" class="btn foil" data-go="chat">Open the chat</button></div>` : ''}</div>`;
   }
   return `<div class="game ${(i || 0) % 2 ? 'zb' : 'za'}${open ? ' g-open' : ''}${b && b.picks && b.picks.length ? ' g-has' : ''}"><button type="button" data-act="game" data-k="${esc(g.k)}" aria-expanded="${open}">${t}
-    <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${b && !open ? `<div class="g-bp" data-act="game" data-k="${esc(g.k)}">${callsMode(F) ? callRowsHtml(b, F) : boardPicksHtml(b, rowF(F), heavy, false)}</div>` : ''}${more}</div>`;
+    <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${b && !open ? `<div class="g-bp" data-act="game" data-k="${esc(g.k)}">${callsMode(F) ? callRowsHtml(b, F) : boardPicksHtml(b, rowF(F), heavy, false)}${halfRowHtml(b)}</div>` : ''}${more}</div>`;
 }
 /* the rows with no filter on show the strongest colored picks (unanimous, supreme, strong); any strength, bet type or Forecast filter shows what passes it */
 /* v64 · Nov 23, Chris: "I also think the pick bars should be visible before a game expands". Every colored pick shows on its game's row
