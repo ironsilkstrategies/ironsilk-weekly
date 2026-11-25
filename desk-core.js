@@ -1406,14 +1406,24 @@ function pubPropLockSave(){try{if(_PPL&&_PPL.dirty){set(PUB_PROPLOCK,{d:_PPL.d,b
    parlay lane". Each character's own tickets over the same 60 days as its record: its game parlay (the 70%+ calls), its strong-suit
    ticket and its prop parlay. A unit a ticket: a cash pays the ticket's price, a miss costs the unit, every leg pushed is a push.
    Plus its last six settled tickets. Graded where they always are (cparGrade / cpxGrade); this only reads them. */
-function pubParRec(v,from,d,CPA,CPXA){const z=()=>({w:0,l:0,p:0,u:0,lw:0,ll:0}),o={game:z(),suit:z(),props:z(),last:[]};
+/* v3.5.26 · Nov 25, 2:57 PM, Chris: "I want them in the actual character menu when you click the character… so I can see the record it
+   carries with parlays and its parlay history". hist: every ticket from the days before today (settled or still waiting on a leg), newest
+   first, with its legs — what it picked, the price, how each leg went — and the ticket's price, chance to cash and what it paid. Graded
+   tickets only (today's ride in vip.parlays); short keys, ~75 KB for every character's 60 days. */
+function pubParRec(v,from,d,CPA,CPXA){const z=()=>({w:0,l:0,p:0,u:0,lw:0,ll:0}),o={game:z(),suit:z(),props:z(),last:[],hist:[]};
   const add=(S,kindOf)=>Object.entries(S||{}).forEach(([day,D])=>{if(day<from||day>d||!D||!D.locked)return;const P=(D.by||{})[v];if(!P||!Array.isArray(P.legs)||!P.legs.length)return;const k=kindOf(P),R=o[k];
-    P.legs.forEach(x=>{if(x.hit===true)R.lw++;else if(x.hit===false)R.ll++;});if(!P.done)return;
-    const live=P.legs.filter(x=>!x.push),dec=live.reduce((a,x)=>a*(americanToDecimal(+x.price)||1.91),1),r=!live.length?'push':P.won?'win':'loss';
+    P.legs.forEach(x=>{if(x.hit===true)R.lw++;else if(x.hit===false)R.ll++;});
+    const live=P.legs.filter(x=>!x.push),dec=live.reduce((a,x)=>a*(americanToDecimal(+x.price)||1.91),1),am=live.length?(dec>=2?Math.round((dec-1)*100):-Math.round(100/(dec-1))):null;
+    if(day<d){const r0=!P.done?null:!live.length?'push':P.won?'win':'loss';
+      o.hist.push({d:day,k,r:r0,price:am,u:r0==='win'?+(dec-1).toFixed(2):r0==='loss'?-1:0,p:P.p!=null&&isFinite(+P.p)?+(+P.p).toFixed(3):null,
+        legs:P.legs.map(x=>({sp:x.sp,g:x.game||'',pk:x.pick||(x.player?(()=>{try{return cpropLine(x);}catch(e){return x.player;}})():''),pr:x.price!=null&&isFinite(+x.price)?+x.price:null,h:x.push?2:x.hit===true?1:x.hit===false?0:null}))});}
+    if(!P.done)return;
+    const r=!live.length?'push':P.won?'win':'loss';
     if(r==='push')R.p++;else if(r==='win'){R.w++;R.u+=dec-1;}else{R.l++;R.u-=1;}
     o.last.push({d:day,k,r,n:P.legs.length,hit:P.legs.filter(x=>x.hit===true).length,price:live.length?(dec>=2?Math.round((dec-1)*100):-Math.round(100/(dec-1))):null});});
   add(CPA,P=>P.skill?'suit':'game');add(CPXA,()=>'props');
-  ['game','suit','props'].forEach(k=>{o[k].u=+o[k].u.toFixed(2);});o.last=o.last.sort((a,b)=>String(b.d).localeCompare(String(a.d))).slice(0,6);return o;}
+  ['game','suit','props'].forEach(k=>{o[k].u=+o[k].u.toFixed(2);});o.last=o.last.sort((a,b)=>String(b.d).localeCompare(String(a.d))).slice(0,6);
+  o.hist=o.hist.sort((a,b)=>String(b.d).localeCompare(String(a.d))||(a.k==='props')-(b.k==='props')).slice(0,60);return o;}
 function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEach(c=>{if(!CHARS[c.voice]||c.voice==='Blend')return;(by[c.voice]=by[c.voice]||[]).push(c);});
     const CPA=(typeof CPAR_KEY!=='undefined'?roGet(CPAR_KEY,{},30e3):null)||{},CPXA=(typeof CPX_KEY!=='undefined'?roGet(CPX_KEY,{},30e3):null)||{};
     const CP=(roGet(CPROP_KEY,[],30e3)||[]).filter(x=>x&&x.d>=from);let todayProps=[];try{todayProps=typeof cpropToday==='function'?cpropToday():[];}catch(e){}

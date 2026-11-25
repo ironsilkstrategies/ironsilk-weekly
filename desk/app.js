@@ -1318,12 +1318,27 @@ const parKind = P => (P.skill ? 'suit' : P.px ? 'props' : 'game');
 const parToday = (F, v) => ((F && F.vip && F.vip.parlays) || []).filter(P => P && Array.isArray(P.legs) && P.legs.length && PAR_K[parKind(P)] && (v == null || P.v === v));
 function parTixHtml(P, color) { const [ic, lab] = PAR_K[parKind(P)];
   return `<div class="paper tix ptk"><div class="tix-h"><b>${color ? `<button type="button" class="link ptk-who" data-act="castpick" data-v="${esc(P.v)}"><i style="background:${okColor(color)}"></i>${esc(P.who)}</button> · ` : ''}${ic} ${lab}</b><span>${P.legs.length} legs · ${esc(P.price != null && P.price !== '' && isFinite(+P.price) ? odds(+P.price) : P.price || '')} · ${pct(P.p)}% to cash</span></div>${tkSum(P.legs, P.p)}${P.legs.map(legRow).join('')}</div>`; }
-function parHtml(P, T0) { P = P || {}; const T = parSum(P), tod = (T0 || []).map(x => parTixHtml(x)).join(''), hist = parN(T) || T.lw + T.ll; if (!hist && !tod) return '';
+function parHtml(P, T0) { P = P || {}; const T = parSum(P), tod = (T0 || []).map(x => parTixHtml(x)).join(''), hist = parN(T) || T.lw + T.ll, H = parHist(P); if (!hist && !tod && !H) return '';
   const rows = Object.keys(PAR_K).filter(k => P[k] && (parN(P[k]) || P[k].lw + P[k].ll)).map(k => { const x = P[k], [ic, lab, sub] = PAR_K[k];
     return `<div class="pl-row"><span class="pl-i" aria-hidden="true">${ic}</span><span class="pl-t"><b>${lab}</b><small>${sub} · legs ${x.lw || 0}–${x.ll || 0}</small></span><span class="pl-r">${parRec(x)}</span><span class="pl-u ${uCls(x.u)}">${parU(x)}</span></div>`; }).join('');
-  const last = (P.last || []).filter(t => t && PAR_K[t.k]).map(t => `<span class="pl-tk ${t.r === 'win' ? 'w' : t.r === 'loss' ? 'l' : 'p'}">${t.r === 'win' ? '✓' : t.r === 'loss' ? '✗' : '='} ${esc(shortDay(t.d))} · ${PAR_K[t.k][0]} ${+t.hit || 0}/${+t.n || 0} legs${t.price != null ? ' · ' + esc(odds(t.price)) : ''}</span>`).join('');
+  const last = (H ? [] : P.last || []).filter(t => t && PAR_K[t.k]).map(t => `<span class="pl-tk ${t.r === 'win' ? 'w' : t.r === 'loss' ? 'l' : 'p'}">${t.r === 'win' ? '✓' : t.r === 'loss' ? '✗' : '='} ${esc(shortDay(t.d))} · ${PAR_K[t.k][0]} ${+t.hit || 0}/${+t.n || 0} legs${t.price != null ? ' · ' + esc(odds(t.price)) : ''}</span>`).join('');
   return `<h2 class="h2">The parlay lane</h2>${hist ? `<div class="paper parlane"><div class="pl-top"><div><b>${parRec(T)}</b><small>${parN(T)} ticket${parN(T) === 1 ? '' : 's'} settled · legs ${T.lw}–${T.ll}</small></div><span class="pl-big ${uCls(T.u)}">${T.w + T.l ? `${T.u > 0 ? 'Up' : T.u < 0 ? 'Down' : 'Even'} <b>${signed(Math.abs(T.u) ? T.u : 0, 1)}u</b>` : 'No result yet'}</span></div>${rows}${last ? `<div class="pl-last"><small>Last tickets</small>${last}</div>` : ''}</div>` : ''}
-    ${tod ? `<h3 class="pl-th">Today’s tickets</h3><div class="pargrid pl-tix">${tod}</div>` : ''}<p class="note">A unit on every ticket it builds, last 60 days. A cash pays the ticket’s price; a miss costs the unit.</p>`; }
+    ${tod ? `<h3 class="pl-th">Today’s tickets</h3><div class="pargrid pl-tix">${tod}</div>` : ''}${H ? parHistHtml(H) : ''}<p class="note">A unit on every ticket it builds, last 60 days. A cash pays the ticket’s price; a miss costs the unit.</p>`; }
+/* v73 · Nov 25, 2:57 PM, Chris: "I want them in the actual character menu when you click the character… so I can see the record it carries
+   with parlays and its parlay history". Every ticket from the last 60 days (feed: par.hist, newest first): the day, the kind, how many legs
+   hit, its price, its chance to cash and what it paid; tap one for its legs — each pick, its price, ✓ / ✗. A chip row narrows it by kind. */
+const parHist = P => (Array.isArray(P && P.hist) ? P.hist.filter(t => t && PAR_K[t.k] && Array.isArray(t.legs) && t.legs.length) : []).length ? P.hist.filter(t => t && PAR_K[t.k] && Array.isArray(t.legs) && t.legs.length) : null;
+const PH_MK = { 1: ['w', '✓'], 0: ['l', '✗'], 2: ['p', '='] }, PH_R = { win: ['w', '✓'], loss: ['l', '✗'], push: ['p', '='] };
+function parHistHtml(H) {
+  const kf = H.some(t => t.k === S.phK) ? S.phK : 'all', HK = H.filter(t => kf === 'all' || t.k === kf), kinds = Object.keys(PAR_K).filter(k => H.some(t => t.k === k));
+  const sum = HK.reduce((o, t) => { if (t.r === 'win') o.w++; else if (t.r === 'loss') o.l++; if (t.r) o.u += +t.u || 0; return o; }, { w: 0, l: 0, u: 0 });
+  const leg = l => { const L = { sp: l.sp, game: l.g, pick: l.pk, price: l.pr }, [c, mk] = PH_MK[l.h] || ['o', '•'];
+    return `<div class="leg"><div class="li"><span class="mk ${c}">${mk}</span><span class="pk">${esc(l.g ? readPick(L).big : l.pk)}${l.pr != null ? ' ' + esc(odds(l.pr)) : ''}<small>${esc([LEAGUE[l.sp], l.g ? matchup(L) : ''].filter(Boolean).join(' · '))}</small></span><span class="u"></span></div></div>`; };
+  const row = t => { const [ic, lab] = PAR_K[t.k], [c, mk] = PH_R[t.r] || ['o', '•'], hit = t.legs.filter(l => l.h === 1).length;
+    return `<details class="ph ${c}"><summary><span class="mk ${c}">${mk}</span><span class="ph-t"><b>${esc(shortDay(t.d))} · ${ic} ${lab}</b><small>${hit}/${t.legs.length} legs hit${t.price != null ? ' · ' + esc(odds(t.price)) : ''}${t.p != null ? ` · ${pct(t.p)}% to cash` : ''}</small></span><span class="ph-u ${t.r ? uCls(t.u) : ''}">${t.r === 'push' ? 'Push' : t.r ? `${signed(+t.u || 0, 2)}u` : 'Waiting'}</span></summary><div class="ph-legs">${t.legs.map(leg).join('')}</div></details>`; };
+  return `<h3 class="pl-th">Parlay history</h3>${kinds.length > 1 ? `<div class="seg tight ph-k" role="group" aria-label="Kind of ticket">${['all', ...kinds].map(k => `<button type="button" data-act="phk" data-v="${k}" aria-pressed="${kf === k}">${k === 'all' ? 'Every ticket' : PAR_K[k][0] + ' ' + PAR_K[k][1]} <span class="n">${k === 'all' ? H.length : H.filter(t => t.k === k).length}</span></button>`).join('')}</div>` : ''}
+    <div class="paper ph-list"><p class="ph-sum">${HK.length} ticket${HK.length === 1 ? '' : 's'} · <b>${sum.w}–${sum.l}</b> · <b class="${uCls(sum.u)}">${signed(Math.round(sum.u * 100) / 100, 2)}u</b> <small>· tap one for its legs</small></p>${HK.map(row).join('')}</div>`;
+}
 function viewCast() {
   const el = $('#v-cast'), F = S.feed || {}, C = F.characters || [], B = F.bloodlines, need = (B && B.need) || { n: 100, days: 10 };
   if (!C.length) { el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">The roster shows up here once the desk publishes it.</p>${footHtml()}`; return; }
@@ -2224,6 +2239,7 @@ document.addEventListener('click', async e => {
   else if (act === 'ranksp') { S.rankSp = a.dataset.sp; S.rankAll = false; render(); }
   else if (act === 'rankall') { S.rankAll = !S.rankAll; render(); }
   else if (act === 'castpick') { S.castPick = a.dataset.v || ''; store.set('castpick', S.castPick); viewCast(); window.scrollTo(0, 0); }
+  else if (act === 'phk') { S.phK = a.dataset.v || 'all'; viewCast(); }
   else if (act === 'restart') restartApp();
   else if (act === 'chat-leave') { store.set('chat', null); viewChat(); }
   else if (act === 'chat-del') chatMod({ act: 'del', id: a.dataset.id }, () => { CH.list = CH.list.filter(m => m.id !== a.dataset.id); paintChat(); });

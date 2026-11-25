@@ -1085,6 +1085,9 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .pl-u.up{color:#17703f}.pl-u.dn{color:#a23b25}
 .pl-last{display:flex;flex-wrap:wrap;gap:6px;padding-top:12px}
 .pl-th{font:800 15px/1.2 var(--display);text-transform:uppercase;letter-spacing:.03em;margin:18px 0 8px}.pl-tix{margin-bottom:6px}.partoday .pargrid{margin-top:10px}.ptk-who{font:inherit;color:inherit;padding:0;display:inline-flex;align-items:center;gap:6px}.ptk-who i{width:10px;height:10px;border-radius:50%;display:inline-block}   /* v72 · today's parlays */
+.ph-k{margin:2px 0 8px}.ph-sum{margin:0;padding:10px 0 9px;font-size:13px;color:var(--ink-2);border-bottom:2px solid var(--ink)}.ph-sum b{color:var(--ink)}.ph-sum .up{color:#17703f}.ph-sum .dn{color:#a23b25}.ph-list{padding:2px 14px}
+.ph{border-bottom:1px solid var(--rule)}.ph:last-child{border-bottom:0}.ph summary{list-style:none;display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;padding:10px 0;cursor:pointer}.ph summary::-webkit-details-marker{display:none}
+.ph-t b{display:block;font-size:14px}.ph-t small{display:block;color:var(--ink-3);font-size:12px;margin-top:2px}.ph-u{font:800 14px/1 var(--text);white-space:nowrap}.ph-u.up{color:#17703f}.ph-u.dn{color:#a23b25}.ph[open] summary{border-bottom:1px dashed var(--rule)}.ph-legs{padding:2px 0 8px 30px}   /* v73 · parlay history */
 .pl-last small{flex-basis:100%;font:700 12px/1 var(--text);color:var(--ink-2)}
 .pl-tk{padding:5px 9px;border-radius:999px;font:600 12px/1.2 var(--text);background:rgba(21,19,15,.06);color:var(--ink)}
 .pl-tk.w{background:rgba(23,112,63,.12);color:#17703f}.pl-tk.l{background:rgba(162,59,37,.1);color:#a23b25}
