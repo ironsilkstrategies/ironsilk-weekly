@@ -99,7 +99,7 @@ setTimeout(async () => { try {
   const on = halfOnHtml(bg).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '), row = halfRowHtml(bg).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
   T('the Slate\'s open game shows every half call by market and pick, who\'s on it and its record there', /Spread/.test(on) && /1H PHI −0\.5/.test(on) && /2 with|2 on it/.test(on) && /1 against/.test(on) && /new/.test(on), on.slice(0, 500));
   T('…and the closed row says the half\'s most-backed calls in one line', /🕐 1st half:/.test(row) && /PHI −0\.5 \d on it/.test(row), row);
-  T('…in the open card, under Who\'s with it', /The \$\{halfTag\(b\.sp\)\}<\/h4>/.test(src) && /\$\{halfRowHtml\(b\)\}/.test(src));
+  T('…in the open card, under Who\'s with it', /The \$\{halfTag\(b\.sp\)\}<\/h4>/.test(src) && /\$\{halfRowHtml\(b, F\)\}/.test(src));
   T('no uncaught errors', !errs.length, errs.join(' | '));
 } catch (e) { T('test ran', false, String(e && e.stack || e).slice(0, 900)); }
   console.log(`\n${pass}/${pass + fail} passed`); process.exit(fail ? 1 : 0); }, 3000);

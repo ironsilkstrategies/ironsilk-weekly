@@ -800,8 +800,11 @@ const CONF = [[0, 'Any confidence'], [55, '55%+'], [60, '60%+'], [65, '65%+'], [
    the most confident tenth of the characters' calls on the sheet as it's filtered (day, league, start time, bet type, character, #1s,
    Forecast), cut at the % the tenth reaches; calls tied at that % come with it. */
 const TOP_CF = 'top10';
+/* v70 · Nov 25, Chris: "a filter for only characters with winning + units on a bet". 💰 Winning & up: a winning record AND up units
+   in that kind of bet (its badge's record, 12+ graded); a half call by its own half record */
+const UP_MIN = 12, upRec = r => !!r && fin(r.w) && fin(r.l) && r.w + r.l >= UP_MIN && r.w > r.l && fin(r.u) && r.u > 0;
 function cfCutOf(gs, F) { const P = []; for (const g of gs) for (const { c } of callsOf(g.b, { ...F, cf: 0 })) if (fin(c.p)) P.push(+c.p); if (!P.length) return null; P.sort((a, b) => b - a); return P[Math.max(0, Math.ceil(P.length * 0.1) - 1)]; }
-const callsMode = F => F.ch !== 'all' || +F.cf > 0 || F.cf === TOP_CF || F.say === 'top';
+const callsMode = F => F.ch !== 'all' || +F.cf > 0 || F.cf === TOP_CF || F.say === 'top' || F.up === 'win';
 function callOk(b, m, c, F, skip = '') {
   if (skip !== 'bt' && F.bt !== 'all' && BTS.some(([k]) => k === F.bt) && m !== F.bt) return false;
   if (skip !== 'ch' && F.ch !== 'all' && c.v !== F.ch) return false;
@@ -810,6 +813,7 @@ function callOk(b, m, c, F, skip = '') {
   if (skip !== 'say' && F.say === 'top' && !(c.r && c.r.say === 'top')) return false;
   if (skip !== 'say' && skip !== 'lane' && F.say === 'top' && F.lane && !(c.r && c.r.lab === F.lane)) return false;
   if (skip !== 'fc' && F.fc && F.fc !== 'all' && !fcPass(fcAt(b.sp, m, c.s, c.pick, c.price), F.fc)) return false;
+  if (skip !== 'up' && F.up === 'win' && !upRec(c.r)) return false;
   return true; }
 const callsOf = (b, F, skip) => { const out = []; if (b) for (const m of ['ml', 'spread', 'total']) for (const c of (b.calls || {})[m] || []) if (callOk(b, m, c, F, skip)) out.push({ m, c }); return out; };
 const tierTag = p => `${p.unan ? '<span class="tb unan">★ Unanimous</span>' : ''}${TIER[p.tier] ? `<span class="tb ${TIER[p.tier][1]}">${TIER[p.tier][0]}</span>` : ''}${p.off ? '<span class="tb off">✓ Official</span>' : ''}`;
@@ -866,10 +870,12 @@ function halfOnHtml(b) {
   }
   return out.join('');
 }
-/* the row before it opens: each half market's most-backed call, one line */
-function halfRowHtml(b) {
+/* the row before it opens: each half market's most-backed call that passes the filters on; none under 👑 #1s or the top 10% (unranked) */
+const halfPass = (c, F) => !F || ((F.ch === 'all' || c.v === F.ch) && !(+F.cf > 0 && !(fin(c.p) && pct(c.p) >= +F.cf)) && (F.up !== 'win' || upRec(c)));
+function halfRowHtml(b, F) {
   const H = b && b.half; if (!H) return ''; const P = [];
-  for (const m of ['ml', 'spread', 'total']) { const C = H[m]; if (!C || !C.length) continue; const by = {}; for (const c of C) (by[c.pick] = by[c.pick] || []).push(c);
+  if (F && (F.say === 'top' || F.cf === TOP_CF)) return '';
+  for (const m of ['ml', 'spread', 'total']) { if (F && F.bt !== 'all' && BTS.some(([k]) => k === F.bt) && m !== F.bt) continue; const C = (H[m] || []).filter(c => halfPass(c, F)); if (!C.length) continue; const by = {}; for (const c of C) (by[c.pick] = by[c.pick] || []).push(c);
     const k = Object.keys(by).sort((x, y) => by[y].length - by[x].length)[0], L = by[k], r = L[0].hit;
     P.push(`${r === true ? '✓ ' : r === false ? '✗ ' : ''}<b>${esc(hpk(k.replace(/^(1H|P1) /, '')))}</b> <small>${L.length} on it${L.some(c => c.o) ? ', official' : ''}</small>`); }
   return P.length ? `<div class="g-half">🕐 ${halfTag(b.sp)}: ${P.join(' · ')}</div>` : '';
@@ -884,7 +890,7 @@ function callRowsHtml(b, F) {
   const L = callsOf(b, F); if (!L.length) return '';
   const G = new Map(); for (const x of L) { const k = x.m + '|' + x.c.pick; if (!G.has(k)) G.set(k, []); G.get(k).push(x); }
   const tag = ({ c }) => { const k = castOf(c.v), say = c.r && c.r.say === 'top' ? '👑 ' : c.r && c.r.say === 'worst' ? '🧊 ' : '';
-    return `<span class="tb ch" style="--c:${k.color}">${say}${esc(k.name)}${fin(c.p) ? ` <b>${pct(c.p)}%</b>` : ''}</span>${c.o ? '<span class="tb off">✓ Official</span>' : ''}`; };
+    return `<span class="tb ch" style="--c:${k.color}">${say}${esc(k.name)}${fin(c.p) ? ` <b>${pct(c.p)}%</b>` : ''}${F.up === 'win' && c.r && fin(c.r.w) ? ` <small class="rec">${c.r.w}–${c.r.l}, ${u1(c.r.u)}</small>` : ''}</span>${c.o ? '<span class="tb off">✓ Official</span>' : ''}`; };
   return `<div class="bpicks">${[...G.values()].map(xs => { xs.sort((x, y) => ((y.c.o || 0) - (x.c.o || 0)) || ((y.c.p || 0) - (x.c.p || 0)));
     const { m, c } = xs[0], top = Math.max(...xs.map(x => (fin(x.c.p) ? x.c.p : 0))), L2 = { sp: b.sp, game: b.game, pick: c.pick, price: c.price, p: top, start: b.start, hit: c.hit }, X = legState(L2), q = X.st === 'live' ? liveQ(L2) : null;
     return `<div class="bp bp-${X.st}">${X.st !== 'o' ? `<span class="mkk ${X.st}">${markOf(X.st)}</span>` : ''}<span class="bp-pk">${esc(bigOf(b.sp, b.game, c.pick))}${c.price != null ? ' ' + esc(odds(c.price)) : ''}</span>${fcBadge(fcAt(b.sp, m, c.s, c.pick, c.price))}${q != null ? `<span class="bp-p lvq ${q >= top ? 'up' : 'dn'}">${pct(q)}% live</span>` : X.st === 'w' ? '<span class="bp-p g w">Hit</span>' : X.st === 'l' ? '<span class="bp-p g l">Missed</span>' : ''}${xs.map(tag).join('')}</div>`; }).join('')}</div>`;
@@ -899,13 +905,14 @@ function fcGameHtml(b) {
   return `<div class="g-sec"><h4>🌦 The Forecast</h4><p class="g-note">How each kind of bet on this game has paid the last 7 days at the real prices, every character’s picks counted once.</p><ul class="fcl">${L.map(f => { const W = fcW(f);
     return `<li class="${W ? (f.lv >= 1 ? 'up' : f.lv <= -2 ? 'dn' : '') : 'zz'}"><span class="fci">${W ? W[0] : '💤'}</span><span><b>${esc(fcLab(f.k))}</b> ${W ? W[1] : 'too few picks this week to say'}${f.tr ? (f.tr > 0 ? ' · ↑ rising' : ' · ↓ sliding') : ''}<small>${fcWk(f)} · 30 days ${+f.w30 || 0}–${+f.l30 || 0}, ${u1(f.u30)}</small></span></li>`; }).join('')}</ul></div>`;
 }
-const BF0 = { win: 'up', tier: 'all', bt: 'all', ch: 'all', cf: 0, say: 'all', lane: '', fc: 'all' };
+const BF0 = { win: 'up', tier: 'all', bt: 'all', ch: 'all', cf: 0, say: 'all', lane: '', fc: 'all', up: 'all' };
 const okWin = (g, w) => w === 'all' || (w === 'up' ? !g.over : winOf(g.t) === w);
 /* a saved filter that no longer fits the board (an old value, a character not on it, a #1 category not on this sheet) drops back */
 function bfFix(B, games, F) {
   if (!BTS.some(([k]) => k === F.bt)) F.bt = 'all';
   F.cf = F.cf === TOP_CF ? TOP_CF : CONF.some(([k]) => k === +F.cf) ? +F.cf : 0;
   if (F.say !== 'top') { F.say = 'all'; F.lane = ''; }
+  if (F.up !== 'win') F.up = 'all';
   if (!B || !B.fc || !FCF.some(([k]) => k === F.fc)) F.fc = 'all';
   if (F.ch !== 'all' && !(B && B.cast && Object.prototype.hasOwnProperty.call(B.cast, F.ch))) F.ch = 'all';
   if (F.lane && !games.filter(g => okWin(g, F.win)).some(g => callsOf(g.b, F, 'lane').some(({ c }) => c.r.lab === F.lane))) F.lane = '';
@@ -927,8 +934,9 @@ function filterBarHtml(B, games, F) {
     if (L.length) tops = `<div class="seg tight tops" role="group" aria-label="Today’s number ones">${chip('lane', '', 'All #1s', L.reduce((s, o) => s + o.n, 0))}${L.map(o => chip('lane', o.lab, `👑 ${esc(castOf(o.v).name)} · ${esc(o.lab)}`, o.n)).join('')}</div>`;
     const o = F.lane && M.get(F.lane);
     if (o) note = `👑 <b>${esc(castOf(o.v).name)}</b> is #1 in ${esc(o.lab)}${o.r.w != null ? ` (${o.r.w}–${o.r.l}, ${u1(o.r.u)})` : ''}. Every ${esc(o.lab)} call it has on this sheet${+F.cf ? ` at ${+F.cf}%+` : ''}: ${o.n}.`; }
-  if (cm && !note) note = F.say === 'top' ? `Only the calls from the character ranked #1 in each kind of bet (it has the say)${F.ch !== 'all' ? `, from <b>${esc(castOf(F.ch).name)}</b>` : ''}${+F.cf ? `, at <b>${+F.cf}%+</b> sure` : ''}${F.cf === TOP_CF ? ',' + topTxt : ''}. Tap a 👑 above for every pick it has in that kind of bet.`
-    : `The characters’ own calls${F.ch !== 'all' ? ` from <b>${esc(castOf(F.ch).name)}</b>` : ''}${+F.cf ? ` at <b>${+F.cf}%+</b> sure` : ''}${F.cf === TOP_CF ? topTxt : ''}. 👑 #1 in that kind of bet · 🧊 the worst.`;
+  const upTxt = F.up === 'win' ? `, only from characters with a <b>winning record and up units</b> in that kind of bet (${UP_MIN}+ graded there)` : '';
+  if (cm && !note) note = F.say === 'top' ? `Only the calls from the character ranked #1 in each kind of bet (it has the say)${F.ch !== 'all' ? `, from <b>${esc(castOf(F.ch).name)}</b>` : ''}${+F.cf ? `, at <b>${+F.cf}%+</b> sure` : ''}${F.cf === TOP_CF ? ',' + topTxt : ''}${upTxt}. Tap a 👑 above for every pick it has in that kind of bet.`
+    : `The characters’ own calls${F.ch !== 'all' ? ` from <b>${esc(castOf(F.ch).name)}</b>` : ''}${+F.cf ? ` at <b>${+F.cf}%+</b> sure` : ''}${F.cf === TOP_CF ? topTxt : ''}${upTxt}.${F.up === 'win' ? ' Each one’s record in that kind of bet rides with its name.' : ''} 👑 #1 in that kind of bet · 🧊 the worst.`;
   if (cm && !F.lane) note += ' Strength chips are for the desk’s colored picks.';
   return `<div class="bf">
     <div class="seg tight" role="group" aria-label="View">${chip('view', 'time', '🕒 By time')}${chip('view', 'league', 'By league')}</div>
@@ -937,7 +945,7 @@ function filterBarHtml(B, games, F) {
     <div class="seg tight" role="group" aria-label="Bet type">${BTS.map(([k, l]) => chip('bt', k, l, k === 'all' ? null : cm ? nCalls({ ...F, bt: k }) : inW.filter(g => (g.b ? g.b.picks : []).some(p => btOk(k, p, heavy) && pickOkB(g.b, p, { ...F, bt: 'all' }, heavy))).length)).join('')}</div>
     ${cast.length ? `<div class="bf-ch2"><label class="bf-sel${F.ch !== 'all' ? ' on' : ''}"><span class="sr">Character</span><select data-change="bfch"><option value="all">Every character</option>${cast.map(([v, c]) => `<option value="${esc(v)}"${F.ch === v ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
       <label class="bf-sel${+F.cf || F.cf === TOP_CF ? ' on' : ''}"><span class="sr">How sure the character is</span><select data-change="bfcf">${CONF.map(([v, l]) => `<option value="${v}"${F.cf !== TOP_CF && +F.cf === v ? ' selected' : ''}>${v ? `${l} sure · ${nCalls({ ...F, cf: v })}` : l}</option>`).join('')}<option value="${TOP_CF}"${F.cf === TOP_CF ? ' selected' : ''}>🎯 Top 10% most confident · ${nTop}</option></select></label></div>` : ''}
-    <div class="seg tight" role="group" aria-label="Number ones, the most confident and the Forecast">${chip('say', 'top', '👑 #1s only', nCalls({ ...F, say: 'top', lane: '' }), 't-say', true)}${chip('cf', TOP_CF, '🎯 Top 10% sure', nTop, 't-top', true)}${B.fc ? FCF.map(([v, l]) => chip('fc', v, l, cm ? nCalls({ ...F, fc: v }) : nPicks({ ...F, fc: v }), 'f-' + v, true)).join('') : ''}</div>
+    <div class="seg tight" role="group" aria-label="Number ones, winning and up, the most confident and the Forecast">${chip('say', 'top', '👑 #1s only', nCalls({ ...F, say: 'top', lane: '' }), 't-say', true)}${chip('up', 'win', '💰 Winning & up', nCalls({ ...F, up: 'win' }), 't-up', true)}${chip('cf', TOP_CF, '🎯 Top 10% sure', nTop, 't-top', true)}${B.fc ? FCF.map(([v, l]) => chip('fc', v, l, cm ? nCalls({ ...F, fc: v }) : nPicks({ ...F, fc: v }), 'f-' + v, true)).join('') : ''}</div>
     ${tops}${note ? `<p class="bf-note">${note}</p>` : ''}
     ${Object.keys(BF0).some(k => String(F[k] ?? BF0[k]) !== String(BF0[k])) ? '<button type="button" class="bf-reset" data-act="bfreset">Show everything</button>' : ''}</div>`;
 }
@@ -997,7 +1005,7 @@ function gameHtml(g, i) {
       ${g.q && g.q.title ? `<div class="ask"><b>${esc(g.q.title)}</b><span>${esc((g.q.opts || []).join(' or '))}? Make your case in the members’ chat.</span><button type="button" class="btn foil" data-go="chat">Open the chat</button></div>` : ''}</div>`;
   }
   return `<div class="game ${(i || 0) % 2 ? 'zb' : 'za'}${open ? ' g-open' : ''}${b && b.picks && b.picks.length ? ' g-has' : ''}"><button type="button" data-act="game" data-k="${esc(g.k)}" aria-expanded="${open}">${t}
-    <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${b && !open ? `<div class="g-bp" data-act="game" data-k="${esc(g.k)}">${callsMode(F) ? callRowsHtml(b, F) : boardPicksHtml(b, rowF(F), heavy, false)}${halfRowHtml(b)}</div>` : ''}${more}</div>`;
+    <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${b && !open ? `<div class="g-bp" data-act="game" data-k="${esc(g.k)}">${callsMode(F) ? callRowsHtml(b, F) : boardPicksHtml(b, rowF(F), heavy, false)}${halfRowHtml(b, F)}</div>` : ''}${more}</div>`;
 }
 /* the rows with no filter on show the strongest colored picks (unanimous, supreme, strong); any strength, bet type or Forecast filter shows what passes it */
 /* v64 · Nov 23, Chris: "I also think the pick bars should be visible before a game expands". Every colored pick shows on its game's row
@@ -2188,10 +2196,10 @@ document.addEventListener('click', async e => {
     /* 👑 #1s only and the Forecast chips switch on and off; a strength chip goes back to the desk's colored picks */
     S.bf[k] = a.dataset.tog && String(S.bf[k]) === v ? BF0[k] : k === 'cf' ? (v === TOP_CF ? TOP_CF : +v || 0) : v;
     if (k === 'say' && S.bf.say !== 'top') S.bf.lane = '';
-    if (k === 'tier') Object.assign(S.bf, { ch: 'all', cf: 0, say: 'all', lane: '' });
+    if (k === 'tier') Object.assign(S.bf, { ch: 'all', cf: 0, say: 'all', lane: '', up: 'all' });
     store.set('bf', S.bf); S.openGame = ''; render(); }
   else if (act === 'bfscope') { /* from a game's 👑 line: every pick that #1 has in its kind of bet, across the sheet */
-    S.bf = { ...S.bf, tier: 'all', bt: 'all', ch: 'all', cf: 0, fc: 'all', say: 'top', lane: a.dataset.lab || '' }; store.set('bf', S.bf); S.openGame = ''; render();
+    S.bf = { ...S.bf, tier: 'all', bt: 'all', ch: 'all', cf: 0, fc: 'all', up: 'all', say: 'top', lane: a.dataset.lab || '' }; store.set('bf', S.bf); S.openGame = ''; render();
     const f = $('#v-slate .bf'); if (f) f.scrollIntoView({ block: 'start' }); }
   else if (act === 'bfreset') { S.bf = { ...BF0, view: S.bf.view || 'time' }; store.set('bf', S.bf); render(); }
   else if (act === 'gobf') { S.bf = { ...S.bf, ...BF0, tier: a.dataset.tier || 'all', view: 'time' }; store.set('bf', S.bf); S.slateDay = 0; go('slate', true); }

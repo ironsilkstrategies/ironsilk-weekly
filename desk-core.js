@@ -1575,7 +1575,7 @@ function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=ne
     const tl=(()=>{const L=(VI.get(g.sp+'|'+g.game+'|'+g.day)||[]).find(c=>mkNorm(c.market)==='total'&&pubLineOf(c)!=null);return L?pubLineOf(L):null;})();
     const fx=(()=>{try{return pubGameFacts(g.sp,g.game,tl);}catch(e){return'';}})();
     const half={};(HI.get(g.sp+'|'+g.game+'|'+g.day)||[]).forEach(x=>{const m=String(x.mk||'').slice(2);if(m!=='ml'&&m!=='spread'&&m!=='total')return;let R=null;try{R=halfRecord(x.sp,x.voice,x.mk);}catch(e){}
-      (half[m]=half[m]||[]).push({v:use(x.voice),s:x.side,pick:x.pick,price:x.price!=null?+x.price:null,p:x.q!=null?r3(x.q):null,o:(()=>{try{return halfOfficial(R,x)?1:0;}catch(e){return 0;}})(),w:R?R.w:0,l:R?R.l:0,hit:x.graded?(x.hit==null?null:x.hit):null});});
+      (half[m]=half[m]||[]).push({v:use(x.voice),s:x.side,pick:x.pick,price:x.price!=null?+x.price:null,p:x.q!=null?r3(x.q):null,o:(()=>{try{return halfOfficial(R,x)?1:0;}catch(e){return 0;}})(),w:R?R.w:0,l:R?R.l:0,u:R&&isFinite(+R.u)?+(+R.u).toFixed(1):0,hit:x.graded?(x.hit==null?null:x.hit):null});});   /* v3.5.24 · u: the public Slate's 💰 Winning & up reads it */
     return{sp:g.sp,game:g.game,gl:gameLabel(g.sp,g.game),start:g.start,day:g.day,st:g.st,picks,calls,...(Object.keys(sc).length?{sc}:{}),...(fx?{fx}:{}),...(Object.keys(half).length?{half}:{})};}).filter(g=>g.picks.length||Object.keys(g.calls).length||g.half);
   const fc=pubForecast();
   return{d,games,cast,heavy:typeof BT_HEAVY!=='undefined'?BT_HEAVY:-500,...(fc?{fc}:{})};}

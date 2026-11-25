@@ -1195,6 +1195,7 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 /* v66 · 🎯 Top 10% sure */
 .seg button.t-top:not([aria-pressed="true"]){color:#8FE3FF;border-color:rgba(143,227,255,.5)}
 .seg button.t-top[aria-pressed="true"]{background:#8FE3FF;color:#05232c;border-color:#8FE3FF}
+.t-up:not([aria-pressed="true"]){color:#9BF2B8;border-color:rgba(155,242,184,.5)}.t-up[aria-pressed="true"]{background:#9BF2B8;color:#062b16;border-color:#9BF2B8}.tb.ch .rec{font-weight:600;opacity:.8;margin-left:2px;text-transform:none;letter-spacing:0}   /* v70 · 💰 Winning & up */
 /* v68 · the team book, three ways (moneyline, spread, over/under), every sport */
 .tb-sub{margin:6px 0 0;max-width:640px;font-size:13px;line-height:1.45;color:var(--cream-2)}
 .tb3 table{font-size:13px}
