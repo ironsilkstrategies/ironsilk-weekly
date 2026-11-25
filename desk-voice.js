@@ -378,6 +378,15 @@ function vx2Price(F,cf,rec,v){const base=vxPriceLine(F,cf,rec);if(!base||F.imp==
     ()=>cf!=null?`The book is pricing this like it happens ${vxPct(F.imp)} of the time. I say ${vxPct(cf)}${verdict?`. Translation: ${verdict}`:''}.${t}`:null,
     ()=>cf!=null?`Break-even at ${vxPrice(F.price)} is ${vxPct(F.imp)}. My number: ${vxPct(cf)}${verdict?`. ${vxCap(verdict)}`:''}.${t}`:null];
   return vx2Pick(alts,v,F,'price')||base;}
+/* v3.5.19 · its team book in its own words (Nov 24, Chris: "aware of … who they hit over unders with or against… who they hit spreads
+   with or against… all sports for all characters"): the most lopsided line it holds on these two teams in this bet type, 3+ calls */
+function vxBookLine(v,F,c){try{if(typeof tbTell!=='function')return null;const x=c?{...c,voice:v}:{voice:v,sp:F.sp,game:F.x.game,market:F.m,side:F.sd};const b=tbTell(x,3,1)[0];if(!b)return null;
+    const nm=vxName(F.sp,b.t)||b.t,n=b.w+b.l,good=b.w>b.l,mkn=b.mk==='ml'?'moneyline':'spread',to=b.mk==='ml'?'to win':'on the spread';
+    const L=b.mk==='ou'?(b.rel==='over'?[()=>`I've hit ${b.w} of ${n} overs in ${nm} games`,()=>`${nm} games and the over: ${b.w}-${b.l} for me`,()=>good?`${nm} games keep going over for me, ${b.w}-${b.l}`:`overs in ${nm} games have cost me, ${b.w}-${b.l}`]
+        :[()=>`I've hit ${b.w} of ${n} unders in ${nm} games`,()=>`${nm} games and the under: ${b.w}-${b.l} for me`,()=>good?`${nm} games stay under for me, ${b.w}-${b.l}`:`unders in ${nm} games have burned me, ${b.w}-${b.l}`])
+      :b.rel==='with'?[()=>`I'm ${b.w}-${b.l} backing ${nm} ${to}`,()=>`my book on ${nm} ${to}: ${b.w}-${b.l}`,()=>good?`${nm} has been good to me on the ${mkn}, ${b.w}-${b.l}`:`${nm} has let me down on the ${mkn}, ${b.w}-${b.l}`]
+      :[()=>`I'm ${b.w}-${b.l} going against ${nm} on the ${mkn}`,()=>`fading ${nm} on the ${mkn}: ${b.w}-${b.l} for me`,()=>good?`betting against ${nm} has paid, ${b.w}-${b.l}`:`going against ${nm} has hurt me, ${b.w}-${b.l}`];
+    const s=vx2Pick(L,v,F,'tbook');return s?vxCap(s)+vxSmall(n)+'.':null;}catch(e){return null;}}
 /* the read, assembled in one of a few shapes, so it never runs the same order every time */
 if(typeof window!=='undefined'&&!window.__VX2__){window.__VX2__=1;const CR1=charRead;
   charRead=function(v,x,c){const d=String(x.date||x.d||today()).slice(0,10);if(d<VX2_FROM)return CR1(v,x,c);
@@ -390,10 +399,11 @@ if(typeof window!=='undefined'&&!window.__VX2__){window.__VX2__=1;const CR1=char
       const lead=vx2Pick(P.lead.map(w=>()=>w||null),v,F,'lead');if(lead&&vxH(v+F.x.game+F.m)%3!==0&&!take.startsWith(lead))take=`${lead} ${take}`;
       const story=[pick(P0.story),pick(['players','injO','sit','form','met','flags','luck'])].filter(Boolean).slice(0,2);
       const aside=vx2Pick(P.aside.map(w=>()=>w),v,F,'aside');if(aside&&story.length&&(vx2Rank(v,F)+vxH(v))%3===1)story.push(aside);
-      const proof=[pick(P0.proof)].filter(Boolean);
+      const proof=[pick(P0.proof)].filter(Boolean);const bk=vxBookLine(v,F,c);
       if(rec.lane){const L=rec.lane;proof.push(vx2Pick([()=>`I'm ${L.w}-${L.l} on ${L.lab}${vxSmall(L.w+L.l)}.`,()=>`My record on ${L.lab}: ${L.w}-${L.l}${vxSmall(L.w+L.l)}.`,()=>`${L.lab.replace(/^./,c=>c.toUpperCase())} is ${L.w>L.l?'a lane I know':'not my best lane'}: ${L.w}-${L.l}${vxSmall(L.w+L.l)}.`],v,F,'lane'));}
-      else if(rec.team&&F.T)proof.push(vx2Pick([()=>`I'm ${rec.team.w}-${rec.team.l} picking ${F.Tn} games${vxSmall(rec.team.w+rec.team.l)}.`,()=>`I've called ${F.Tn} games ${rec.team.w}-${rec.team.l}${vxSmall(rec.team.w+rec.team.l)}.`],v,F,'team'));
-      const R={v,name:charName(v),pick:x.pick||charPickText(c||{...x,market:mkNorm(x.m||x.market),side:x.sd||x.side}),price:F.price,cf,take,story,proof:proof.filter(Boolean).slice(0,2),worry:vx2Worry(F,v,rec),worryLab:vx2Pick(vxP(v).worry.map(w=>()=>w).concat([()=>'The worry:',()=>'Where it goes wrong:']),v,F,'wlab'),priceLine:null,
+      else if(rec.team&&F.T&&!bk)proof.push(vx2Pick([()=>`I'm ${rec.team.w}-${rec.team.l} picking ${F.Tn} games${vxSmall(rec.team.w+rec.team.l)}.`,()=>`I've called ${F.Tn} games ${rec.team.w}-${rec.team.l}${vxSmall(rec.team.w+rec.team.l)}.`],v,F,'team'));
+      if(bk)proof.push(bk);
+      const R={v,name:charName(v),pick:x.pick||charPickText(c||{...x,market:mkNorm(x.m||x.market),side:x.sd||x.side}),price:F.price,cf,take,story,proof:proof.filter(Boolean).slice(0,bk?3:2),worry:vx2Worry(F,v,rec),worryLab:vx2Pick(vxP(v).worry.map(w=>()=>w).concat([()=>'The worry:',()=>'Where it goes wrong:']),v,F,'wlab'),priceLine:null,
         status:rec.status||null,skill:!!x.skill,under:cf!=null&&!(c&&isOfficial(c)),shape:(vx2Rank(v,F)+vxH(v+'shape'))%3};R.priceLine=vx2Price(F,cf,rec,v);
       VX_CACHE.set(k,R);return R;}catch(e){return CR1(v,x,c);}};
   /* the read as one paragraph, in that read's shape: take-first, worry-early, or story-first */

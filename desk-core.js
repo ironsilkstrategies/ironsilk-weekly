@@ -1357,9 +1357,34 @@ const PUB_PLANS=[{id:'month',name:'Monthly',price:50,per:'month',note:'Everythin
   {id:'league',name:'League pass',price:100,per:'league, per season',note:'Everything for one league, all season'},{id:'pass',name:'2-day pass',price:20,per:'2 days',note:'Everything for 48 hours'},
   {id:'single',name:'Single pick',price:2,per:'pick',note:'One pick from a game the characters are on'}];
 const PUB_NOTE_SKIP=new Set(['fav','dog','home','road','over','under','bigfav','longdog']);
-function pubCallNote(c){try{const w0=typeof c.why==='string'?c.why:Array.isArray(c.why)?c.why.join(' · '):'';const w=pubScrub(w0);if(w)return w.slice(0,240);
-    const f=(Array.isArray(c.f)?c.f:[]).filter(t=>!PUB_NOTE_SKIP.has(t)).map(t=>(typeof FAC_LAB!=='undefined'&&FAC_LAB[t])||'').filter(Boolean).slice(0,3);
-    return f.join(' · ').slice(0,240);}catch(e){return'';}}
+/* v3.5.19 · Nov 24, 9:42 PM, Chris: "this character and all characters need a way more vast vocabulary instead of saying the same
+   thing about every game". A call's note was its three situation tags at most, often the same two for a whole card, cut mid-word at
+   the end ("as a dog: 2-", "the line s"). Now: its own reasons, then what its own book says about these teams (the team book), then
+   the game's own numbers (each team's scoring, record, last five, how often its games clear this total), joined whole reasons at a
+   time, with the desk's housekeeping ("still learning these sources") left out. The public voices turn these into sentences. */
+const PUB_NOTE_DROP=/still learning these sources|too few graded/i;
+function pubNoteJoin(parts,max){const out=[];let n=0;for(const p0 of parts){const p=String(p0||'').trim();if(!p||PUB_NOTE_DROP.test(p)||out.includes(p))continue;const add=(out.length?3:0)+p.length;if(n+add>max)continue;out.push(p);n+=add;}return out.join(' · ');}
+function pubCallNote(c,opt){try{opt=opt||{};const max=opt.max||240;const w0=typeof c.why==='string'?c.why:Array.isArray(c.why)?c.why.join(' · '):'';const w=pubScrub(w0);
+    const base=w?w.split(/\s*·\s*/):(Array.isArray(c.f)?c.f:[]).filter(t=>!PUB_NOTE_SKIP.has(t)).map(t=>(typeof FAC_LAB!=='undefined'&&FAC_LAB[t])||'').filter(Boolean).slice(0,3);
+    let tb=[];if(opt.tb!==false){try{tb=tbTell(c,opt.tbN||2,opt.tbGap||0).slice(0,2).map(tbTok);}catch(e){}}
+    const gf=opt.gf?String(opt.gf).split(/\s*·\s*/):[];
+    return pubNoteJoin([...base.slice(0,2),...tb.slice(0,1),...base.slice(2),...tb.slice(1),...gf],max);}catch(e){return'';}}
+/* the game's own numbers, for the voices: each team's points for and against a game this season, its record, its last five, and how
+   many of its last eight cleared this total (totals only). Tags: "avg PFW 78.2-71.5 SEMO 69.1-74.3", "rec WYO 18-4 KENT 9-12",
+   "last5 WYO 4-1 KENT 1-4", "past 149: PFW 5/8 SEMO 3/7". Nothing here is a pick. */
+let PUB_GF=null;
+function pubGameFacts(sp,game,line){try{const[a,h]=String(game||'').split('@');if(!a||!h)return'';const ln=line!=null&&line!==''&&isFinite(+line)?+line:null;
+    const k=sp+'|'+game+'|'+(ln==null?'':ln);if(!PUB_GF||Date.now()-PUB_GF.ts>10*60e3)PUB_GF={ts:Date.now(),m:new Map()};if(PUB_GF.m.has(k))return PUB_GF.m.get(k);
+    const out=[],f1=x=>(+x).toFixed(1).replace(/\.0$/,'');
+    const sa=typeof seasonTeam==='function'?seasonTeam(sp,a):null,sh=typeof seasonTeam==='function'?seasonTeam(sp,h):null;
+    if(sa&&sh&&sa.gp>=3&&sh.gp>=3){if(sa.pf>0&&sh.pf>0)out.push(`avg ${a} ${f1(sa.pf/sa.gp)}-${f1(sa.pa/sa.gp)} ${h} ${f1(sh.pf/sh.gp)}-${f1(sh.pa/sh.gp)}`);out.push(`rec ${a} ${sa.w}-${sa.l} ${h} ${sh.w}-${sh.l}`);}
+    let I=null;try{I=typeof facIndex==='function'?facIndex()[sp]:null;}catch(e){}
+    const tg=t=>((I&&I.tg[t])||[]).slice().sort((x,y)=>String(x.d).localeCompare(String(y.d))),ga=tg(a),gh=tg(h);
+    const l5=G=>{const L=G.slice(-5);return L.length>=3?[L.filter(x=>x.me>x.op).length,L.filter(x=>x.me<x.op).length]:null;},fa=l5(ga),fh=l5(gh);
+    if(fa&&fh)out.push(`last5 ${a} ${fa[0]}-${fa[1]} ${h} ${fh[0]}-${fh[1]}`);
+    if(ln!=null){const pa=G=>{const L=G.slice(-8);return L.length>=4?[L.filter(x=>x.me+x.op>ln).length,L.length]:null;},xa=pa(ga),xh=pa(gh);if(xa&&xh)out.push(`past ${ln}: ${a} ${xa[0]}/${xa[1]} ${h} ${xh[0]}/${xh[1]}`);}
+    const s=out.join(' · ');PUB_GF.m.set(k,s);return s;}catch(e){return'';}}
+const pubLineOf=c=>{const l=c&&c.line!=null&&c.line!==''&&isFinite(+c.line)?+c.line:null;if(l!=null)return Math.abs(l);const m=String((c&&c.pick)||'').match(/(?:over|under|o|u)\s*(\d+(?:\.\d+)?)/i);return m?+m[1]:null;};
 const pubOff=c=>{try{return!!isOfficial(c);}catch(e){return false;}};
 /* v3.0.2 · the number shown is the character's OWN confidence — the one that made the call official: its own read, scaled by its own record
    in that lane, moved by its own chemistry with the others (desk-coach.js). Nov 13: the Coach's 70%+ under showed 51%, a different number. */
@@ -1367,8 +1392,9 @@ const pubConf=c=>{try{const v=typeof coachOk==='function'?coachOk(c):confOf(c);r
 const pubUnits=(price,hit)=>hit?(+price>0?+price/100:100/Math.abs(+price||100)):-1;
 /* every character's call on a pick's game and bet type: with it or against it, how sure, and why */
 function pubVoicesOn(x,V){try{const m=mkNorm(x.m||x.market),sd=x.sd||x.side,d=String(x.date||x.d0||x.d||today()).slice(0,10);
+    const gf=pubGameFacts(x.sp,x.game,m==='total'?pubLineOf(x):null);
     return V.filter(c=>c.sp===x.sp&&c.game===x.game&&c.market===m&&String(c.date).slice(0,10)===d&&CHARS[c.voice]&&c.voice!=='Blend')
-      .map(c=>({who:charName(c.voice),v:c.voice,with:c.side===sd,pick:c.pick,p:pubConf(c),official:pubOff(c),note:pubCallNote(c)}))
+      .map(c=>({who:charName(c.voice),v:c.voice,with:c.side===sd,pick:c.pick,p:pubConf(c),official:pubOff(c),note:pubCallNote(c,{max:300,gf})}))
       .sort((a,b)=>(b.with-a.with)||(b.official-a.official)||((b.p||0)-(a.p||0)));}catch(e){return[];}}
 /* the roster: bio, record on official calls, today's official picks with the reasons */
 let PUB_CHAR_MEMO=null;
@@ -1396,12 +1422,10 @@ function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEac
       L.forEach(c=>{const day=String(c.date).slice(0,10);if(day<from||day>d)return;if(day<d&&c.hit==null&&!c.push)return;if(!pubOff(c))return;
         /* v3.5.14 · Nov 23, Chris (the Grinder's profile read "Official game picks —" under "Today 3–0"): a pick from today counts in
            the record the moment it's graded, not the next morning. It stays in today's list; the recent results start with yesterday. */
-        if(day===d){if(!pubHeavy({m:mkNorm(c.market),price:c.price,pick:c.pick}))picks.push({kind:'game',sp:c.sp,game:c.game,gl:gameLabel(c.sp,c.game),pick:c.pick,price:c.price,p:pubConf(c),start:(()=>{try{return deskGameStart(c.sp,c.game)||'';}catch(e){return'';}})(),hit:c.hit==null?null:c.hit,push:!!c.push,note:pubCallNote(c)});if(c.hit==null&&!c.push)return;}
+        if(day===d){if(!pubHeavy({m:mkNorm(c.market),price:c.price,pick:c.pick}))picks.push({kind:'game',sp:c.sp,game:c.game,gl:gameLabel(c.sp,c.game),pick:c.pick,price:c.price,p:pubConf(c),start:(()=>{try{return deskGameStart(c.sp,c.game)||'';}catch(e){return'';}})(),hit:c.hit==null?null:c.hit,push:!!c.push,note:pubCallNote(c,{max:320,gf:pubGameFacts(c.sp,c.game,c.market==='total'?pubLineOf(c):null)})});if(c.hit==null&&!c.push)return;}
         if(c.push)pu++;else if(c.hit===true){w++;u+=pubUnits(c.price,true);}else if(c.hit===false){l++;u-=1;}
         if(day<d)recent.push({d:day,kind:'game',sp:c.sp,pick:c.pick,price:c.price,gl:gameLabel(c.sp,c.game),r:res(c)});
-        /* the teams it backs and goes against (sides only; totals have no side) */
-        if(c.market!=='total'&&c.side&&c.game&&!c.push&&c.hit!=null){const[A,H]=String(c.game).split('@');const mine=c.side==='home'?H:A,opp=c.side==='home'?A:H;
-          [[mine,'for'],[opp,'vs']].forEach(([t,k])=>{const o=teams[c.sp+'|'+t]||(teams[c.sp+'|'+t]={sp:c.sp,team:t,for:{w:0,l:0},vs:{w:0,l:0}});c.hit?o[k].w++:o[k].l++;});}});
+        });
       /* props: its record, the players it backs (overs) and goes against (unders), today's calls */
       const pr={w:0,l:0},players={};CP.filter(x=>x.voice===v&&x.hit!=null).forEach(x=>{x.hit?pr.w++:pr.l++;const o=players[x.sp+'|'+x.player]||(players[x.sp+'|'+x.player]={sp:x.sp,player:x.player,team:x.team||'',over:{w:0,l:0},under:{w:0,l:0}});
         const k=x.side==='under'?'under':'over';x.hit?o[k].w++:o[k].l++;if(String(x.d).slice(0,10)===d&&(pubPropLock(d).by[v]||[]).some(m=>m.key===[x.sp,x.player,x.k,x.thr,x.side==='under'?'under':'over'].join('|')))return;recent.push({d:x.d,kind:'prop',sp:x.sp,pick:(()=>{try{return cpropLine(x);}catch(e){return x.player;}})(),r:x.hit?'win':'loss'});});
@@ -1419,7 +1443,22 @@ function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEac
       const top=(o,n)=>Object.values(o).map(x=>({...x,n:(x.for?x.for.w+x.for.l+x.vs.w+x.vs.l:x.over.w+x.over.l+x.under.w+x.under.l)})).sort((a,b)=>b.n-a.n).slice(0,n).map(x=>{delete x.n;return x;});
       return{v,name:C.label,chip:C.chip,color:C.color,title:B.title||'',bio:B.bio||'',origin:B.origin||'',best,still,
         record:{w,l,pu,u:+u.toFixed(2)},props:pr,par:(()=>{try{return pubParRec(v,from,d,CPA,CPXA);}catch(e){return null;}})(),picks:picks.sort((a,b)=>(a.kind===b.kind?0:a.kind==='game'?-1:1)||(b.p||0)-(a.p||0)).slice(0,16),
-        recent:recent.sort((a,b)=>String(b.d).localeCompare(String(a.d))).slice(0,12),teams:top(teams,8),players:top(players,8)};});}catch(e){console.warn('pub characters',e);return[];}}
+        recent:recent.sort((a,b)=>String(b.d).localeCompare(String(a.d))).slice(0,12),teams:pubTeamRows(v,new Set(picks.filter(x=>x.kind==='game'&&x.game).flatMap(x=>String(x.game).split('@').map(t=>x.sp+'|'+t))),10),players:top(players,8)};});}catch(e){console.warn('pub characters',e);return[];}}
+/* v3.5.19 · the teams it backs and fades, now every sport and three ways (Nov 24, Chris: "who they hit over unders with or against… who
+   they hit spreads with or against… all sports for all characters"): its team book (every call it has made, official or not; the
+   record above it stays its official picks). The teams on its card today first, then the ones its book is most lopsided on, no more
+   than four from one sport while another sport has a story. ml/ats [with W, with L, against W, against L], ou [over W-L, under W-L];
+   for/vs (moneyline and spread together) stay for older copies of the app. */
+function pubTeamRows(v,now,max){try{const rows=[];['nfl','ncaaf','nba','ncaab','nhl','mlb'].forEach(sp=>{Object.entries(tbBook(v,sp)).forEach(([t,o])=>{
+      const ml=o.ml||[0,0,0,0],ats=o.ats||[0,0,0,0],ou=o.ou||[0,0,0,0],P=[[ml[0],ml[1]],[ml[2],ml[3]],[ats[0],ats[1]],[ats[2],ats[3]],[ou[0],ou[1]],[ou[2],ou[3]]];
+      const n=P.reduce((s,c)=>s+c[0]+c[1],0);if(!n)return;rows.push({sp,team:t,n,tell:Math.max(...P.map(c=>c[0]+c[1]>=2?Math.abs(c[0]-c[1]):0)),now:now.has(sp+'|'+t),ml,ats,ou});});});
+    const out=[],per={},take=r=>{out.push(r);per[r.sp]=(per[r.sp]||0)+1;};
+    rows.filter(r=>r.now).sort((a,b)=>b.tell-a.tell||b.n-a.n).slice(0,4).forEach(take);
+    const rest=rows.filter(r=>!r.now&&r.tell>0).sort((a,b)=>b.tell-a.tell||b.n-a.n),sps=new Set(rest.map(r=>r.sp));
+    for(const r of rest){if(out.length>=max)break;if(sps.size>1&&(per[r.sp]||0)>=4)continue;take(r);}
+    for(const r of rest){if(out.length>=max)break;if(!out.includes(r))take(r);}
+    const z=a=>a.some(Boolean)?a:undefined;
+    return out.map(r=>({sp:r.sp,team:r.team,...(r.now?{now:1}:{}),ml:z(r.ml),ats:z(r.ats),ou:z(r.ou),for:{w:r.ml[0]+r.ats[0],l:r.ml[1]+r.ats[1]},vs:{w:r.ml[2]+r.ats[2],l:r.ml[3]+r.ats[3]}}));}catch(e){return[];}}
 /* the bloodlines: each character × bet type, its generation, its heirs and how close the best one is to the chair (labels only) */
 function pubBloodlines(){try{if(typeof heirsAll!=='function')return null;const H=heirsAll(),R=typeof HEIR_MEMO!=='undefined'?HEIR_MEMO:null;
     const cells=Object.entries(H.cells||{}).map(([k,C])=>{const c=R&&R.cells&&R.cells[k],bar=+(((c&&c.ctx)||{}).bar||HEIR_BAR).toFixed(2);
@@ -1525,10 +1564,13 @@ function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=ne
     const calls={};(VI.get(g.sp+'|'+g.game+'|'+g.day)||[]).forEach(c=>{const m=mkNorm(c.market);if(pubHeavy({m,price:c.price}))return;let txt='';try{txt=charPickText(c);}catch(e){txt=c.pick||c.side;}
       /* v3.5.13 · Nov 23, Chris: "make sure … the characters reasoning is quoted inside their pick box along with their predicted final
          exact score". Each call carries its own reason in its own words (q), cleaned of any method talk like the Best 3's notes. */
-      const q=(()=>{try{const t=pubCallNote(c);return t?String(t).slice(0,180):'';}catch(e){return'';}})();
+      const q=(()=>{try{return pubCallNote(c,{max:180,tbN:3,tbGap:2})||'';}catch(e){return'';}})();
       (calls[m]=calls[m]||[]).push({v:use(c.voice),s:c.side,pick:txt,price:c.price!=null?+c.price:null,p:pubConf(c),o:pubOff(c)?1:0,r:rankOf(c,m),hit:c.hit==null?null:c.hit,...(q?{q}:{})});});
     const S0=SCI.get(g.sp+'|'+g.game+'|'+g.day),sc={};if(S0)Object.values(calls).forEach(L=>L.forEach(c=>{if(S0[c.v])sc[c.v]=S0[c.v];}));   /* only the characters with a call here */
-    return{sp:g.sp,game:g.game,gl:gameLabel(g.sp,g.game),start:g.start,day:g.day,st:g.st,picks,calls,...(Object.keys(sc).length?{sc}:{})};}).filter(g=>g.picks.length||Object.keys(g.calls).length);
+    /* v3.5.19 · the game's own numbers once a game, for every character's quote to draw on (the total's line from its total calls) */
+    const tl=(()=>{const L=(VI.get(g.sp+'|'+g.game+'|'+g.day)||[]).find(c=>mkNorm(c.market)==='total'&&pubLineOf(c)!=null);return L?pubLineOf(L):null;})();
+    const fx=(()=>{try{return pubGameFacts(g.sp,g.game,tl);}catch(e){return'';}})();
+    return{sp:g.sp,game:g.game,gl:gameLabel(g.sp,g.game),start:g.start,day:g.day,st:g.st,picks,calls,...(Object.keys(sc).length?{sc}:{}),...(fx?{fx}:{})};}).filter(g=>g.picks.length||Object.keys(g.calls).length);
   const fc=pubForecast();
   return{d,games,cast,heavy:typeof BT_HEAVY!=='undefined'?BT_HEAVY:-500,...(fc?{fc}:{})};}
 /* v3.1.7 · Nov 21, Chris: "can the forecast emoji be on game picks on the slate so I know if I should stay away or it's working?"

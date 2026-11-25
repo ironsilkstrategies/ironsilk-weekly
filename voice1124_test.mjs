@@ -1,0 +1,62 @@
+/* v68 · Nov 24, 9:42 PM, Chris (the Closer's card: eight college overs, each one "both offenses outclass the defenses (Scout)" with
+   "Quick one." / "Here's my read." / "I like this." in front): "this character and all characters need a way more vast vocabulary
+   instead of saying the same thing about every game". The public voices (desk/voice.js v3), tested on their own. */
+import fs from 'fs';
+const { say, voiceFacts } = await import('./desk/voice.js');
+let pass = 0, fail = 0; const T = (n, c, x) => { c ? pass++ : fail++; console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  — ' + String(x ?? '').slice(0, 900))); };
+const NM = { ND: 'Notre Dame', CMU: 'Central Michigan', PFW: 'Fort Wayne', SEMO: 'SE Missouri', WYO: 'Wyoming', KENT: 'Kent State', EMU: 'Eastern Michigan', KENN: 'Kennesaw State', LBSU: 'Long Beach State', ARST: 'Arkansas State', TLSA: 'Tulsa', ILST: 'Illinois State', QUC: 'Queens', WOF: 'Wofford', UND: 'North Dakota', DETM: 'Detroit Mercy', FAMU: 'Florida A&M', USA: 'South Alabama' };
+const nm = ab => NM[ab] || ab, day = '2026-11-24', CLOSER = { arch: 'Prodigy Grinder', a: 'The Scorekeeper', b: 'The Scout' };
+/* the Closer's real card from the Nov 24 feed, old notes */
+const card = [['FAMU@USA', 'Over 142', ''], ['QUC@WOF', 'Over 173.5', 'high total · both offenses outclass the defenses (Scout)'], ['CMU@ND', 'Over 152.5', 'high total · both offenses outclass the defenses (Scout)'],
+  ['UND@DETM', 'Over 151', 'both offenses outclass the defenses (Scout)'], ['PFW@SEMO', 'Over 149', 'both offenses outclass the defenses (Scout)'], ['LBSU@ARST', 'Over 158.5', 'high total · both offenses outclass the defenses (Scout)'],
+  ['TLSA@ILST', 'Over 142.5', ''], ['EMU@KENN', 'Over 147', 'both offenses outclass the defenses (Scout)']].map(([game, pick, note]) => ({ sp: 'ncaab', kind: 'game', game, pick, price: -110, note }));
+const oldReads = card.map((p, i) => say('H_L3e1', p, i, day, nm, CLOSER));
+T('the Closer\'s own card from Nov 24: eight reads, no two alike', new Set(oldReads).size === 8, oldReads.join('\n'));
+T('…no tag read out loud ("(Scout)"), no stock opener of old ("Quick one.", "Here\'s my read.")', oldReads.every(s => !/\(Scout\)|outclass the defenses \(/.test(s)) && !oldReads.some(s => /^(Quick one|Here's my read)\./.test(s)), oldReads.join('\n'));
+const offedge = oldReads.map(s => (s.match(/(both offenses are better than both defenses|the offenses have the edge on both ends|neither defense matches up with the scoring it's facing|this is two offenses that should find room all night|the matchup favors the offenses on both sides|both attacks rate ahead of the defenses trying to stop them|there's scoring on both benches and not much resistance|each offense out-ranks the defense across from it|points should come easy at both ends|two defenses that can't keep up with what they're facing)/i) || [])[0]).filter(Boolean).map(s => s.toLowerCase());
+T('…the fact it leans on most ("both offenses outclass the defenses") is never said the same way twice on the card', offedge.length >= 3 && new Set(offedge).size === offedge.length, JSON.stringify(offedge));
+T('…and the heir talks like its family: a prodigy\'s lines and its parents\' (the Scorekeeper, the Scout)', oldReads.some(s => /Learned this from the best|Born for spots|Young, but not new|They taught me|Golden child|what's working|in my blood|Fast learner|picked this up early|Natural fit|Family business|Watch and learn|made for this|Easy money|My parents would|Two minds|I build it|piece by piece|Count it out|names, just totals|parts together|boring|Box score first|tally|Simple sum|I keep the book|Final score first|Write this one down|Piece by piece|I add, I don't guess|Pencil out|Watch the players|tape|Talent wins|player out there|Eyes on|scouting notebook|who's out there|film|personnel|Matchups decide|Bodies and skill/i.test(s)), oldReads.join('\n'));
+/* the same card with what the desk sends now: its book, the game's numbers */
+const rich = card.map((p, i) => { const [a, h] = p.game.split('@'), L = +p.pick.match(/[\d.]+/)[0];
+  return { ...p, note: [p.note, `me on ${h} over ${3 + i % 3}-1`, `avg ${a} 77.4-70.2 ${h} 75.9-73.1`, `past ${L}: ${a} ${4 + i % 3}/8 ${h} 5/7`, `rec ${a} 4-2 ${h} 3-3`].filter(Boolean).join(' · ') }; });
+const richReads = rich.map((p, i) => say('H_L3e1', p, i, day, nm, CLOSER));
+T('with its book and the game\'s numbers, every read names the game\'s teams or numbers (not one generic line)', richReads.every(s => /\d/.test(s) && Object.values(NM).some(n => s.includes(n))), richReads.join('\n'));
+T('…its book reads as a record, in words, with the team named', richReads.some(s => /(Notre Dame|SE Missouri|Kennesaw State|Arkansas State|Illinois State|Wofford|Detroit Mercy|South Alabama)[^.]*\b(\d-1|four of five|three of four|five of six)/.test(s) || /\b(\d-1|four of five|three of four|five of six)\b[^.]*(Notre Dame|SE Missouri|Kennesaw State|Arkansas State|Illinois State|Wofford|Detroit Mercy|South Alabama)/.test(s)), richReads.join('\n'));
+T('…eight different shapes of sentence on one card (no two reads start the same way)', new Set(richReads.map(s => s.split(/\s+/).slice(0, 3).join(' '))).size >= 7, richReads.map(s => s.split(/\s+/).slice(0, 3).join(' ')).join(' | '));
+/* a fact that cuts against the pick is left out */
+const low = say('Sim', { sp: 'ncaab', game: 'CMU@ND', pick: 'Over 160.5', price: -110, note: 'avg CMU 66.0-70.0 ND 68.0-66.0 · high total' }, 0, day, nm);
+T('a number that argues for the other side isn\'t used to sell this one (their scoring adds to ~135 on a 160.5 over)', !/135|adds up|land near/.test(low), low);
+const under = say('Most common', { sp: 'ncaab', game: 'CMU@ND', pick: 'Under 140.5', price: -110, note: 'avg CMU 66.0-70.0 ND 68.0-66.0' }, 1, day, nm);
+T('…and backs a pick when it agrees (~135 on a 140.5 under)', /135/.test(under), under);
+/* the board: no reasons of its own, the game's numbers only */
+const board = say('Judge', { sp: 'ncaab', game: 'WYO@KENT', pick: 'WYO ML', price: -410, note: '', gf: 'avg WYO 81.0-66.0 KENT 64.0-75.0 · rec WYO 18-4 KENT 9-12 · last5 WYO 4-1 KENT 1-4' }, 3, day, nm);
+T('a call with no reasons of its own still talks about the game, from the game\'s numbers', /Wyoming/.test(board) && /\d/.test(board), board);
+/* cut-off fragments and the desk's housekeeping never read out loud */
+const junk = voiceFacts('+5.3 CREI as a dog: 2- · +2.7 power says GASO by 0.6, the line s · still learning these sources (too few graded picks) — the consensus edge counts at 80% · -10.1 three seasons: WSH offense 14th / defense 0th pct · +5.4 LIN as a favorite:', { game: 'CREI@GASO', pick: 'CREI ML' });
+T('a reason cut off mid-word, the desk\'s housekeeping and a percentile riddle are dropped, not spoken', junk.length === 0, JSON.stringify(junk));
+/* every tag the desk publishes reads as words */
+const TAGS = ['road favorite', 'home underdog', 'big spread (10+)', 'high total', 'low total', 'picked team on 2nd night of back-to-back', 'opponent on back-to-back', 'picked team rested, opponent on back-to-back', 'picked team over-performing its scoring (Pythagorean)', 'picked team under-performing its scoring (Pythagorean)',
+  'picked team on a short week (≤5 days rest)', 'picked team off a bye (13+ days rest)', 'opponent on a short week', 'opponent off a bye', 'picked team has 3+ more days of rest', 'picked team playing its 3rd game in 4 nights', 'opponent on its 3rd game in 4 nights', 'picked team on its 3rd straight road game', 'picked team won 4+ of its last 5', 'picked team won 1 or fewer of its last 5',
+  'division game', 'west-coast team at a 1pm ET kickoff (body clock says 10am)', 'west-coast team in a night game vs an Eastern team (circadian edge)', 'Eastern team in a night game vs a west-coast team', 'picked team has the clear talent edge (Scout)', 'opponent has the clear talent edge (Scout)', 'picked team owns a top-vs-bottom unit mismatch', "picked team's QB is top 5% in passer rating", 'opponent QB is bottom 5%',
+  "picked team's main goalie is top 20% in save %", "opponent's main goalie is bottom 20%", 'both offenses outclass the defenses (Scout)', 'both defenses outclass the offenses (Scout)', 'conference game (not division)', 'out-of-conference game', 'interleague game (AL vs NL)', 'hitter-friendly ballpark', 'pitcher-friendly ballpark', 'ballpark with a roof', 'game at altitude (thin air, tired legs)', 'wind 15+ mph',
+  'freezing (32°F or colder)', 'indoors (dome)', 'picked team leads the head-to-head series', 'picked team trails the head-to-head series', 'spread on the 3 (2.5–3.5)', 'his total 158.2 vs 152.5', 'his final OHIO 80 – 72 NMSU', 'his score SELA 73 – 79 UNCO vs the line -3.5', 'OHIO: 8.0 threes, 18.5 twos, 18.6 FT', 'KENT: 2.4 TD × 7.0 + 0.7 FG', 'VGK: 28.0 shots × 10.8%', '69 possessions',
+  'outside consensus 151.6 vs 146.5', 'outside consensus LIN by 4.9 vs the line +1.5', 'outside consensus TENN 76% to win (price -205)', 'DRatings WRST 76–78.6 SBU', 'DRatings: 154.6 total — 54% on 612', 'DRatings: WSH by 7.5 — 61% on 106', 'DRatings LIN 81%', 'ESPN FPI/BPI LIN 66%', 'Kalshi RUTG 98%', 'Polymarket BOS 80%', '+0.9 NMSU revenge: lost the last meeting (2026)',
+  '-2.39 FIU on a back-to-back', '+8.6 RICE as a dog: 2-1 outright', '+7 RICE as a dog: 3-0 against the spread', '+3.5 TLSA covers as a favorite: 1-3', '+9.5 GASO as a favorite: 0-2', '+6 RICE last 3: Wc Wc Wc', '+1.16 MILW bounce-back after losing by 28', '+6.8 power says UIC by 1.9, the line says 7.5', "-9.6 NHVN's offense (62.3 a game) vs LIN's defense (allows 70.4)", '+6 the triangle: MICH drops games to dogs, CREI beats favorites', '6-0 on him before',
+  'me with WYO ml 3-1', 'me vs KENT ats 0-2', 'me on ND over 4-1', 'me on ND under 2-0', 'avg PFW 78.2-71.5 SEMO 69.1-74.3', 'rec WYO 18-4 KENT 9-12', 'last5 WYO 4-1 KENT 1-4', 'past 149: PFW 5/8 SEMO 3/7'];
+const raw = TAGS.filter(t => { const F = voiceFacts(t, { game: 'AWAY@HOME', pick: /over|under|total|possessions|threes|TD ×|shots ×|past|avg/i.test(t) ? 'Over 149' : 'AWAY ML' }); return F.length && F.some(f => /^raw:/.test(f.k)); });
+T('every tag the desk publishes has its own words (none falls through as raw text)', raw.length === 0, raw.join(' | '));
+/* every character, and the heirs, says something different */
+const V = ['Sim', 'Judge', 'Coach', 'Most common', 'Pred', 'Covers', 'Trends', 'Consensus', 'Power', 'Dog', 'Scout', 'Banker', 'Brain'];
+const one = { sp: 'nba', game: 'SA@SAC', pick: 'SA ML', price: -475, note: 'road favorite · picked team has the clear talent edge (Scout) · avg SA 121.4-108.2 SAC 109.9-118.3 · rec SA 14-3 SAC 4-13' };
+const byV = V.map((v, i) => say(v, one, i, day, x => ({ SA: 'San Antonio', SAC: 'Sacramento' })[x] || x));
+T('thirteen characters on one pick: thirteen different reads', new Set(byV).size === 13 && byV.every(s => s.length > 20), byV.join('\n'));
+T('…and two heirs of different kinds don\'t sound alike', say('H_L2e1', one, 0, day, x => x, { arch: 'Steady Grinder', a: 'The Simulator', b: 'The Commissioner' }) !== say('H_L3e1', one, 0, day, x => x, CLOSER));
+/* breadth: a hundred picks for one character */
+const many = Array.from({ length: 100 }, (_, i) => say('Scout', { sp: 'ncaab', game: `T${i}@H${i}`, pick: i % 2 ? `Over ${140 + i}` : `T${i} ML`, price: -110, note: i % 2 ? 'both offenses outclass the defenses (Scout) · high total' : 'picked team has the clear talent edge (Scout) · road favorite' }, i % 12, day + (i >> 3), x => x));
+T('a hundred of the Scout\'s reads: dozens of different openings, no read repeated', new Set(many.map(s => s.split(/\s+/).slice(0, 3).join(' '))).size >= 25 && new Set(many).size === 100, new Set(many.map(s => s.split(/\s+/).slice(0, 3).join(' '))).size);
+T('the same pick on the same day reads the same everywhere', say('Scout', one, 2, day, x => x) === say('Scout', one, 2, day, x => x));
+const ALL = [...oldReads, ...richReads, ...byV, ...many];
+T('no read promises anything ("guaranteed", "lock", "risk-free") and none has broken punctuation', ALL.every(s => !/guarantee|\block\b|risk-free/i.test(s) && !/\.\.(?!\.)|\s[,.]|,,|\?\./.test(s)), ALL.find(s => /guarantee|\block\b|risk-free/i.test(s) || /\.\.(?!\.)|\s[,.]|,,|\?\./.test(s)));
+const src = fs.readFileSync(new URL('./desk/voice.js', import.meta.url), 'utf8');
+T('the vocabulary is several times what it was (v1 was 17.6 KB)', src.length > 45000, src.length);
+console.log(`\n${pass}/${pass + fail} passed`); process.exit(fail ? 1 : 0);

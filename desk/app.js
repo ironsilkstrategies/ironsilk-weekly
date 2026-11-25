@@ -1,4 +1,4 @@
-import { say } from './voice.js?v=2';
+import { say } from './voice.js?v=3';
 import { library, get as chal, checkpoints, paceAt, orderFor, simulate, ROUTES, RULES, SPORTS, TIERS as CTIERS, rankOf } from './chal-lib.js?v=1';
 /* TheDesk — the public app.
    It shows what the desk publishes and nothing else: the day's Best 3 (each one sealed until 30 minutes before its
@@ -837,10 +837,12 @@ function whoOnHtml(b) {
     const top = C.find(c => c.r && c.r.say === 'top'), low = C.find(c => c.r && c.r.say === 'worst');
     const say = [top ? `👑 <b>${esc(castOf(top.v).name)}</b> has the say, on ${esc(bigOf(b.sp, b.game, top.pick))}${top.r.lab ? ` <button type="button" class="scope" data-act="bfscope" data-lab="${esc(top.r.lab)}">All its ${esc(top.r.lab)} picks →</button>` : ''}` : '', low ? `🧊 <b>${esc(castOf(low.v).name)}</b> shouldn’t, on ${esc(bigOf(b.sp, b.game, low.pick))}` : ''].filter(Boolean).join(' · ');
     /* v62 · Nov 23, Chris: "the characters reasoning is quoted inside their pick box along with their predicted final exact score" —
-       its exact final, then its own reasons in its own voice (only the reasons the desk gave it; no reason, no quote) */
+       its exact final, then its own reasons in its own voice (only the reasons the desk gave it; no reason, no quote).
+       v68 · Nov 24, "a way more vast vocabulary": the game's own numbers ride on the board once a game (fx) and every character can
+       draw on them in its own words, with its own book on these teams in its note. */
     let qi = 0;
     const row = c => { const k = castOf(c.v), mk = c.hit === true ? '<b class="hitw">✓</b> ' : c.hit === false ? '<b class="hitl">✗</b> ' : '';
-      const q = c.q ? voiceOf(c.v, { sp: b.sp, game: b.game, pick: c.pick, note: c.q }, qi++) : '';
+      const q = c.q || b.fx ? voiceOf(c.v, { sp: b.sp, game: b.game, pick: c.pick, price: c.price, note: c.q || '', gf: b.fx || '' }, qi++) : '';
       return `<li style="--c:${k.color}"><span class="who">${mk}${esc(k.name)}${c.o ? ' <em>official</em>' : ''}</span><span class="cp">${c.p != null ? pct(c.p) + '%' : ''}</span>${scoreCall(b, c.v)}${q ? `<q class="cq">${esc(q)}</q>` : ''}${sayBadge(c.r)}</li>`; };
     out.push(`<div class="won"><div class="won-h"><b>${MK_LAB[m]}</b><span>${sides.length === 1 ? `All ${tot} agree` : `${by[sides[0]].length}–${tot - by[sides[0]].length} split`}</span></div>
       ${say ? `<p class="won-say">${say}</p>` : ''}
@@ -1046,7 +1048,10 @@ function viewSlate() {
 const cap1 = t => String(t || '').charAt(0).toUpperCase() + String(t || '').slice(1);
 const nickOf = (sp, game, a) => { try { return String(bigOf(sp, game, a + ' ML')).replace(/\s+ML$/, '') || a; } catch (e) { return a; } };
 const vOfName = n => { const C = (S.feed && S.feed.characters) || []; const c = C.find(x => x.name === n || x.v === n); return c ? c.v : n; };
-const voiceOf = (v, p, idx) => { try { return say(v, p, idx, deskDay(), a => nickOf(p.sp, p.game, a)); } catch (e) { return p.note || ''; } };
+/* v68 · an heir talks like its family (its kind and its parents), so the voice gets them from the roster */
+let VMETA = null;
+const voiceMeta = v => { const F = S.feed; if (!VMETA || VMETA.f !== F) VMETA = { f: F, m: new Map(((F && F.characters) || []).filter(c => c.kid).map(c => [c.v, { arch: c.kid.arch, a: c.kid.a, b: c.kid.b, creed: c.kid.creed }])) }; return VMETA.m.get(v) || null; };
+const voiceOf = (v, p, idx) => { try { return say(v, p, idx, deskDay(), a => nickOf(p.sp, p.game, a), voiceMeta(v)); } catch (e) { return p.note || ''; } };
 /* ── the open beta: the whole card, and every character's say on each pick ──────── */
 const vipBadge = () => (S.feed && S.feed.beta ? '<span class="vipbadge">VIP · free in beta</span>' : '<span class="vipbadge">VIP</span>');
 function callsHtml(calls) {
@@ -1316,9 +1321,22 @@ function viewCast() {
       ${c.par ? parHtml(c.par) : ''}
       <h2 class="h2">Today’s official picks</h2>${todayTxt(c) ? `<p class="tk-sum castday">${todayTxt(c)}${S.liveAt && todayLive(c).on ? ` · <span class="tk-upd">Scores updated ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}</span>` : ''}</p>` : ''}${games.length || props.length ? `<div class="paper tix">${games.map(pickRow).join('')}${props.length ? `<div class="tix-h sub"><b>Props</b></div>${props.map((p, i) => pickRow(p, i + games.length)).join('')}` : ''}</div>` : '<p class="note">Nothing official today. It only speaks when it’s sure.</p>'}
       ${(c.recent || []).length ? `<h2 class="h2">Recent results</h2><div class="paper tix">${c.recent.map(r => `<div class="leg"><div class="li">${mark(r.r)}<span class="pk">${esc(r.kind === 'prop' ? r.pick : readPick(r).big)}${r.price != null ? ' ' + esc(odds(r.price)) : ''}<small>${esc([LEAGUE[r.sp], r.gl, shortDay(r.d)].filter(Boolean).join(' · '))}</small></span><span class="u"></span></div></div>`).join('')}</div>` : ''}
-      ${(c.teams || []).length ? `<h2 class="h2">Teams it backs and fades</h2><div class="paper tbl"><table><thead><tr><th scope="col">Team</th><th scope="col">Backed</th><th scope="col">Against</th></tr></thead><tbody>${c.teams.map(t => `<tr><th scope="row">${esc(teamName(t.sp, t.team))}<small>${esc(LEAGUE[t.sp] || '')}</small></th><td>${wl(t.for)}</td><td>${wl(t.vs)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${(c.teams || []).length ? teamsHtml(c.teams, wl) : ''}
       ${(c.players || []).length ? `<h2 class="h2">Players it rides and fades</h2><div class="paper tbl"><table><thead><tr><th scope="col">Player</th><th scope="col">Overs</th><th scope="col">Unders</th></tr></thead><tbody>${c.players.map(t => `<tr><th scope="row">${esc(t.player)}<small>${esc([LEAGUE[t.sp], t.team].filter(Boolean).join(' · '))}</small></th><td>${wl(t.over)}</td><td>${wl(t.under)}</td></tr>`).join('')}</tbody></table></div>` : ''}
       ${lines.length ? `<h2 class="h2">Bloodlines</h2>${lines.map(x => blRow(x, need)).join('')}` : ''}</article>${footHtml()}`;
+}
+
+/* v68 · Nov 24, 9:42 PM, Chris: "I'd like the characters to be aware of not only who they win with or against etc.. but who they hit over
+   unders with or against… who they hit spreads with or against… all sports for all characters". Its book on each team three ways: the
+   moneyline with the team and against it, the spread with it and against it, the overs and unders in its games. From every call it has
+   made (official or not), every sport; the teams on today's card first. An older feed (with and against only) keeps its two columns. */
+function teamsHtml(T, wl) {
+  if (!T.some(t => t.ml || t.ats || t.ou)) return `<h2 class="h2">Teams it backs and fades</h2><div class="paper tbl"><table><thead><tr><th scope="col">Team</th><th scope="col">Backed</th><th scope="col">Against</th></tr></thead><tbody>${T.map(t => `<tr><th scope="row">${esc(teamName(t.sp, t.team))}<small>${esc(LEAGUE[t.sp] || '')}</small></th><td>${wl(t.for)}</td><td>${wl(t.vs)}</td></tr>`).join('')}</tbody></table></div>`;
+  const one = (lab, w, l, tip) => (w + l ? `<span class="tbc ${w > l ? 'up' : w < l ? 'dn' : ''}" title="${esc(tip)}"><em>${lab}</em> ${w}–${l}</span>` : '');
+  const cell = (a, labs, tips) => { const s = a ? one(labs[0], a[0], a[1], tips[0]) + one(labs[1], a[2], a[3], tips[1]) : ''; return `<td>${s || '<span class="tbc none">—</span>'}</td>`; };
+  return `<h2 class="h2">Teams it backs and fades</h2><p class="tb-sub">Its record with and against each team, on the moneyline and the spread, and on overs and unders in their games. Every call it has made, official or not, every sport.</p>
+    <div class="paper tbl tb3"><table><thead><tr><th scope="col">Team</th><th scope="col">Money&shy;line</th><th scope="col">Spread</th><th scope="col">Over/<wbr>under</th></tr></thead><tbody>${T.map(t => { const nm = teamName(t.sp, t.team);
+      return `<tr${t.now ? ' class="now"' : ''}><th scope="row">${esc(nm)}<small>${esc([LEAGUE[t.sp] || '', t.now ? 'on today’s card' : ''].filter(Boolean).join(' · '))}</small></th>${cell(t.ml, ['with', 'vs'], [`Picking ${nm} to win`, `Picking against ${nm}`])}${cell(t.ats, ['with', 'vs'], [`${nm} on the spread`, `Against ${nm} on the spread`])}${cell(t.ou, ['over', 'under'], [`Overs in ${nm} games`, `Unders in ${nm} games`])}</tr>`; }).join('')}</tbody></table></div>`;
 }
 
 /* ── the members' chatroom (the one thing that talks back: words only, never picks) ── */

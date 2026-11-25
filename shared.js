@@ -3226,7 +3226,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261124e',DESK_VER='3.5.18';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261124f',DESK_VER='3.5.19';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18486,6 +18486,41 @@ function charSplitsFor(v,sp){const S=splitsGet();const V=roGet(VOICES_KEY,[],30e
     V.forEach(x=>{if(x.sr||!x.graded||x.voice!==v||x.sp!==sp||x.market!==mk)return;const r=x.push?2:x.hit?0:1;R.all[r]++;splitInc(R.side,x.side,r);const ro=splitRole(x);if(ro)splitInc(R.role,ro,r);
       if(mk==='total')String(x.game).split('@').forEach(t=>{const T=R.team[t]||(R.team[t]={});splitInc(T,x.side,r);});else{const t=splitTeam(x);if(t)splitInc(R.team,t,r);}});
     out[mk]=R;});return out;}
+/* ══ v3.5.19 · THE TEAM BOOK ══════════════════════════════════════════════════════════════════════════════════
+   Nov 24, 9:42 PM, Chris: "I'd like the characters to be aware of not only who they win with or against etc.. but who they hit
+   over unders with or against… who they hit spreads with or against… and I think it should cover all sports for all characters".
+   Every character's own book on every team it has called, in every sport, three ways: the moneyline with the team and against it,
+   the spread with it and against it, the overs and the unders in its games. Read from the permanent splits (every graded call
+   since they began, so nothing ages out with the ledger) plus the graded calls not rolled in yet; "against" is the head-to-head
+   side of the splits (picking the other team in a game this team played). Cells: ml/ats [with W, with L, against W, against L],
+   ou [over W, over L, under W, under L]. Pushes are left out, as on every record. */
+const TB_MK={ml:'ml',spread:'ats',total:'ou'};let TB_C=null;
+function tbOther(pair,t){pair=String(pair);return pair.startsWith(t+'-')?pair.slice(t.length+1):pair.endsWith('-'+t)?pair.slice(0,-(t.length+1)):null;}
+/* every character's book in every sport, built in one pass over the splits and the ledger (rebuilt when either changes) */
+function tbAll(){const S=splitsGet()||{},V=roGet(VOICES_KEY,[],30e3)||[];let sl=0;try{const wp=WB_PEND.get(SPLIT_KEY);sl=String((wp?wp.json:localStorage.getItem(SPLIT_KEY))||'').length;}catch(e){}
+  /* keyed by fingerprints, so an old ledger or old splits are never held in memory after they change */
+  const key=ledgerSig(V)+'|'+sl;if(TB_C&&TB_C.key===key)return TB_C.by;
+  const by=new Map(),book=(v,sp)=>{const k=v+'|'+sp;let T=by.get(k);if(!T)by.set(k,T={});return T;},cell=(T,t,mk)=>{const o=T[t]||(T[t]={});return o[mk]||(o[mk]=[0,0,0,0]);};
+  Object.entries(S).forEach(([sp,BV])=>Object.entries(BV||{}).forEach(([v,M0])=>{if(!M0)return;const T=book(v,sp);
+    ['ml','spread'].forEach(m=>{const M=M0[m];if(!M)return;const mk=TB_MK[m];
+      Object.entries(M.team||{}).forEach(([t,a])=>{if(!Array.isArray(a))return;const c=cell(T,t,mk);c[0]+=+a[0]||0;c[1]+=+a[1]||0;});
+      Object.entries(M.h2h||{}).forEach(([pr,o])=>Object.entries(o||{}).forEach(([t,a])=>{const op=tbOther(pr,t);if(!op||!Array.isArray(a))return;const c=cell(T,op,mk);c[2]+=+a[0]||0;c[3]+=+a[1]||0;}));});
+    const M=M0.total;if(M)Object.entries(M.team||{}).forEach(([t,o])=>{if(!o||Array.isArray(o))return;const c=cell(T,t,'ou');if(o.over){c[0]+=+o.over[0]||0;c[1]+=+o.over[1]||0;}if(o.under){c[2]+=+o.under[0]||0;c[3]+=+o.under[1]||0;}});}));
+  V.forEach(x=>{if(!x||x.sr||!x.graded||x.push||x.hit==null||!x.voice||!x.sp||!TB_MK[x.market])return;const[a,h]=String(x.game||'').split('@');if(!a||!h)return;const r=x.hit?0:1,T=book(x.voice,x.sp);
+    if(x.market==='total'){const j=x.side==='under'?2:x.side==='over'?0:-1;if(j<0)return;cell(T,a,'ou')[j+r]++;cell(T,h,'ou')[j+r]++;}
+    else{const me=x.side==='home'?h:x.side==='away'?a:null;if(!me)return;const op=me===h?a:h,mk=TB_MK[x.market];cell(T,me,mk)[r]++;cell(T,op,mk)[2+r]++;}});
+  TB_C={key,by};return by;}
+function tbBook(v,sp){return tbAll().get(v+'|'+sp)||{};}
+/* one call's lines in its own character's book: a side → with the team it took, against the other; a total → its side in both teams' games */
+function tbCellsFor(c){try{const m=c&&(c.market||mkNorm(c.m)),mk=TB_MK[m];if(!mk||!c.voice||!c.sp)return[];const[a,h]=String(c.game||'').split('@');if(!a||!h)return[];
+    const B=tbBook(c.voice,c.sp),g=t=>(B[t]||{})[mk]||[0,0,0,0];
+    if(mk==='ou'){const j=c.side==='under'?2:c.side==='over'?0:-1;if(j<0)return[];return[a,h].map(t=>({t,mk,rel:j?'under':'over',w:g(t)[j],l:g(t)[j+1]}));}
+    const me=c.side==='home'?h:c.side==='away'?a:null;if(!me)return[];const op=me===h?a:h;
+    return[{t:me,mk,rel:'with',w:g(me)[0],l:g(me)[1]},{t:op,mk,rel:'vs',w:g(op)[2],l:g(op)[3]}];}catch(e){return[];}}
+/* the lines worth saying out loud: enough calls, the most lopsided first */
+function tbTell(c,minN,minGap){return tbCellsFor(c).filter(x=>x.w+x.l>=(minN||2)&&Math.abs(x.w-x.l)>=(minGap||0)).sort((p,q)=>Math.abs(q.w-q.l)-Math.abs(p.w-p.l)||(q.w+q.l)-(p.w+p.l));}
+/* as a reason tag the public voices read: "me with WYO ml 3-1", "me vs KENT ats 0-2", "me on ND over 4-1" */
+const tbTok=x=>`me ${x.mk==='ou'?'on':x.rel} ${x.t} ${x.mk==='ou'?x.rel:x.mk} ${x.w}-${x.l}`;
 function charSplitsHtml(F){const sp=F&&F.sp&&F.sp!=='all'?F.sp:(typeof ACTIVE_SPORT!=='undefined'?ACTIVE_SPORT:'mlb');const pc=a=>a&&a[0]+a[1]?Math.round(a[0]/(a[0]+a[1])*100)+'%':'—';
   const cell=a=>a&&a[0]+a[1]?`<td style="color:${a[0]/(a[0]+a[1])>=0.55?'var(--win)':a[0]/(a[0]+a[1])<0.45?'var(--rust)':'var(--chalk)'}">${a[0]}-${a[1]}${a[2]?'-'+a[2]:''} <span style="color:var(--mute)">${pc(a)}</span></td>`:'<td style="color:var(--mute)">—</td>';
   const rows=CHAR_ORDER.map(v=>{const X=charSplitsFor(v,sp);const n=['ml','spread','total'].reduce((s,m)=>s+X[m].all[0]+X[m].all[1],0);

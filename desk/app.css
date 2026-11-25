@@ -1195,3 +1195,13 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 /* v66 · 🎯 Top 10% sure */
 .seg button.t-top:not([aria-pressed="true"]){color:#8FE3FF;border-color:rgba(143,227,255,.5)}
 .seg button.t-top[aria-pressed="true"]{background:#8FE3FF;color:#05232c;border-color:#8FE3FF}
+/* v68 · the team book, three ways (moneyline, spread, over/under), every sport */
+.tb-sub{margin:6px 0 0;max-width:640px;font-size:13px;line-height:1.45;color:var(--cream-2)}
+.tb3 table{font-size:13px}
+.tb3 thead th{font-size:13px;padding:10px 8px 8px}
+.tb3 tbody th{padding:9px 8px}
+.tb3 td{padding:8px 6px;vertical-align:top}
+.tbc{display:block;white-space:nowrap;line-height:1.35}
+.tbc em{font-style:normal;font-weight:500;font-size:11px;color:var(--ink-2);margin-right:2px}
+.tbc.up{color:var(--win)}.tbc.dn{color:var(--loss)}.tbc.none{color:var(--ink-3);font-weight:500}
+.tb3 tr.now th{box-shadow:inset 3px 0 0 var(--brass)}
