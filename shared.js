@@ -209,7 +209,7 @@ const NCAAB_ALIAS={/* v2.87.3 · BetOnline writes the UC schools as "Cal Riversi
   'SOUTHEASTERN LOUISIANA':'SELA','USC UPSTATE':'UPST','CITADEL':'CIT','TARLETON':'TAR','MISSISSIPPI':'MISS','CONNECTICUT':'CONN','KENNESAW':'KENN',
   'CS NORTHRIDGE':'CSUN','CAL ST NORTHRIDGE':'CSUN','CSUN':'CSUN','CS FULLERTON':'CSUF','CSUF':'CSUF','CS BAKERSFIELD':'CSUB','CSUB':'CSUB',
   'TENN MARTIN':'UTM','TENNESSEE MARTIN':'UTM','UT MARTIN':'UTM','UMKC':'KC','MISSOURI KANSAS CITY':'KC','UTRGV':'RGV','TEXAS RIO GRANDE VALLEY':'RGV','UT RIO GRANDE VALLEY':'RGV',
-  'CAL BAPTIST':'CBU','CALIFORNIA BAPTIST':'CBU','COL OF CHARLESTON':'COFC','COLLEGE OF CHARLESTON':'COFC','UNC A AND T':'NCAT','NC A AND T':'NCAT','NORTH CAROLINA A AND T':'NCAT',
+  'CAL BAPTIST':'CBU','CALIFORNIA BAPTIST':'CBU','COL OF CHARLESTON':'COFC','COLL OF CHARLESTON':'COFC','COLLEGE OF CHARLESTON':'COFC','UNC A AND T':'NCAT','NC A AND T':'NCAT','NORTH CAROLINA A AND T':'NCAT',
   'UNC CENTRAL':'NCCU','NC CENTRAL':'NCCU','NORTH CAROLINA CENTRAL':'NCCU','ALBANY':'UALB','SUNY ALBANY':'UALB','ALBANY NY':'UALB','LIU BROOKLYN':'LIU','IUPUI':'IUIN','IU INDY':'IUIN',
   'FORT WAYNE':'PFW','IPFW':'PFW','FLORIDA INTL':'FIU','FLA INTERNATIONAL':'FIU','FLA ATLANTIC':'FAU','FLA GULF COAST':'FGCU','FLORIDA GULF COAST':'FGCU','FGCU':'FGCU',
   'MIAMI OHIO':'M-OH','MIAMI OH':'M-OH','LOYOLA MARYLAND':'L-MD','LOYOLA MD':'L-MD','LOYOLA CHICAGO':'LUC','LOYOLA IL':'LUC','ST MARYS CA':'SMC','ST MARYS CALIFORNIA':'SMC',
@@ -228,7 +228,7 @@ const NCAAB_ALIAS={/* v2.87.3 · BetOnline writes the UC schools as "Cal Riversi
   'ST BONAVENTURE':'SBU','ST JOSEPHS':'JOES','ST LOUIS':'SLU','ST PETERS':'SPU','ST THOMAS MN':'STMN','ST THOMAS':'STMN','UC IRVINE':'UCI','UC DAVIS':'UCD','UC RIVERSIDE':'UCR',
   'NJIT':'NJIT','VA TECH':'VT','VA COMMONWEALTH':'VCU','WRIGHT ST':'WRST','YOUNGSTOWN ST':'YSU','OLE MISS':'MISS','PITT':'PITT','UCONN':'CONN','UMASS':'MASS'};
 const NCAAB_SHORT=[[/^CS /,'CAL ST '],[/^FLA /,'FLORIDA '],[/^TENN /,'TENNESSEE '],[/^MISS /,'MISSISSIPPI '],[/^ARK /,'ARKANSAS '],[/^GA /,'GEORGIA '],[/^MD /,'MARYLAND '],
-  [/^MASS /,'MASSACHUSETTS '],[/^CONN /,'CONNECTICUT '],[/^MICH /,'MICHIGAN '],[/^WASH /,'WASHINGTON '],[/^COL OF /,'COLLEGE OF '],[/\bINTL\b/,'INTERNATIONAL'],[/\bMT\b/,'MOUNT'],[/\bFT\b/,'FORT'],
+  [/^MASS /,'MASSACHUSETTS '],[/^CONN /,'CONNECTICUT '],[/^MICH /,'MICHIGAN '],[/^WASH /,'WASHINGTON '],[/^COL OF /,'COLLEGE OF '],[/\bCOLL\b/,'COLLEGE'],   /* v3.5.17 · Nov 24, ticket 1018641748: "Coll Of Charleston" read as nothing (Charleston and Charleston Southern tied on the last-resort match) */[/\bINTL\b/,'INTERNATIONAL'],[/\bMT\b/,'MOUNT'],[/\bFT\b/,'FORT'],
   [/\bUNIV\b|\bUNIVERSITY\b/,''],[/\bTHE\b/,'']];
 let NCAAB_MASCOT=null;
 function ncaabAbbrFor(raw){const t=String(raw||'').replace(/^\s*(?:#|No\.?\s*)\d{1,2}\s+/i,'').replace(/\s*\(\d+-\d+\)\s*$/,'').trim();if(!t)return null;const I=ncaabIdx();
@@ -3187,7 +3187,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261124c',DESK_VER='3.5.16';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261124d',DESK_VER='3.5.17';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
