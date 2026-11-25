@@ -1084,6 +1084,7 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .pl-u{font:800 15px/1 var(--text);font-variant-numeric:tabular-nums;text-align:right;color:var(--ink-2)}
 .pl-u.up{color:#17703f}.pl-u.dn{color:#a23b25}
 .pl-last{display:flex;flex-wrap:wrap;gap:6px;padding-top:12px}
+.pl-th{font:800 15px/1.2 var(--display);text-transform:uppercase;letter-spacing:.03em;margin:18px 0 8px}.pl-tix{margin-bottom:6px}.partoday .pargrid{margin-top:10px}.ptk-who{font:inherit;color:inherit;padding:0;display:inline-flex;align-items:center;gap:6px}.ptk-who i{width:10px;height:10px;border-radius:50%;display:inline-block}   /* v72 · today's parlays */
 .pl-last small{flex-basis:100%;font:700 12px/1 var(--text);color:var(--ink-2)}
 .pl-tk{padding:5px 9px;border-radius:999px;font:600 12px/1.2 var(--text);background:rgba(21,19,15,.06);color:var(--ink)}
 .pl-tk.w{background:rgba(23,112,63,.12);color:#17703f}.pl-tk.l{background:rgba(162,59,37,.1);color:#a23b25}
