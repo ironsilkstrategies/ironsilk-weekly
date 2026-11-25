@@ -505,8 +505,12 @@ function orGrade(s,f){const m=f.hs-f.as;const pc=f.pc||{};const cl=pc.spread&&pc
   if(s.xp&&cl!=null&&s.xp.a!==s.xp.h&&m+cl!==0)r.ats=(s.xp.h>s.xp.a)===(m+cl>0)?1:0;
   if(s.pub){const p=s.pub;if(p.ml!=null&&p.ml!==50&&m!==0)r.su=(p.ml>50)===(m>0)?1:0;if(p.sp!=null&&p.sp!==50&&cl!=null&&m+cl!==0)r.ats=(p.sp>50)===(m+cl>0)?1:0;if(p.ou!=null&&p.ou!==50&&T!=null&&f.as+f.hs!==T)r.ou=(p.ou>50)===(f.as+f.hs>T)?1:0;}
   return r;}
+const OR_SRC_V={public:2};
 const OR_SRC={espn:{lab:'ESPN FPI/BPI',kind:'model'},kalshi:{lab:'Kalshi',kind:'market'},poly:{lab:'Polymarket',kind:'market'},dr:{lab:'DRatings',kind:'model'},os:{lab:'OddsShark computer',kind:'model'},pw:{lab:'Pickswise experts',kind:'expert'},cbs:{lab:'CBS Sports experts',kind:'expert'},covers:{lab:'Covers contest consensus',kind:'crowd'},public:{lab:'The betting public',kind:'crowd'}};
 async function buildOracle(diag,finals){const now=+process.env.FEEDS_NOW||Date.now();const C=read('oraclecache.json')||{v:1};['espn','p','led','h'].forEach(k=>C[k]=C[k]||{});
+  /* a source rebuilt on a new endpoint starts with a clean slate: the betting public failed 85 runs straight on Action Network's dead
+     v1 board and was resting (one try every 6 hours) — on v2 it gets its next try now, not hours later */
+  Object.entries(OR_SRC_V).forEach(([k,v])=>{const H=C.h[k];if(H&&H.v!==v)C.h[k]={ok:H.ok||0,fail:0,try:0,v};});
   const D={calls:0,src:{}};const G=await orSlate(now,D);D.slate={};G.forEach(g=>{D.slate[g.sp]=(D.slate[g.sp]||0)+1;});
   const pre=G.filter(g=>g.state==='pre'&&Date.parse(g.st)<=now+80*36e5);
   /* each source, unless it's resting after a day of failures */
