@@ -209,10 +209,12 @@ async function liveTick() {
   const fresh = x => { const r = liveOf(x); return !(r && r.state === 'post'); };
   const extra = [...((T && T.picks) || []).filter(x => x && !x.hidden && x.game && (x.hit != null || x.push)).map(x => ({ sp: x.sp, game: x.game, start: x.start, day: x.start ? deskDay(Date.parse(x.start)) : td })),
     ...((F.founder || {}).tix || []).flatMap(t => (t.legs || []).filter(l => l.sp && l.game && (l.st === 'hit' || l.st === 'miss' || l.st === 'push')).map(l => ({ sp: l.sp, game: l.game, start: l.start, day: l.day || t.date }))),
+    ...((AC.me && AC.me.tickets) || []).flatMap(t => (t.legs || []).filter(l => l.src === 'pick' && !l.res && l.sp && l.game).map(l => ({ sp: l.sp, game: l.game, start: l.start || '', day: tkLegDay(l, t) }))).filter(x => x.day && x.day <= deskDay()),
     ...((AC.me && AC.me.bets) || []).filter(b => b.status === 'open' || (b.done || b.ts) > Date.now() - 36 * 36e5).flatMap(b => (b.legs || []).filter(l => l.sp && l.game && l.t && l.t < Date.now() + 15 * 60e3).map(l => ({ sp: l.sp, game: l.game, start: new Date(l.t).toISOString(), day: deskDay(l.t) })))].filter(fresh);
   const by = new Map(); [...items, ...extra].forEach(x => { const d = String(x.day || td).slice(0, 10).replace(/-/g, ''); const k = d; const set = by.get(k) || new Set(); set.add(x.sp); by.set(k, set); });
   if (!by.size) return;
   await Promise.all([...by].map(([d, sps]) => scores([...sps], d)));
+  try { await tkAutoSave(); } catch (e) { }
   liveRepaint();
   await boxes([...items, ...cast.map(withGame)]); /* player props: their box scores, now that the scoreboard has each game's id (the cast's props find their game by team) */
   if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || S.tab === 'cast') whenFree(render);
@@ -478,12 +480,22 @@ const acctPass = () => store.get('acct');
 async function acctApi(path, body) { const r = await fetch(CFG.chat + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   let j = {}; try { j = await r.json(); } catch { /* empty */ } if (!r.ok) { const e = new Error(j.error || 'the server didn’t answer'); e.status = r.status; throw e; } return j; }
 async function acctLoad() { const P = acctPass(); if (!P) { AC.me = null; return; } try { AC.me = await acctApi('/acct/me', { token: P.token }); AC.err = ''; AC.at = Date.now(); }
-  catch (e) { if (e.status === 401) { store.set('acct', null); AC.me = null; } else AC.err = 'Your tickets can’t be reached right now.'; } acctBadge(); if (S.tab === 'me') viewMe(); else if (S.tab === 'tix') viewTix(); else if (S.tab === 'challenges') viewChallenges(); else if (S.tab === 'leagues') viewLeagues(); else if (S.tab === 'admin') viewAdmin(); }
+  catch (e) { if (e.status === 401) { store.set('acct', null); AC.me = null; } else AC.err = 'Your tickets can’t be reached right now.'; } acctBadge(); if (AC.me && (AC.me.tickets || []).some(t => (t.legs || []).some(l => l.src === 'pick' && !l.res))) setTimeout(() => { try { liveTick(); } catch (e) { } }, 50);   /* v80 · tracked picks from past days look up their finals now */ if (S.tab === 'me') viewMe(); else if (S.tab === 'tix') viewTix(); else if (S.tab === 'challenges') viewChallenges(); else if (S.tab === 'leagues') viewLeagues(); else if (S.tab === 'admin') viewAdmin(); }
 function acctBadge() { const b = $('#acctBtn'); if (!b) return; const P = acctPass(); b.classList.toggle('dot', !!(AC.me && AC.me.inbox && AC.me.inbox.unread)); document.body.classList.toggle('is-owner', !!(AC.me && AC.me.owner)); b.textContent = P ? P.name.slice(0, 1).toUpperCase() : ''; b.classList.toggle('in', !!P); b.setAttribute('aria-label', P ? `Your account (${P.name})` : 'Sign in'); tixBadge(); }
 const tid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-function legAuto(l) { if (l.src !== 'pick' || l.res) return l.res; const B = boardOf(); if (!B) return null; const g = (B.games || []).find(x => x.sp === l.sp && x.game === l.game); if (!g) return null;
-  for (const a of Object.values(g.calls || {})) for (const c of a) if (c.pick === l.pick && c.hit != null) return c.hit === true ? 'hit' : c.hit === false ? 'miss' : null; return null; }
-function tkState(t) { const R = t.legs.map(l => l.res || legAuto(l)); const miss = R.includes('miss'), done = R.every(Boolean);
+/* v80 · Nov 26, Chris: "Those singles were from last week and just never got graded" — a tracked desk pick only looked itself up on
+   TODAY's board, so once its day passed nothing could grade it. Now its game's own ESPN final grades it (the day it was played: its
+   start, or the day it was tracked when the start wasn't kept), and the grade is saved to the account so it stays on every device. */
+const tkLegDay = (l, t) => (l.start && fin(Date.parse(l.start)) ? deskDay(Date.parse(l.start)) : t && t.ts ? deskDay(t.ts) : '');
+function legAuto(l, t) { if (l.src !== 'pick' || l.res) return l.res; const B = boardOf(), g = B && (B.games || []).find(x => x.sp === l.sp && x.game === l.game);
+  if (g) for (const a of Object.values(g.calls || {})) for (const c of a) if (c.pick === l.pick && c.hit != null) return c.hit === true ? 'hit' : c.hit === false ? 'miss' : null;
+  if (!l.sp || !l.game || !l.pick) return null; const x = { sp: l.sp, game: l.game, pick: l.pick, start: l.start || '', day: tkLegDay(l, t) }, L = liveOf(x);
+  if (!L || L.state !== 'post') return null; const r = liveGrade0(x); return r.push ? 'push' : r.hit === true ? 'hit' : r.hit === false ? 'miss' : null; }
+let TK_SAVING = false;
+async function tkAutoSave() { if (TK_SAVING) return; const L = (AC.me && AC.me.tickets) || []; const todo = [];
+  L.forEach(t => { let ch = false; const legs = (t.legs || []).map(l => { if (l.src !== 'pick' || l.res) return l; const r = legAuto(l, t); if (!r) return l; ch = true; return { ...l, res: r, auto: 1 }; }); if (ch) todo.push({ ...t, legs }); });
+  if (!todo.length) return; TK_SAVING = true; try { for (const t of todo) await tkSave(t); } finally { TK_SAVING = false; } try { if (S.tab === 'tix') viewTix(); else if (S.tab === 'me') viewMe(); } catch (e) { } }
+function tkState(t) { const R = t.legs.map(l => l.res || legAuto(l, t)); const miss = R.includes('miss'), done = R.every(Boolean);
   return { R, res: miss ? 'lost' : done ? 'cashed' : R.some(Boolean) ? 'live' : 'open', hit: R.filter(x => x === 'hit').length }; }
 const tkDec = t => { if (t.odds) return t.odds > 0 ? 1 + t.odds / 100 : 1 + 100 / -t.odds; const P = t.legs.map(l => l.price); return P.every(x => x != null) ? P.reduce((a, x) => a * (x > 0 ? 1 + x / 100 : 1 + 100 / -x), 1) : null; };
 async function tkSave(t, msg) { const P = acctPass(); if (!P) { AC.open = true; go('me', true); toast('Sign in to track tickets'); return false; }
