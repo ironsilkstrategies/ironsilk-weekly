@@ -97,7 +97,7 @@ function readPick(x) {
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, liveD: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null,
   bf: Object.assign({ win: 'up', tier: 'all', bt: 'all', ch: 'all', view: 'time', cf: 0, say: 'all', lane: '', fc: 'all' }, store.get('bf') || {}) };
-const TABS = ['today', 'slate', 'props', 'me', 'tix', 'gc', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join', 'admin', 'u'];
+const TABS = ['today', 'slate', 'props', 'me', 'tix', 'gc', 'live', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join', 'admin', 'u'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 async function getJSON(url, wait = 9000) {
@@ -182,7 +182,7 @@ document.addEventListener('focusout', () => setTimeout(() => { if (!HELD.size ||
 /* …and an iPhone zooms the whole page in when a box under 16px gets the keyboard (the stake box zoomed the Slate in). On iOS only, the
    page keeps its own scale while typing; pinching to zoom still works there, iOS ignores the cap for fingers. */
 try { if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) { const m = document.querySelector('meta[name="viewport"]'); if (m && !/maximum-scale/.test(m.content)) m.content += ',maximum-scale=1'; } } catch (e) { /* no viewport tag: nothing to hold */ }
-const repaintLive = () => { if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || S.tab === 'cast') render(); else if (S.tab === 'challenges') runsRepaint(); else if (S.tab === 'tix') tixRepaint(); };
+const repaintLive = () => { if (WIRE) WIRE.tick(); if (S.tab === 'live' && WIRE) viewLive(); else if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || S.tab === 'cast') render(); else if (S.tab === 'challenges') runsRepaint(); else if (S.tab === 'tix') tixRepaint(); };
 let rpT = 0; const liveRepaint = () => { clearTimeout(rpT); rpT = setTimeout(() => { whenFree(repaintLive); runDot(); }, 120); };
 /* v62 · the run cards follow the scores on their own (the rest of the Challenges page — its search box, its filters — stays put) */
 function runsRepaint() { const g = $('#v-challenges .rgrid'); if (!g) return; const f = document.activeElement, sel = f && f.closest && f.closest('.runcard') ? f.dataset.change && f.dataset.rid : null; if (sel) return; g.innerHTML = liveRuns().map(runCard).join(''); }
@@ -378,7 +378,7 @@ function viewToday() {
       <p>Members get the Best 3 at lock time, the Top 10 plays and every character’s parlay, in a private Telegram.</p></div>
       <div class="row"><a class="btn foil" href="${esc(sub)}" target="_blank" rel="noopener">Join VIP${price ? ', ' + esc(price) : ''}</a><button type="button" class="btn line" data-go="join">What you get</button></div></div>` : '';
 
-  el.innerHTML = `${introHtml()}<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${favTodayHtml()}${founderHtml()}${strongHtml()}${last}${propsHtml}${parlayHtml}${T ? vipHtml(F) : ''}${upsHtml}
+  el.innerHTML = `<div id="wtick">${WIRE ? WIRE.ticker() : ''}</div>${introHtml()}<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${favTodayHtml()}<div id="wbox">${WIRE ? WIRE.box() : ''}</div>${founderHtml()}${strongHtml()}${last}${propsHtml}${parlayHtml}${T ? vipHtml(F) : ''}${upsHtml}
     <div id="seal"></div>${vip}
     ${T && picks.length ? `<div class="row" style="margin-top:22px"><button type="button" class="btn line" data-act="share">Share today’s card</button></div>` : ''}${footHtml()}`;
   if (T) { remember(picks.map((x, i) => [keys[i], x])); remember(props.map((x, i) => [`${T.d}|p${i}`, x])); seal(T); }
@@ -2159,7 +2159,10 @@ function pubRecHtml(P) { const M = AC.me || {};
     <label class="chk"><input type="checkbox" data-act="pubtoggle" data-k="pub"${M.pub || M.cap ? ' checked' : ''}${M.cap ? ' disabled' : ''}> Make my record public${M.cap ? ' (✔ verified capper: always public)' : ''}</label>
     <label class="chk"><input type="checkbox" data-act="pubtoggle" data-k="open"${M.pubOpen ? ' checked' : ''}${M.pub || M.cap ? '' : ' disabled'}> Show my open bets too</label>
     ${M.pub || M.cap ? `<div class="row"><button type="button" class="btn sm" data-act="proflink" data-name="${esc(P.name)}">Copy my link</button><button type="button" class="btn ghost sm" data-act="prof" data-name="${esc(P.name)}">See it</button></div>` : ''}</div>`; }
-let GCM = null, GC_ON = '';
+let GCM = null, GC_ON = '', WIRE = null, WIRE_P = null;
+/* v78 · the Live feed (its own file, loaded right after the first paint): the score ticker and social box on Today, and the Live page */
+function wireLoad() { if (WIRE) return Promise.resolve(WIRE); return WIRE_P || (WIRE_P = import('./wire.js?v=1').then(m => { WIRE = m.init({ S, chatUrl: CFG.chat, foot: footHtml }); if (S.tab === 'today') { const t = $('#wtick'), b = $('#wbox'); if (t) t.innerHTML = WIRE.ticker(); if (b) b.innerHTML = WIRE.box(); } return WIRE; }).catch(() => { WIRE_P = null; return null; })); }
+async function viewLive() { const el = $('#v-live'), W = await wireLoad(); if (S.tab !== 'live') return; if (!W) { el.innerHTML = '<div class="paper blank"><b>The live feed didn’t load</b><p>Check your connection, then <button type="button" class="link" data-go="today">go back</button>.</p></div>'; return; } W.mount(el); }
 /* the game's own entry on the Slate: its ESPN id rides on the live scores */
 const gcGame = g => { const k = Object.keys(S.live || {}).find(x => x.startsWith(g.sp + '|') && String((S.live[x] || {}).id) === String(g.id)); return k ? k.slice(g.sp.length + 1) : ''; };
 function gcPicks(g) { const B = boardOf(), gm = gcGame(g), b = B && gm ? (B.games || []).find(x => x.sp === g.sp && x.game === gm) : null; if (!b) return '';
@@ -2169,7 +2172,7 @@ async function viewGc() {
   const el = $('#v-gc'), g = S.gc; if (!g) return; const key = g.sp + ':' + g.id; if (GC_ON === key && el.querySelector('.gc-top')) return;
   if (!GCM) { el.innerHTML = '<div class="shimmer"></div>'; try { GCM = await import('./gamecast.js?v=1'); } catch (e) { el.innerHTML = '<div class="paper blank"><b>Gamecast didn’t load</b><p>Check your connection, then <button type="button" class="link" data-go="slate">go back to the Slate</button>.</p></div>'; return; } }
   if (S.tab !== 'gc' || S.gc !== g) return; GC_ON = key; GCM.mount(el, { sp: g.sp, id: g.id, back: gcBack, picksHtml: () => gcPicks(g) }); }
-const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, tix: viewTix, gc: viewGc, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, admin: viewAdmin, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin, u: viewProfile };
+const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, tix: viewTix, gc: viewGc, live: viewLive, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, admin: viewAdmin, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin, u: viewProfile };
 function render() { VIEWS[S.tab](); }
 function go(tab, push) {
   /* v3.3 · #u=<name> opens a member's public record (the Open Scoreboard) */
@@ -2179,7 +2182,7 @@ function go(tab, push) {
   /* v78 · #gc=<sport>:<ESPN game id> opens the Gamecast; Back (the button, the phone's back gesture) returns to where it was opened */
   if (typeof tab === 'string' && tab.startsWith('gc=')) { const [sp, id] = tab.slice(3).split(':'); if (sp && /^\d+$/.test(id || '')) S.gc = { sp, id }; tab = 'gc'; }
   if (!TABS.includes(tab) || (tab === 'u' && !S.profile) || (tab === 'gc' && !S.gc)) tab = 'today';
-  if (tab === 'gc' && S.tab !== 'gc') S.gcFrom = push ? S.tab : ''; if (S.tab === 'gc' && tab !== 'gc' && GCM) { GCM.unmount(); GC_ON = ''; }
+  if (tab === 'gc' && S.tab !== 'gc') S.gcFrom = push ? S.tab : ''; if (S.tab === 'gc' && tab !== 'gc' && GCM) { GCM.unmount(); GC_ON = ''; } if (S.tab === 'live' && tab !== 'live' && WIRE) WIRE.unmount();
   S.tab = tab;
   for (const t of TABS) $('#v-' + t).hidden = t !== tab;
   for (const b of $$('[data-go]')) { if (b.closest('.tabs,.nav-top') || b.id === 'tixBtn') { if (b.dataset.go === tab || (b.dataset.also || '').split(' ').includes(tab)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); } }
@@ -2188,7 +2191,7 @@ function go(tab, push) {
   try { if (TG && TG.BackButton) { if (tab === 'today') TG.BackButton.hide(); else TG.BackButton.show(); } } catch (e) { }
   if (tab === 'slate') { if (!S.slate) loadSlate(); else slateLive(); }
   if (tab === 'u') profLoad(S.profile);
-  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your account — TheDesk', tix: 'My tickets — TheDesk', gc: 'Gamecast — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', challenges: 'Challenges — TheDesk', leagues: 'Leagues — TheDesk', admin: 'Admin — TheDesk', cast: 'The characters — TheDesk', chat: 'Chat — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk', u: `${S.profile || 'A member'}: the record — TheDesk` }[tab];
+  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your account — TheDesk', tix: 'My tickets — TheDesk', gc: 'Gamecast — TheDesk', live: 'Live — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', challenges: 'Challenges — TheDesk', leagues: 'Leagues — TheDesk', admin: 'Admin — TheDesk', cast: 'The characters — TheDesk', chat: 'Chat — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk', u: `${S.profile || 'A member'}: the record — TheDesk` }[tab];
 }
 document.addEventListener('click', async e => {
   const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, true); return; }
@@ -2403,7 +2406,7 @@ if (/[?&]embed=1/.test(location.search)) document.body.classList.add('embed');
 go((() => { try { const sp = TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param; if (sp && TABS.includes(sp)) return sp; if (sp && /^lg_[a-z0-9]{1,24}$/i.test(sp)) return 'lg=' + sp.slice(3); } catch (e) { } return (location.hash || '#today').slice(1); })(), false);
 loadFeed(); liveTick(); /* scores straight away off the saved card: live legs shouldn't wait for a new publish or the minute loop */
 acctBadge(); acctLoad();
-(window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => loadSlate());
+(window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => { loadSlate(); wireLoad(); });
 /* the install guide greets a first visit, comes back once a week later, and after that lives behind "Get the app" */
 { const g = store.get('guide'); if (!isStandalone() && (!g || ((g.n || 1) < 2 && Date.now() - g.at > 7 * 864e5))) openGuide(true); }
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { /* the app works without it */ });
