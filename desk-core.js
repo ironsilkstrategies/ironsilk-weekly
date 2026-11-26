@@ -319,7 +319,7 @@ function deskSize(legs,kMax){const L=legs.slice(0,Math.min(kMax||DESK_MAXLEG,leg
   while(k>2&&L.slice(0,k).reduce((a,x)=>a*x.p,1)<DESK_CASH_MIN)k--;return k;}
 function deskTicket(legs,v){const dec=legs.reduce((a,x)=>a*americanToDecimal(x.price),1),p=legs.reduce((a,x)=>a*(+(+x.p).toFixed(4)),1);
   return{voice:v,legs:legs.map(x=>({kind:x.kind||'game',sp:x.sp,game:x.game,gd:x.gd,start:x.start||'',pick:x.pick,price:x.price,m:x.m,sd:x.sd,line:x.line,p:+(+x.p).toFixed(4),score:+(+(x.fit!=null?x.fit:x.p)).toFixed(4),v:x.v,why:x.why||[],
-    ...(x.kind==='prop'?{player:x.player,team:x.team,k:x.k,thr:x.thr,est:true}:{}),...(x.skill?{skill:true}:{})})),dec:+dec.toFixed(4),p,alloc:true};}
+    ...(x.kind==='prop'?{player:x.player,team:x.team,k:x.k,thr:x.thr,side:x.side||'over',est:true}:{}),...(x.skill?{skill:true}:{})})),dec:+dec.toFixed(4),p,alloc:true};}
 /* the character props the desk can use: official (70%+ calibrated), never a player the character fades */
 function deskPropCands(){let C=[];try{C=cpropToday();}catch(e){}
   return C.filter(c=>c.cal>=DESK_PROP_MIN&&c.fav!=='fade').map(c=>({...c,kind:'prop',game:cpxPropGame(c.sp,c.team),pick:cpropLine(c),price:cpxPropPrice(c.cal),p:c.cal,fit:c.cal+(c.fav==='fav'?0.03:0),key:deskPropKey(c),
@@ -1481,7 +1481,8 @@ function pubBloodlines(){try{if(typeof heirsAll!=='function')return null;const H
 function pubLiveQ(l,st,d){try{if(!l||!l.game||!st||Date.parse(st)>Date.now())return null;const x={id:'pq',sport:l.sp,game:l.game,pick:l.pick,price:l.price,p:l.p,gameDate:d||today(),start:st,
     ...(l.player?{bbProp:1}:{})};let r=null;try{r=gradeLeg(x,d||today());}catch(e){}const q=liveLegProb(x,r,d||today());return q==null?null:+(+q).toFixed(3);}catch(e){return null;}}
 function pubLeg(l,V){const st=l.start||(()=>{try{return deskGameStart(l.sp,l.game)||'';}catch(e){return'';}})();
-  const pick=l.player?(()=>{try{return cpropLine(l);}catch(e){return l.pick||'';}})():l.pick;
+  /* v3.5.27 · the leg's own text: rebuilt from a leg that had lost its side, every under read as an over ("under 9.5 REB" → "10+ REB") */
+  const pick=l.player?(l.pick||(()=>{try{return cpropLine(l);}catch(e){return'';}})()):l.pick;
   return{sp:l.sp,game:l.game||'',gl:l.game?gameLabel(l.sp,l.game):'',pick,price:l.price,p:l.p!=null?+(+l.p).toFixed(3):null,q:l.player?null:pubLiveQ({...l,pick},st),start:st,hit:l.hit==null?null:l.hit,push:!!l.push,
     by:l.by?(Array.isArray(l.by)?l.by:[l.by]).map(charName):l.v?[charName(l.v)]:[],voices:l.player?[]:pubVoicesOn(l,V)};}
 function pubVip(V){try{const C=subCard();const par=P=>({who:charName(P.v),v:P.v,skill:!!P.skill,px:!!P.px,price:decimalToAmerican(P.dec),p:+(+P.p).toFixed(3),legs:P.legs.map(l=>pubLeg({...l,v:P.v},V))});
@@ -2482,10 +2483,11 @@ function slotAgreeHtml(g,VI){const C=VI.get(g.sp+'|'+g.game)||[];if(!C.length)re
     return`${lab[m]} <b>${txtEsc(txt)}</b> <span style="color:${col}">${all?`all ${tot}`:`${top.length}–${tot-top.length}`}</span>`;});
   return P.length?`<div class="mono" style="font-size:10.5px;margin-top:3px">🗣 Characters: ${P.join(' · ')}</div>`:'';}
 function slotPropsHtml(g,CPI){const[a,h]=g.game.split('@');const tc=g.props.slice().sort((x,y)=>(y.p||0)-(x.p||0));
-  const M=new Map();[a,h].forEach(t=>(CPI.get(g.sp+'|'+t)||[]).forEach(x=>{if(String(x.d).slice(0,10)!==g.day)return;const k=x.player+'|'+x.k+'|'+x.thr;
-    const o=M.get(k)||{player:x.player,k:x.k,thr:x.thr,p:0,n:0};o.p=Math.max(o.p,+x.p||0);o.n++;M.set(k,o);}));
+  const out=n=>{try{return typeof rsOut==='function'&&rsOut(rsInjury(g.sp,n));}catch(e){return false;}};   /* v3.5.27 · ruled out → off the card */
+  const M=new Map();[a,h].forEach(t=>(CPI.get(g.sp+'|'+t)||[]).forEach(x=>{if(String(x.d).slice(0,10)!==g.day||out(x.player))return;const k=x.player+'|'+x.k+'|'+x.thr+'|'+(x.side||'over');
+    const o=M.get(k)||{player:x.player,k:x.k,thr:x.thr,side:x.side||'over',p:0,n:0};o.p=Math.max(o.p,+x.p||0);o.n++;M.set(k,o);}));
   const cp=[...M.values()].sort((x,y)=>y.p-x.p||y.n-x.n);if(!tc.length&&!cp.length)return'';
-  const cpl=o=>`${txtEsc(o.player)} ${o.thr}+ ${txtEsc(CPROP_LAB[o.k]||o.k)} <b style="color:var(--win)">${Math.round(o.p*100)}%</b>${o.n>1?` <span style="color:var(--mute)">(${o.n} characters)</span>`:''}`;
+  const cpl=o=>`${txtEsc(cpropLine(o))} <b style="color:var(--win)">${Math.round(o.p*100)}%</b>${o.n>1?` <span style="color:var(--mute)">(${o.n} characters)</span>`:''}`;
   const more=tc.length>3||cp.length>3;
   const top=(tc.length?`<div class="mktlab" style="margin-top:6px">Props ≥70%</div>`+tc.slice(0,3).map(x=>tcPropRowHtml(g.sp,x,{inGame:true})).join(''):'')
     +(cp.length?`<div class="mono" style="font-size:10.5px;margin-top:4px">🎭 Character prop calls: ${cp.slice(0,3).map(cpl).join(' · ')}</div>`:'');
@@ -2557,7 +2559,10 @@ function slotBoardHtml(pfx){pfx=pfx||'sg';const F=slotF();const V=slotView(F);co
   const strip=V.slots.length>1?`<div class="subnav" style="margin:0 0 8px;position:sticky;top:${hh}px;z-index:30;background:var(--ink,#080B10);padding:6px 0">${V.slots.map(s=>`<button onclick="slotGo(${jsArg(pfx+'-'+s.key)})" style="flex:none;font-size:11px;padding:5px 9px;${s.st==='in'?'border-color:#ff4b5c;':s.st==='post'?'opacity:.55;':''}">${s.day!==d?slotDayLab(s.day).slice(0,3)+' ':''}${slotTime(s.t)} <span style="opacity:.6">${s.games.length}</span></button>`).join('')}</div>`:'';
   const X={SC:roGet(SCORECALL_KEY,{},30e3)||{},VI:new Map(),CPI:new Map(),CHI:V.CHI,HI:V.HI};
   try{(roGet(VOICES_KEY,[],30e3)||[]).forEach(c=>{if(!c||!(String(c.date).slice(0,10)>=d)||!shownV(c.voice))return;const k=c.sp+'|'+c.game;const a=X.VI.get(k);if(a)a.push(c);else X.VI.set(k,[c]);});}catch(e){}
-  try{(roGet(CPROP_KEY,[],30e3)||[]).forEach(c=>{if(!c||!(String(c.d).slice(0,10)>=d))return;const k=c.sp+'|'+c.team;const a=X.CPI.get(k);if(a)a.push(c);else X.CPI.set(k,[c]);});}catch(e){}
+  /* v3.5.27 · the cards' character prop calls: today's straight from the characters (the ledger dropped the day's early ones — the Bulls left
+     CHI@CHA between two looks), plus whatever the ledger kept for games already under way */
+  try{const seen=new Set(),add=c=>{if(!c||!(String(c.d).slice(0,10)>=d)||seen.has(c.id))return;seen.add(c.id);const k=c.sp+'|'+c.team;const a=X.CPI.get(k);if(a)a.push(c);else X.CPI.set(k,[c]);};
+    (typeof cpropToday==='function'?cpropToday():[]).forEach(add);(roGet(CPROP_KEY,[],30e3)||[]).forEach(add);}catch(e){}
   let prof='';if(F.ch!=='all'&&CHARS[F.ch])try{prof=charProfileHtml(F.ch,{sp:F.sp,bt:F.bt});}catch(e){}
   return head+prof+strip+V.slots.map(s=>`<div class="tkt slot" id="${pfx}-${s.key}" style="margin-bottom:8px;scroll-margin-top:${hh+50}px;${s.st==='post'?'opacity:.78;':''}${s.st==='in'?'border-color:#ff4b5c;':''}">
     ${slotHeadHtml(pfx,s,F)}${s.games.map(g=>slotGameHtml(g,F,X)).join('')}</div>`).join('');}

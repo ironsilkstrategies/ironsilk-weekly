@@ -1221,7 +1221,21 @@ async function rsRoster(sp,team,tid){const ab=rsAb(sp,team);const k=sp+':'+ab;if
   return a;}
 /* who's hurt: the status ESPN's roster lists for a player ("Out", "Doubtful", "Day-To-Day"…) — '' when healthy or unknown */
 let RS_INJ=null;
-function rsInjury(sp,name){try{const C=roGet('d4.rsroster',{})||{};   /* v2.86 · cached read: the Today tab asked ~1,500 times and re-parsed the roster every time */
+/* v3.5.27 · Nov 25, 5:42 PM, Chris: "some players are getting listed that shouldn't" — Ryan Kalkbrenner was ruled OUT for CHI@CHA and still
+   carried "15+ PTS+REB 85%". Injuries came only from each team's cached roster, refreshed when something asked for that roster — Charlotte's
+   was two days old. Now ESPN's league injury report (NBA, NHL, NFL; college when ESPN keeps one) is read every 15 minutes while the machine
+   is open, and it has the say over the rosters for that sport: on it as Out / Doubtful → no call; off it → he plays. */
+const INJL_KEY='d4.injlive',INJL_SP={nba:'basketball/nba',nhl:'hockey/nhl',nfl:'football/nfl',ncaab:'basketball/mens-college-basketball',ncaaf:'football/college-football'};
+let INJL_AT=0,INJL_BUSY=false;
+function injlParse(j){const m={};((j&&j.injuries)||[]).forEach(t=>(t.injuries||[]).forEach(x=>{const n=((x.athlete||{}).displayName)||((x.athlete||{}).fullName)||'';
+  const st=String(x.status||((x.type||{}).description)||'');if(n&&st)m[pstId(n)]=st;}));return m;}
+async function injlRefresh(force){if(INJL_BUSY||(!force&&Date.now()-INJL_AT<15*60e3))return false;INJL_BUSY=true;INJL_AT=Date.now();let ch=false;
+  try{const C=get(INJL_KEY,{})||{};for(const [sp,path] of Object.entries(INJL_SP)){const j=await rsJson('https://site.api.espn.com/apis/site/v2/sports/'+path+'/injuries');
+      if(!j||!Array.isArray(j.injuries))continue;const m=injlParse(j);if(!Object.keys(m).length&&(sp==='ncaab'||sp==='ncaaf'))continue;C[sp]={ts:Date.now(),m};ch=true;}
+    if(ch){set(INJL_KEY,C);RS_INJ=null;CPT_MEMO=null;}}catch(e){}finally{INJL_BUSY=false;}return ch;}
+function injLive(sp){try{const L=(roGet(INJL_KEY,{},60e3)||{})[sp];return L&&L.m&&L.ts>Date.now()-3*36e5?L.m:null;}catch(e){return null;}}
+if(typeof window!=='undefined'&&!window.__NO_GRADELOOP__){window.addEventListener('load',()=>setTimeout(()=>injlRefresh(true).catch(()=>{}),4000));setInterval(()=>{if(!document.hidden)injlRefresh().catch(()=>{});},3*60e3);}
+function rsInjury(sp,name){try{const LV=injLive(sp);if(LV)return LV[pstId(name)]||'';const C=roGet('d4.rsroster',{})||{};   /* v2.86 · cached read: the Today tab asked ~1,500 times and re-parsed the roster every time */
   const n=Object.keys(C).length;if(!RS_INJ||RS_INJ.ts<Date.now()-60e3||RS_INJ.n!==n){const m={};
       Object.entries(C).forEach(([k,o])=>{const s=k.split(':')[0];(o.a||[]).forEach(x=>{const a=rsUnpack(x);if(a.inj)(m[s]=m[s]||{})[pstId(a.name)]=a.inj;});});RS_INJ={ts:Date.now(),n,m};}
     return((RS_INJ.m[sp]||{})[pstId(name)])||'';}catch(e){return'';}}
@@ -3587,7 +3601,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261125f',DESK_VER='3.5.26';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261125g',DESK_VER='3.5.27';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -18689,8 +18703,8 @@ function charCallsToday(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];
     have.add(v+'|'+sp+'|'+x.game+'|'+m+'|'+x.sd);put(v,{kind:'line',v,sp,game:x.game,gid:x.gid,start:x.start||null,m,sd:x.sd,line:x.line,price:x.price,pick:x.pick,conf:null,off:false,fromCard:true,graded:false,hit:null,tc:x});});}));
   Object.values(HL).forEach(x=>{if(!x||String(x.date).slice(0,10)!==d||!CHARS[x.voice])return;let rec=null;try{rec=halfRecord(x.sp,x.voice,x.mk);}catch(e){}
     put(x.voice,{kind:'half',v:x.voice,sp:x.sp,game:x.game,start:start.get(x.sp+'|'+x.game)||null,m:x.mk,sd:x.side,line:x.line,price:x.price,pick:x.pick,conf:halfRecConf(rec),off:halfOfficial(rec,x),rec,graded:!!x.graded,hit:x.graded?x.hit:null,tc:null});});
-  const seen=new Set();CP.forEach(x=>{if(!x||String(x.d).slice(0,10)!==d||!CHARS[x.voice])return;const k=x.voice+'|'+x.sp+'|'+x.player+'|'+x.k+'|'+x.thr;if(seen.has(k))return;seen.add(k);
-    const game=team.get(x.sp+'|'+x.team)||null;put(x.voice,{kind:'prop',v:x.voice,sp:x.sp,game,team:x.team,start:game?start.get(x.sp+'|'+game)||null:null,m:'prop',pick:`${x.player} ${x.thr}+ ${CPROP_LAB[x.k]||x.k}`,conf:x.p!=null?+x.p:null,off:+x.p>=0.7,graded:x.hit!=null,hit:x.hit!=null?x.hit:null,tc:null});});
+  const seen=new Set();CP.forEach(x=>{if(!x||String(x.d).slice(0,10)!==d||!CHARS[x.voice])return;const k=x.voice+'|'+x.sp+'|'+x.player+'|'+x.k+'|'+x.thr+'|'+(x.side||'over');if(seen.has(k))return;seen.add(k);
+    const game=team.get(x.sp+'|'+x.team)||null;put(x.voice,{kind:'prop',v:x.voice,sp:x.sp,game,team:x.team,start:game?start.get(x.sp+'|'+game)||null:null,m:'prop',pick:cpropLine(x),conf:x.p!=null?+x.p:null,off:+x.p>=0.7,graded:x.hit!=null,hit:x.hit!=null?x.hit:null,tc:null});});
   CHC_C={d,V,CP,HL,TC,t:Date.now(),R};return R;}
 /* a character's calls through the filters: sport, bet type, and the tier row read for a character — Official = its official calls
    (70%+: a game line, a proven half market at 70%+, or a 70%+ prop), Unanimous/colors = the picks of its that made Today's card in that color */
@@ -19280,12 +19294,22 @@ function cpxBuild(voice,V,d,calls){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today
   const dec=pick.reduce((a,l)=>a*americanToDecimal(l.price),1),p=pick.reduce((a,l)=>a*l.p,1);
   return{voice,d,legs:pick,dec,p,props:pick.filter(l=>l.kind==='prop').length};}
 let CPX_MEM=null;
-function cpxGradeLeg(l,d){if(l.kind==='prop'){const g=(get('d4.pstlast.'+l.sp,{})||{})[pstId(l.player)];
-    if(g&&g.d>=d&&g.d<=dayShift(d,1)&&g.v[l.k]!=null){l.actual=+g.v[l.k];l.hit=l.actual>=l.thr;return true;}
+/* v3.5.27 · a prop leg grades by its side: the tickets dropped it, so every under on a prop parlay ("Nic Dowd under 1.5 SOG", 0 shots) was graded
+   as an over — 40 legs backwards since Nov 13. And a combo stat (PTS+REB+AST) is summed from its parts instead of voiding for "no box line". */
+const cpxSide=l=>l.side||(/\bunder\b/i.test(String(l.pick||''))?'under':'over');
+/* his line from that game: the last box read, or — when he has played again since — that date's row in his last-10 log */
+function cpxBoxOf(sp,player,d){const g=(get('d4.pstlast.'+sp,{})||{})[pstId(player)];if(g&&g.d>=d&&g.d<=dayShift(d,1))return g.v;
+  try{const P=pstDb(sp).p[pstId(player)],K=Object.keys(PST_STATS[sp]||{}),y0=pstYmd(d),y1=pstYmd(dayShift(d,1));const r=((P&&P.r)||[]).find(x=>x[0]===y0||x[0]===y1);
+    if(r){const v={};K.forEach((k,i)=>{if(r[i+1]!=null)v[k]=r[i+1];});return v;}}catch(e){}return null;}
+function cpxGradeLeg(l,d){if(l.kind==='prop'){const v=cpxBoxOf(l.sp,l.player,d);const av=v?pstVal(v,l.k):null;
+    if(av!=null){l.actual=+av;l.hit=cpxSide(l)==='under'?l.actual<l.thr:l.actual>=l.thr;return true;}
     if(today()>dayShift(d,2)){l.push=true;l.void='no box line for this player';return true;}return false;}
   let r=null;try{r=gradeLeg({sport:l.sp,game:l.game,pick:l.pick,gameDate:d},d);}catch(e){}
   if(!r||r.live)return false;if(r.push){l.push=true;return true;}if(r.hit===true||r.hit===false){l.hit=r.hit;return true;}return false;}
 function cpxGrade(){const S=get(CPX_KEY,{})||{};let n=0;
+  /* v3.5.27 · once: the unders graded as overs get their real result, and their tickets settle again */
+  Object.values(S).forEach(D=>{if(!D||!D.locked)return;Object.values(D.by||{}).forEach(P=>{let f=false;(P.legs||[]).forEach(l=>{if(l.kind!=='prop'||l.sfix||l.actual==null||l.push||cpxSide(l)!=='under')return;l.hit=+l.actual<l.thr;l.sfix=1;f=true;n++;});
+    if(f){const live=P.legs.filter(l=>!l.push);P.done=live.some(l=>l.hit===false)||(live.length>0&&live.every(l=>l.hit===true));P.won=P.done?live.every(l=>l.hit===true):undefined;if(!P.done)delete P.won;}});});
   Object.entries(S).forEach(([d,D])=>{if(!D||!D.locked)return;Object.values(D.by||{}).forEach(P=>{if(P.done)return;
     P.legs.forEach(l=>{if(l.hit!=null||l.push)return;if(cpxGradeLeg(l,d))n++;});
     const live=P.legs.filter(l=>!l.push);if(live.some(l=>l.hit===false)){P.done=true;P.won=false;}else if(live.length&&live.every(l=>l.hit===true)){P.done=true;P.won=true;}});});
@@ -19699,7 +19723,13 @@ function cpropCalib(){const L=(roGet(CPROP_KEY,[])||[]).filter(cpropNew);const C
   CPROP_VOICES.forEach(v=>{C[v]=CPROP_BKT.map(([lo,hi])=>{const g=L.filter(x=>x.voice===v&&x.hit!=null&&x.p>=lo&&x.p<hi);const h=g.filter(x=>x.hit).length;
     return{lo,hi,n:g.length,h,rate:g.length?h/g.length:null,avgP:g.length?g.reduce((a,x)=>a+x.p,0)/g.length:(lo+Math.min(hi,1))/2};});});return C;}
 function cpropCal(C,v,p){const b=(C[v]||[]).find(x=>p>=x.lo&&p<x.hi);if(!b||!b.n)return p;return(b.h+p*12)/(b.n+12);}
-function cpropToday(){const d=today();const out=[];const BR=cpropBrier();const C=cpropCalib();const REC=cpropRecIdx();
+/* v3.5.27 · today's calls are computed once and shared (the game cards now read them too, not just the ledger) — again when anything they
+   read has changed: a store write, a player's numbers, the teams on today's slate — and at least once a minute */
+let CPT_MEMO=null;
+function cpropSig(){let s=today()+'|'+(typeof CHAR_GEN!=='undefined'?CHAR_GEN:0);['nfl','ncaaf','nba','ncaab','nhl','mlb'].forEach(sp=>{if(!LIKELY_LADDER[sp])return;let n=0,m=0;const P=pstDb(sp).p;
+  for(const id in P){n++;m+=(P[id]&&P[id].n)||0;}let t='';try{t=[...teamsToday(sp)].join(',');}catch(e){}s+='|'+n+':'+m+':'+t;});return s;}
+function cpropToday(){const sig=cpropSig();if(CPT_MEMO&&CPT_MEMO.sig===sig&&Date.now()-CPT_MEMO.ts<60e3)return CPT_MEMO.val.slice();const val=cpropToday0();CPT_MEMO={sig,ts:Date.now(),val};return val.slice();}
+function cpropToday0(){const d=today();const out=[];const BR=cpropBrier();const C=cpropCalib();const REC=cpropRecIdx();
   ['nfl','ncaaf','nba','ncaab','nhl','mlb'].forEach(sp=>{const L=LIKELY_LADDER[sp];if(!L)return;const teams=teamsToday(sp);if(!teams.size)return;
     const last=roGet('d4.pstlast.'+sp,{})||{};
     Object.values(pstDb(sp).p).forEach(P=>{if(!teams.has(P.team)||(P.n||0)<5)return;if(last[pstId(P.name)]&&last[pstId(P.name)].d>=d)return; // already played today
@@ -19725,10 +19755,20 @@ function cpropFavs(v){const L=Object.values(cpropRecIdx()).filter(o=>o.voice===v
 function cpropOfDay(v,calls){calls=(calls||cpropToday()).filter(c=>c.voice===v&&c.fav!=='fade');if(!calls.length)return null;
   return calls.sort((a,b)=>(b.cal+(b.fav==='fav'?0.03:0))-(a.cal+(a.fav==='fav'?0.03:0)))[0];}
 function cpropLine(c){return c&&c.side==='under'?`${c.player} under ${(+c.thr)-0.5} ${CPROP_LAB[c.k]||c.k}`:`${c.player} ${c.thr}+ ${CPROP_LAB[c.k]||c.k}`;}
-function cpropLog(calls){const L=get(CPROP_KEY,[])||[];const have=new Set(L.map(x=>x.id));let n=0;
-  calls.forEach(c=>{if(have.has(c.id))return;L.push({id:c.id,sp:c.sp,voice:c.voice,player:c.player,team:c.team,k:c.k,thr:c.thr,...(c.side==='under'?{side:'under'}:{}),p:c.p,d:c.d,hit:null,mv:CPROP_MV});n++;});
-  if(n)set(CPROP_KEY,L.slice(-6000));return n;}
+/* v3.5.27 · the ledger kept the last 6,000 calls — and one college-basketball day now makes more than that (Nov 25: every row was that day's,
+   4,106 of them college). So every earlier day was gone (26 graded calls left: no prop records, no calibration), and the day's own early calls
+   fell out as later ones came in — the Bulls' players vanished from CHI@CHA between two looks. Now each character logs its best 30 calls a
+   sport a day (its six official props are always among them) and the ledger keeps 10,000 — about two weeks. The game cards read today's
+   calls straight from the characters, so they no longer depend on what the ledger kept. */
+const CPROP_DAY_CAP=30,CPROP_KEEP=10000;
+function cpropLog(calls){const L=get(CPROP_KEY,[])||[];const have=new Set(L.map(x=>x.id));let n=0;const cnt={};
+  L.forEach(x=>{const k=x.voice+'|'+x.sp+'|'+x.d;cnt[k]=(cnt[k]||0)+1;});
+  (calls||[]).slice().sort((a,b)=>(b.cal!=null?b.cal:b.p||0)-(a.cal!=null?a.cal:a.p||0)).forEach(c=>{if(have.has(c.id))return;const k=c.voice+'|'+c.sp+'|'+c.d;if((cnt[k]||0)>=CPROP_DAY_CAP)return;cnt[k]=(cnt[k]||0)+1;have.add(c.id);
+    L.push({id:c.id,sp:c.sp,voice:c.voice,player:c.player,team:c.team,k:c.k,thr:c.thr,...(c.side==='under'?{side:'under'}:{}),p:c.p,d:c.d,hit:null,mv:CPROP_MV});n++;});
+  if(n)set(CPROP_KEY,L.slice(-CPROP_KEEP));return n;}
 function cpropGrade(){const L=get(CPROP_KEY,[])||[];let n=0;const LAST={};
+  /* v3.5.27 · the live tracker graded every call as an over ("under 6.5 AST" with 7 assists counted as a hit) — fixed once, here */
+  L.forEach(x=>{if(x.side!=='under'||x.hit==null||x.actual==null||x.sfix)return;x.hit=+x.actual<x.thr;x.sfix=1;n++;});
   L.forEach(x=>{if(x.hit!=null)return;const g=(LAST[x.sp]=LAST[x.sp]||get('d4.pstlast.'+x.sp,{})||{})[pstId(x.player)];
     const a=g?pstVal(g.v,x.k):null;if(!g||g.d<x.d||g.d>dayShift(x.d,1)||a==null)return;x.actual=a;x.hit=x.side==='under'?a<x.thr:a>=x.thr;n++;});
   if(n)set(CPROP_KEY,L);return n;}
@@ -19759,12 +19799,12 @@ function cpropHtml(F){let calls=[];try{calls=cpropToday();cpropLog(calls);}catch
   let mine=new Set();try{mgPending(true).forEach(o=>String(o.l.game||'').split('@').forEach(t=>mine.add((o.sp||'mlb')+'|'+t)));}catch(e){}
   const list=Object.values(byP).map(x=>({...x,top:Math.max(...x.calls.map(c=>c.cal)),yours:mine.has(x.sp+'|'+x.team)})).sort((a,b)=>(b.yours-a.yours)||(b.top-a.top)).slice(0,40);
   const body=list.length?list.map(x=>{const id=x.sp+'|'+pstId(x.player);
-    const byStat={};x.calls.forEach(c=>{const k=c.k+'|'+c.thr;(byStat[k]=byStat[k]||[]).push(c);});
+    const byStat={};x.calls.forEach(c=>{const k=c.k+'|'+c.thr+'|'+(c.side||'over');(byStat[k]=byStat[k]||[]).push(c);});
     return`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;align-items:baseline">
       <a href="#" onclick="cpropFocus('${esc(id)}');return false" style="color:var(--chalk);font-weight:800;text-decoration:none">${txtEsc(x.player)} ${CPROP_FOCUS===id?'▾':'▸'}</a>
       <span class="mono" style="font-size:9.5px;color:var(--mute)">${x.yours?'<b style="color:var(--gold)">💰 your game</b> · ':''}${SP_LAB[x.sp]||''} · ${esc(x.team)}</span></div>
       ${Object.values(byStat).map(cs=>{const c0=cs[0];const best=cs.reduce((a,c)=>c.cal>a.cal?c:a,cs[0]);
-        return`<div class="mono" style="font-size:10.5px;margin-top:2px"><b>${c0.thr}+ ${CPROP_LAB[c0.k]||c0.k}</b>${(()=>{try{return cpropLiveChip(best)}catch(e){return''}})()} ${cs.map(c=>chip(c.voice)+cpropFavTag(c)).join('')} <span style="color:var(--win);font-weight:800">${Math.round(best.cal*100)}%</span> <span style="color:var(--mute)">calibrated · says ${Math.round(best.p*100)}% · proj ${best.mu.toFixed(1)}</span></div>`;}).join('')}
+        return`<div class="mono" style="font-size:10.5px;margin-top:2px"><b>${c0.side==='under'?`under ${(+c0.thr)-0.5}`:`${c0.thr}+`} ${CPROP_LAB[c0.k]||c0.k}</b>${(()=>{try{return cpropLiveChip(best)}catch(e){return''}})()} ${cs.map(c=>chip(c.voice)+cpropFavTag(c)).join('')} <span style="color:var(--win);font-weight:800">${Math.round(best.cal*100)}%</span> <span style="color:var(--mute)">calibrated · says ${Math.round(best.p*100)}% · proj ${best.mu.toFixed(1)}</span></div>`;}).join('')}
       ${CPROP_FOCUS===id?cpropSweetHtml(x.sp,x.player):''}</div>`;}).join('')
     :'<div class="empty">No 70%+ character prop calls yet — player game logs fill in as boards load and games finish.</div>';
   let live='';try{live=cpropLiveHtml();}catch(e){}
@@ -21792,7 +21832,7 @@ function sgpCardHtml(sp,g,s){try{
     if(alt)legs.push({kind:'Alt total',txt:`${side==='over'?'Over':'Under'} ${alt.L}`,p:alt.p,by:tt.B,ladder:ladder.map(o=>`${side==='over'?'o':'u'}${o.L} ${Math.round(o.p*100)}%`).join(' · ')});}
   /* props: the characters' calibrated 70%+ calls on this game's players, one per player */
   const P=sgpProps().filter(x=>x.sp===sp&&(x.team===A||x.team===H)).sort((a,b)=>b.cal-a.cal);const seen=new Set();
-  P.forEach(x=>{if(seen.has(x.player)||seen.size>=2)return;seen.add(x.player);legs.push({kind:'Prop',txt:`${x.player} ${x.thr}+ ${CPROP_LAB[x.k]||x.k}`,p:x.cal,propBy:x.voice});});
+  P.forEach(x=>{if(seen.has(x.player)||seen.size>=2)return;seen.add(x.player);legs.push({kind:'Prop',txt:cpropLine(x),p:x.cal,propBy:x.voice});});
   const play=legs.filter(l=>!l.ref);if(!play.length)return'';
   const P0=play.reduce((a,l)=>a*l.p,1);
   const row=l=>{const t=l.by&&l.by.top;const who=l.propBy?`${charName(l.propBy)} (calibrated)`:t?`${charName(t.c.voice)}${t.best?` — ${t.best.w}-${t.best.l} ${t.best.lab}`:''}`:'';
@@ -22052,15 +22092,17 @@ function cpropLiveList(force){if(!force&&CPL_C&&Date.now()-CPL_C.ts<8000)return 
   L.forEach(c=>{const G=cpropGameFor(c.sp,c.team,d);if(!G)return;const st=G.e?G.e.state:'pre';if(st==='pre'){out.push({...c,state:'pre',game:G.key});return;}
     let id=G.e&&G.e.espnId;if(!id){try{const ev=fbpEventId({sport:c.sp,game:G.key,gameDate:d},d);id=ev.id;}catch(e){}}
     const box=id?fbpBox(id,c.sp):null;const val=cpropBoxVal(c.sp,box,c.team,c.player,c.k);const fin=(box&&box.state==='post')||st==='post';
-    const hit=val!=null&&val>=c.thr;out.push({...c,game:G.key,state:fin?'post':'in',val,hitLive:hit,miss:fin&&val!=null&&!hit,pending:val==null});});
+    /* v3.5.27 · an under is only won at the final (still under), and lost the moment he reaches the number */
+    const und=c.side==='under',hit=val!=null&&(und?fin&&val<c.thr:val>=c.thr),miss=val!=null&&(und?val>=c.thr:fin&&!hit);
+    out.push({...c,game:G.key,state:fin?'post':'in',val,hitLive:hit,miss,pending:val==null});});
   CPL_C={ts:Date.now(),v:out};return out;}
 function cpropLiveTick(){try{const pre=sgpProps();if(pre&&pre.length)cpropLog(pre);}catch(e){}
   const L=cpropLiveList(true);if(!L.length)return;
   /* grade finals straight from the box, and announce every new live hit once */
-  try{const S=get(CPROP_KEY,[])||[];let ch=0;L.forEach(x=>{if(x.state!=='post'||x.val==null)return;const r=S.find(y=>y.id===x.id);if(r&&r.hit==null){r.actual=x.val;r.hit=x.val>=x.thr;ch++;}});if(ch)set(CPROP_KEY,S);}catch(e){}
+  try{const S=get(CPROP_KEY,[])||[];let ch=0;L.forEach(x=>{if(x.state!=='post'||x.val==null)return;const r=S.find(y=>y.id===x.id);if(r&&r.hit==null){r.actual=x.val;r.hit=r.side==='under'?x.val<x.thr:x.val>=x.thr;if(r.side==='under')r.sfix=1;ch++;}});if(ch)set(CPROP_KEY,S);}catch(e){}
   const seen=get('d4.cprophits',{})||{};let n=0;const d=today();
   L.filter(x=>x.hitLive).forEach(x=>{if(seen[x.id])return;seen[x.id]=d;n++;
-    if(n<=3)dToast(`<b style="color:var(--win)">✅ HIT${x.state==='in'?' LIVE':''}</b> · ${txtEsc(x.player)} ${x.thr}+ ${CPROP_LAB[x.k]||x.k} <span class="mono" style="font-size:11px">(${x.val})</span><br><span style="font-size:11px;color:var(--mute)">${txtEsc(charName(x.voice))}'s pick · ${(SP_LAB[x.sp]||'')} ${txtEsc(x.game||'')}</span>`);});
+    if(n<=3)dToast(`<b style="color:var(--win)">✅ HIT${x.state==='in'?' LIVE':''}</b> · ${txtEsc(cpropLine(x))} <span class="mono" style="font-size:11px">(${x.val})</span><br><span style="font-size:11px;color:var(--mute)">${txtEsc(charName(x.voice))}'s pick · ${(SP_LAB[x.sp]||'')} ${txtEsc(x.game||'')}</span>`);});
   if(n){Object.keys(seen).forEach(k=>{if(seen[k]<dayShift(d,-3))delete seen[k];});set('d4.cprophits',seen);}
   try{const on=id=>{const v=document.getElementById(id);return v&&v.classList.contains('on');};if(on('v-mine'))renderMyGames();if(on('v-today')&&tfGet().view==='props')renderToday(true);}catch(e){}}
 function cpropLiveChip(c){const L=cpropLiveList();const x=L.find(y=>y.id===c.id)||L.find(y=>y.voice===c.voice&&y.player===c.player&&y.k===c.k&&y.thr===c.thr);if(!x||x.state==='pre')return'';
@@ -22070,7 +22112,7 @@ function cpropLiveHtml(){const L=cpropLiveList().filter(x=>x.state!=='pre');if(!
   const by={};L.forEach(x=>{const k=x.sp+'|'+x.player+'|'+x.k+'|'+x.thr;(by[k]=by[k]||{...x,voices:[]}).voices.push(x.voice);});
   const rows=Object.values(by).sort((a,b)=>(b.hitLive-a.hitLive)||((b.val||0)/b.thr-(a.val||0)/a.thr)).map(x=>{const pct=x.val!=null?Math.min(100,Math.round(x.val/x.thr*100)):0;const col=x.hitLive?'var(--win)':x.miss?'var(--rust)':'var(--gold)';
     return`<div style="padding:6px 8px;margin:4px 0;border-radius:9px;border:1.5px solid ${x.hitLive?'var(--win)':x.miss?'var(--rust)':'#ff4b5c'}">
-      <div style="display:flex;justify-content:space-between;gap:8px"><b>${txtEsc(x.player)} ${x.thr}+ ${CPROP_LAB[x.k]||x.k}</b><span class="mono" style="font-size:10.5px;font-weight:800;color:${col}">${x.hitLive?'✅ HIT'+(x.state==='in'?' LIVE':''):x.miss?'❌ MISSED':x.val!=null?x.val+' / '+x.thr:'waiting on box'}</span></div>
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${txtEsc(cpropLine(x))}</b><span class="mono" style="font-size:10.5px;font-weight:800;color:${col}">${x.hitLive?'✅ HIT'+(x.state==='in'?' LIVE':''):x.miss?'❌ MISSED':x.val!=null?x.val+' / '+x.thr:'waiting on box'}</span></div>
       <div style="height:5px;border-radius:3px;background:var(--rule);overflow:hidden;margin:3px 0"><div style="height:100%;width:${pct}%;background:${col}"></div></div>
       <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(x.game||x.team)} · called by ${x.voices.map(v=>`<span style="color:${(CHARS[v]||{}).color}">${txtEsc(charName(v))}</span>`).join(', ')}</div></div>`;}).join('');
   return`<div class="tkt" style="border-color:#ff4b5c"><h3>🎯 Character props — live</h3><div class="sub" style="font-size:10px">Every 70%+ prop the characters called, tracked in the live box score. A hit lights up the second the player clears the line.</div>${rows}</div>`;}
@@ -22220,7 +22262,7 @@ function gcLeaders(j){const L=(j&&j.leaders)||[];if(!L.length)return'<div class=
 function gcBets(sp,game,d){const out=[];const k=x=>{try{return mgKey(sp,x)}catch(e){return x}};const want=k(game),rev=k(String(game).split('@').reverse().join('@'));
   (get(LS.locked,[])||[]).forEach(t=>(t.legs||[]).forEach(l=>{if((l.sport||'mlb')!==sp)return;const g2=k(l.game);if((g2===want||g2===rev)&&legDay(l,t.date)===d)out.push(legLiveCard(t,l,{link:true}));}));
   let props='';try{const [a,h]=String(game).split('@');const L=cpropLiveList().filter(x=>x.sp===sp&&(x.team===a||x.team===h));
-    props=L.map(x=>`<div class="mono" style="font-size:11px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(x.player)} ${x.thr}+ ${CPROP_LAB[x.k]||x.k}</b> ${x.hitLive?'<b style="color:var(--win)">✅ HIT</b>':x.miss?'<b style="color:var(--rust)">❌</b>':x.val!=null?`<span style="color:#ff4b5c">● ${x.val}/${x.thr}</span>`:''} <span style="color:${(CHARS[x.voice]||{}).color}">${txtEsc(charName(x.voice))}</span></div>`).join('');}catch(e){}
+    props=L.map(x=>`<div class="mono" style="font-size:11px;padding:4px 0;border-bottom:1px solid var(--rule)"><b>${txtEsc(cpropLine(x))}</b> ${x.hitLive?'<b style="color:var(--win)">✅ HIT</b>':x.miss?'<b style="color:var(--rust)">❌</b>':x.val!=null?`<span style="color:#ff4b5c">● ${x.val}/${x.thr}</span>`:''} <span style="color:${(CHARS[x.voice]||{}).color}">${txtEsc(charName(x.voice))}</span></div>`).join('');}catch(e){}
   return(out.length?out.join(''):'<div class="sub">No tickets on this game.</div>')+(props?`<div class="mktlab" style="margin-top:8px">Character props in this game</div>${props}`:'');}
 function gcHtml(sp,j){const G=gcTeams(j);const T=G.T;const a=T.away||{},h=T.home||{};
   const live=G.state==='in',fin=G.state==='post';
