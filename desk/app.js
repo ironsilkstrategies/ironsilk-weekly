@@ -97,7 +97,7 @@ function readPick(x) {
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, liveD: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null,
   bf: Object.assign({ win: 'up', tier: 'all', bt: 'all', ch: 'all', view: 'time', cf: 0, say: 'all', lane: '', fc: 'all' }, store.get('bf') || {}) };
-const TABS = ['today', 'slate', 'props', 'me', 'tix', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join', 'admin', 'u'];
+const TABS = ['today', 'slate', 'props', 'me', 'tix', 'gc', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join', 'admin', 'u'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 async function getJSON(url, wait = 9000) {
@@ -378,7 +378,7 @@ function viewToday() {
       <p>Members get the Best 3 at lock time, the Top 10 plays and every character’s parlay, in a private Telegram.</p></div>
       <div class="row"><a class="btn foil" href="${esc(sub)}" target="_blank" rel="noopener">Join VIP${price ? ', ' + esc(price) : ''}</a><button type="button" class="btn line" data-go="join">What you get</button></div></div>` : '';
 
-  el.innerHTML = `${introHtml()}<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${founderHtml()}${strongHtml()}${last}${propsHtml}${parlayHtml}${T ? vipHtml(F) : ''}${upsHtml}
+  el.innerHTML = `${introHtml()}<h1 class="title">${esc(title)}</h1><p class="lede">${lede}</p>${onrec}${slips}${favTodayHtml()}${founderHtml()}${strongHtml()}${last}${propsHtml}${parlayHtml}${T ? vipHtml(F) : ''}${upsHtml}
     <div id="seal"></div>${vip}
     ${T && picks.length ? `<div class="row" style="margin-top:22px"><button type="button" class="btn line" data-act="share">Share today’s card</button></div>` : ''}${footHtml()}`;
   if (T) { remember(picks.map((x, i) => [keys[i], x])); remember(props.map((x, i) => [`${T.d}|p${i}`, x])); seal(T); }
@@ -840,8 +840,40 @@ const TOP_CF = 'top10';
 /* v70 · Nov 25, Chris: "a filter for only characters with winning + units on a bet". 💰 Winning & up: a winning record AND up units
    in that kind of bet (its badge's record, 12+ graded); a half call by its own half record */
 const UP_MIN = 12, upRec = r => !!r && fin(r.w) && fin(r.l) && r.w + r.l >= UP_MIN && r.w > r.l && fin(r.u) && r.u > 0;
+/* v77 · Nov 26, 1:00 PM, Chris: "give the subscribers a chance to pick their fav characters per sport per option for instance the scorekeeper
+   on nba ml’s and judge for nhl overs and the grinder for underdog ml picks in NCAAB… a “store as fav” option when they are on the characters
+   profiles… which doubles as a filter on slates so they can filter down and see what their favs picked across the board". A fav is a
+   character in one lane (sport · bet type · favorite / underdog / over / under), starred from its profile or from any game's "who's with
+   it" list; ⭐ My favs on the Slate shows only those calls, with the starred lanes' combined record. Kept on this device. */
+const LSP = { mlb: 'MLB', nfl: 'NFL', ncaaf: 'CFB', nhl: 'NHL', nba: 'NBA', ncaab: 'CBB' }, LSPR = Object.fromEntries(Object.entries(LSP).map(([k, v]) => [v, k]));
+const laneLabK = k => { const [sp, m, t] = String(k).split('|'); return `${LSP[sp] || String(sp).toUpperCase()} ${m === 'total' ? (t === 'under' ? 'unders' : 'overs') : (m === 'ml' ? 'ML' : 'spread') + ' ' + (t === 'fav' ? 'favorites' : t === 'dog' ? 'dogs' : 'sides')}`; };
+/* a call's lane: the key the desk sends, or read off its label ("CBB ML favorites") for a feed from before it sent one */
+const laneKeyOf = (sp, r) => { if (!r) return ''; if (r.k) return r.k; const L = String(r.lab || ''), s2 = LSPR[L.split(' ')[0]] || sp, m = /\bML\b/.test(L) ? 'ml' : /spread/i.test(L) ? 'spread' : /overs|unders/i.test(L) ? 'total' : '';
+  const t = m === 'total' ? (/unders/i.test(L) ? 'under' : 'over') : /favorites/i.test(L) ? 'fav' : /dogs/i.test(L) ? 'dog' : /sides/i.test(L) ? 'side' : ''; return m && t ? `${s2}|${m}|${t}` : ''; };
+S.favs = new Set(Array.isArray(store.get('favs')) ? store.get('favs') : []);
+const isFav = (v, k) => !!k && S.favs.has(v + '#' + k), favOk = (sp, c) => isFav(c.v, laneKeyOf(sp, c.r));
+function favToggle(v, k) { if (!v || !k) return; const id = v + '#' + k, on = !S.favs.has(id); if (on) S.favs.add(id); else S.favs.delete(id); store.set('favs', [...S.favs]);
+  toast(on ? `⭐ ${castOf(v).name} · ${laneLabK(k)} is a fav` : `Unstarred ${castOf(v).name} · ${laneLabK(k)}`); }
+function favRec() { const seen = new Map(), B = boardOf();
+  for (const c of ((S.feed && S.feed.characters) || [])) for (const L of c.lanes || []) { const id = c.v + '#' + L[0]; if (S.favs.has(id)) seen.set(id, { w: L[1], l: L[2], u: L[3] }); }
+  if (B) for (const g of B.games || []) for (const m of ['ml', 'spread', 'total']) for (const c of (g.calls || {})[m] || []) { const id = c.v + '#' + laneKeyOf(g.sp, c.r); if (S.favs.has(id) && !seen.has(id) && c.r && fin(c.r.w)) seen.set(id, { w: c.r.w, l: c.r.l, u: c.r.u }); }
+  let w = 0, l = 0, u = 0; for (const o of seen.values()) { w += +o.w || 0; l += +o.l || 0; u += +o.u || 0; } return seen.size ? { w, l, u } : null; }
+function favNote(games, F) {
+  if (!S.favs.size) return '⭐ <b>No favs yet.</b> Star a character in a lane from its profile on the <button type="button" class="link" data-go="cast">Cast</button> tab, or tap ☆ beside any call in a game’s “Who’s with it” list: the Scorekeeper on NBA moneylines, the Judge on NHL overs.';
+  const n = games.reduce((a, g) => a + callsOf(g.b, F).length, 0), R = favRec();
+  return `⭐ Your <b>${S.favs.size}</b> starred lane${S.favs.size === 1 ? '' : 's'}: <b>${n}</b> pick${n === 1 ? '' : 's'} on this sheet.${R ? ` Together they’re <b>${R.w}–${R.l}, ${u1(R.u)}</b> in those lanes.` : ''} Open a game and tap ★ to drop one.`; }
+function lanesHtml(c) {
+  let L = (c.lanes || []).map(x => ({ k: x[0], w: x[1], l: x[2], u: x[3], rk: x[4], of: x[5] }));
+  if (!L.length) { const M = new Map(), B = boardOf(); if (B) for (const g of B.games || []) for (const m of ['ml', 'spread', 'total']) for (const x of (g.calls || {})[m] || []) { if (x.v !== c.v || !x.r || !fin(x.r.w)) continue; const k = laneKeyOf(g.sp, x.r); if (k && !M.has(k)) M.set(k, { k, w: x.r.w, l: x.r.l, u: x.r.u, rk: x.r.rk, of: x.r.of }); } L = [...M.values()]; }
+  if (!L.length) return ''; L.sort((a, b) => isFav(c.v, b.k) - isFav(c.v, a.k) || b.u - a.u);
+  const n = L.filter(x => isFav(c.v, x.k)).length, row = x => `<li class="ln${isFav(c.v, x.k) ? ' on' : ''}">${favBtn(c.v, x.k)}<span class="ln-t"><b>${esc(laneLabK(x.k))}</b>${x.rk ? `<small>${x.rk === 1 ? '👑 #1' : '#' + x.rk} of ${x.of}</small>` : ''}</span><span class="ln-r">${x.w}–${x.l}</span><span class="ln-u ${uCls(x.u)}">${u1(x.u)}</span></li>`;
+  return `<h2 class="h2">Star its lanes</h2><p class="note">Star a lane and the Slate’s <b>⭐ My favs</b> filter shows every pick it makes there, across the board.${n ? ` <b>${n}</b> starred.` : ''}</p><ul class="paper lanes-x">${L.slice(0, 6).map(row).join('')}</ul>${L.length > 6 ? `<details class="lanes-more"><summary>All ${L.length} of its lanes</summary><ul class="paper lanes-x">${L.slice(6).map(row).join('')}</ul></details>` : ''}`; }
+function favTodayHtml() { const B = boardOf(); if (!S.favs.size || !B) return ''; const d = B.d; let n = 0; const who = new Set();
+  for (const g of B.games || []) { if (g.day && d && g.day !== d) continue; for (const { c } of callsOf(g, { ...BF0, fav: 'on' })) { n++; who.add(c.v); } }
+  return n ? `<button type="button" class="paper favtoday" data-act="favgo"><span aria-hidden="true">⭐</span><span><b>Your favs: ${n} pick${n === 1 ? '' : 's'} today</b><small>From ${[...who].slice(0, 3).map(v => castOf(v).name).join(', ')}${who.size > 3 ? ` +${who.size - 3}` : ''}, in the lanes you starred</small></span><span class="ft-a">See them →</span></button>` : ''; }
+const favBtn = (v, k, sm) => k ? `<button type="button" class="favb${sm ? ' sm' : ''}${isFav(v, k) ? ' on' : ''}" data-act="fav" data-v="${esc(v)}" data-k="${esc(k)}" aria-pressed="${isFav(v, k)}" aria-label="${isFav(v, k) ? 'Unstar' : 'Star'} ${esc(castOf(v).name)} in ${esc(laneLabK(k))}">${isFav(v, k) ? '★' : '☆'}</button>` : '';
 function cfCutOf(gs, F) { const P = []; for (const g of gs) for (const { c } of callsOf(g.b, { ...F, cf: 0 })) if (fin(c.p)) P.push(+c.p); if (!P.length) return null; P.sort((a, b) => b - a); return P[Math.max(0, Math.ceil(P.length * 0.1) - 1)]; }
-const callsMode = F => F.ch !== 'all' || +F.cf > 0 || F.cf === TOP_CF || F.say === 'top' || F.up === 'win';
+const callsMode = F => F.ch !== 'all' || +F.cf > 0 || F.cf === TOP_CF || F.say === 'top' || F.up === 'win' || F.fav === 'on';
 function callOk(b, m, c, F, skip = '') {
   if (skip !== 'bt' && F.bt !== 'all' && BTS.some(([k]) => k === F.bt) && m !== F.bt) return false;
   if (skip !== 'ch' && F.ch !== 'all' && c.v !== F.ch) return false;
@@ -851,6 +883,7 @@ function callOk(b, m, c, F, skip = '') {
   if (skip !== 'say' && skip !== 'lane' && F.say === 'top' && F.lane && !(c.r && c.r.lab === F.lane)) return false;
   if (skip !== 'fc' && F.fc && F.fc !== 'all' && !fcPass(fcAt(b.sp, m, c.s, c.pick, c.price), F.fc)) return false;
   if (skip !== 'up' && F.up === 'win' && !upRec(c.r)) return false;
+  if (skip !== 'fav' && F.fav === 'on' && !favOk(b.sp, c)) return false;
   return true; }
 const callsOf = (b, F, skip) => { const out = []; if (b) for (const m of ['ml', 'spread', 'total']) for (const c of (b.calls || {})[m] || []) if (callOk(b, m, c, F, skip)) out.push({ m, c }); return out; };
 const tierTag = p => `${p.unan ? '<span class="tb unan">★ Unanimous</span>' : ''}${TIER[p.tier] ? `<span class="tb ${TIER[p.tier][1]}">${TIER[p.tier][0]}</span>` : ''}${p.off ? '<span class="tb off">✓ Official</span>' : ''}`;
@@ -884,7 +917,7 @@ function whoOnHtml(b) {
     let qi = 0;
     const row = c => { const k = castOf(c.v), mk = c.hit === true ? '<b class="hitw">✓</b> ' : c.hit === false ? '<b class="hitl">✗</b> ' : '';
       const q = c.q || b.fx ? voiceOf(c.v, { sp: b.sp, game: b.game, pick: c.pick, price: c.price, note: c.q || '', gf: b.fx || '' }, qi++) : '';
-      return `<li style="--c:${k.color}"><span class="who">${mk}${esc(k.name)}${c.o ? ' <em>official</em>' : ''}</span><span class="cp">${c.p != null ? pct(c.p) + '%' : ''}</span>${scoreCall(b, c.v)}${q ? `<q class="cq">${esc(q)}</q>` : ''}${sayBadge(c.r)}</li>`; };
+      return `<li style="--c:${k.color}"><span class="who">${mk}${esc(k.name)}${c.o ? ' <em>official</em>' : ''}</span><span class="cp">${c.p != null ? pct(c.p) + '%' : ''}</span>${scoreCall(b, c.v)}${q ? `<q class="cq">${esc(q)}</q>` : ''}${sayBadge(c.r)}${favBtn(c.v, laneKeyOf(b.sp, c.r), true)}</li>`; };
     out.push(`<div class="won"><div class="won-h"><b>${MK_LAB[m]}</b><span>${sides.length === 1 ? `All ${tot} agree` : `${by[sides[0]].length}–${tot - by[sides[0]].length} split`}</span></div>
       ${say ? `<p class="won-say">${say}</p>` : ''}
       ${sides.map((sd, i) => { const L = by[sd].sort((x, y) => (y.o - x.o) || ((y.p || 0) - (x.p || 0))); const pr = L.find(c => c.price != null);
@@ -911,7 +944,7 @@ function halfOnHtml(b) {
 const halfPass = (c, F) => !F || ((F.ch === 'all' || c.v === F.ch) && !(+F.cf > 0 && !(fin(c.p) && pct(c.p) >= +F.cf)) && (F.up !== 'win' || upRec(c)));
 function halfRowHtml(b, F) {
   const H = b && b.half; if (!H) return ''; const P = [];
-  if (F && (F.say === 'top' || F.cf === TOP_CF)) return '';
+  if (F && (F.say === 'top' || F.cf === TOP_CF || F.fav === 'on')) return '';
   for (const m of ['ml', 'spread', 'total']) { if (F && F.bt !== 'all' && BTS.some(([k]) => k === F.bt) && m !== F.bt) continue; const C = (H[m] || []).filter(c => halfPass(c, F)); if (!C.length) continue; const by = {}; for (const c of C) (by[c.pick] = by[c.pick] || []).push(c);
     const k = Object.keys(by).sort((x, y) => by[y].length - by[x].length)[0], L = by[k], r = L[0].hit;
     P.push(`${r === true ? '✓ ' : r === false ? '✗ ' : ''}<b>${esc(hpk(k.replace(/^(1H|P1) /, '')))}</b> <small>${L.length} on it${L.some(c => c.o) ? ', official' : ''}</small>`); }
@@ -927,7 +960,7 @@ function callRowsHtml(b, F) {
   const L = callsOf(b, F); if (!L.length) return '';
   const G = new Map(); for (const x of L) { const k = x.m + '|' + x.c.pick; if (!G.has(k)) G.set(k, []); G.get(k).push(x); }
   const tag = ({ c }) => { const k = castOf(c.v), say = c.r && c.r.say === 'top' ? '👑 ' : c.r && c.r.say === 'worst' ? '🧊 ' : '';
-    return `<span class="tb ch" style="--c:${k.color}">${say}${esc(k.name)}${fin(c.p) ? ` <b>${pct(c.p)}%</b>` : ''}${F.up === 'win' && c.r && fin(c.r.w) ? ` <small class="rec">${c.r.w}–${c.r.l}, ${u1(c.r.u)}</small>` : ''}</span>${c.o ? '<span class="tb off">✓ Official</span>' : ''}`; };
+    return `<span class="tb ch" style="--c:${k.color}">${say}${esc(k.name)}${fin(c.p) ? ` <b>${pct(c.p)}%</b>` : ''}${(F.up === 'win' || F.fav === 'on') && c.r && fin(c.r.w) ? ` <small class="rec">${c.r.w}–${c.r.l}, ${u1(c.r.u)}</small>` : ''}${favOk(b.sp, c) ? ' ⭐' : ''}</span>${c.o ? '<span class="tb off">✓ Official</span>' : ''}`; };
   return `<div class="bpicks">${[...G.values()].map(xs => { xs.sort((x, y) => ((y.c.o || 0) - (x.c.o || 0)) || ((y.c.p || 0) - (x.c.p || 0)));
     const { m, c } = xs[0], top = Math.max(...xs.map(x => (fin(x.c.p) ? x.c.p : 0))), L2 = { sp: b.sp, game: b.game, pick: c.pick, price: c.price, p: top, start: b.start, hit: c.hit }, X = legState(L2), q = X.st === 'live' ? liveQ(L2) : null;
     return `<div class="bp bp-${X.st}">${X.st !== 'o' ? `<span class="mkk ${X.st}">${markOf(X.st)}</span>` : ''}<span class="bp-pk">${esc(bigOf(b.sp, b.game, c.pick))}${c.price != null ? ' ' + esc(odds(c.price)) : ''}</span>${fcBadge(fcAt(b.sp, m, c.s, c.pick, c.price))}${q != null ? `<span class="bp-p lvq ${q >= top ? 'up' : 'dn'}">${pct(q)}% live</span>` : X.st === 'w' ? '<span class="bp-p g w">Hit</span>' : X.st === 'l' ? '<span class="bp-p g l">Missed</span>' : ''}${xs.map(tag).join('')}</div>`; }).join('')}</div>`;
@@ -942,7 +975,7 @@ function fcGameHtml(b) {
   return `<div class="g-sec"><h4>🌦 The Forecast</h4><p class="g-note">How each kind of bet on this game has paid the last 7 days at the real prices, every character’s picks counted once.</p><ul class="fcl">${L.map(f => { const W = fcW(f);
     return `<li class="${W ? (f.lv >= 1 ? 'up' : f.lv <= -2 ? 'dn' : '') : 'zz'}"><span class="fci">${W ? W[0] : '💤'}</span><span><b>${esc(fcLab(f.k))}</b> ${W ? W[1] : 'too few picks this week to say'}${f.tr ? (f.tr > 0 ? ' · ↑ rising' : ' · ↓ sliding') : ''}<small>${fcWk(f)} · 30 days ${+f.w30 || 0}–${+f.l30 || 0}, ${u1(f.u30)}</small></span></li>`; }).join('')}</ul></div>`;
 }
-const BF0 = { win: 'up', tier: 'all', bt: 'all', ch: 'all', cf: 0, say: 'all', lane: '', fc: 'all', up: 'all' };
+const BF0 = { win: 'up', tier: 'all', bt: 'all', ch: 'all', cf: 0, say: 'all', lane: '', fc: 'all', up: 'all', fav: 'all' };
 const okWin = (g, w) => w === 'all' || (w === 'up' ? !g.over : winOf(g.t) === w);
 /* a saved filter that no longer fits the board (an old value, a character not on it, a #1 category not on this sheet) drops back */
 function bfFix(B, games, F) {
@@ -950,6 +983,7 @@ function bfFix(B, games, F) {
   F.cf = F.cf === TOP_CF ? TOP_CF : CONF.some(([k]) => k === +F.cf) ? +F.cf : 0;
   if (F.say !== 'top') { F.say = 'all'; F.lane = ''; }
   if (F.up !== 'win') F.up = 'all';
+  if (F.fav !== 'on') F.fav = 'all';
   if (!B || !B.fc || !FCF.some(([k]) => k === F.fc)) F.fc = 'all';
   if (F.ch !== 'all' && !(B && B.cast && Object.prototype.hasOwnProperty.call(B.cast, F.ch))) F.ch = 'all';
   if (F.lane && !games.filter(g => okWin(g, F.win)).some(g => callsOf(g.b, F, 'lane').some(({ c }) => c.r.lab === F.lane))) F.lane = '';
@@ -974,6 +1008,7 @@ function filterBarHtml(B, games, F) {
   const upTxt = F.up === 'win' ? `, only from characters with a <b>winning record and up units</b> in that kind of bet (${UP_MIN}+ graded there)` : '';
   if (cm && !note) note = F.say === 'top' ? `Only the calls from the character ranked #1 in each kind of bet (it has the say)${F.ch !== 'all' ? `, from <b>${esc(castOf(F.ch).name)}</b>` : ''}${+F.cf ? `, at <b>${+F.cf}%+</b> sure` : ''}${F.cf === TOP_CF ? ',' + topTxt : ''}${upTxt}. Tap a 👑 above for every pick it has in that kind of bet.`
     : `The characters’ own calls${F.ch !== 'all' ? ` from <b>${esc(castOf(F.ch).name)}</b>` : ''}${+F.cf ? ` at <b>${+F.cf}%+</b> sure` : ''}${F.cf === TOP_CF ? topTxt : ''}${upTxt}.${F.up === 'win' ? ' Each one’s record in that kind of bet rides with its name.' : ''} 👑 #1 in that kind of bet · 🧊 the worst.`;
+  if (F.fav === 'on') note = favNote(inW, F);
   if (cm && !F.lane) note += ' Strength chips are for the desk’s colored picks.';
   return `<div class="bf">
     <div class="seg tight" role="group" aria-label="View">${chip('view', 'time', '🕒 By time')}${chip('view', 'league', 'By league')}</div>
@@ -982,7 +1017,7 @@ function filterBarHtml(B, games, F) {
     <div class="seg tight" role="group" aria-label="Bet type">${BTS.map(([k, l]) => chip('bt', k, l, k === 'all' ? null : cm ? nCalls({ ...F, bt: k }) : inW.filter(g => (g.b ? g.b.picks : []).some(p => btOk(k, p, heavy) && pickOkB(g.b, p, { ...F, bt: 'all' }, heavy))).length)).join('')}</div>
     ${cast.length ? `<div class="bf-ch2"><label class="bf-sel${F.ch !== 'all' ? ' on' : ''}"><span class="sr">Character</span><select data-change="bfch"><option value="all">Every character</option>${cast.map(([v, c]) => `<option value="${esc(v)}"${F.ch === v ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
       <label class="bf-sel${+F.cf || F.cf === TOP_CF ? ' on' : ''}"><span class="sr">How sure the character is</span><select data-change="bfcf">${CONF.map(([v, l]) => `<option value="${v}"${F.cf !== TOP_CF && +F.cf === v ? ' selected' : ''}>${v ? `${l} sure · ${nCalls({ ...F, cf: v })}` : l}</option>`).join('')}<option value="${TOP_CF}"${F.cf === TOP_CF ? ' selected' : ''}>🎯 Top 10% most confident · ${nTop}</option></select></label></div>` : ''}
-    <div class="seg tight" role="group" aria-label="Number ones, winning and up, the most confident and the Forecast">${chip('say', 'top', '👑 #1s only', nCalls({ ...F, say: 'top', lane: '' }), 't-say', true)}${chip('up', 'win', '💰 Winning & up', nCalls({ ...F, up: 'win' }), 't-up', true)}${chip('cf', TOP_CF, '🎯 Top 10% sure', nTop, 't-top', true)}${B.fc ? FCF.map(([v, l]) => chip('fc', v, l, cm ? nCalls({ ...F, fc: v }) : nPicks({ ...F, fc: v }), 'f-' + v, true)).join('') : ''}</div>
+    <div class="seg tight" role="group" aria-label="Number ones, winning and up, the most confident and the Forecast">${chip('say', 'top', '👑 #1s only', nCalls({ ...F, say: 'top', lane: '' }), 't-say', true)}${chip('up', 'win', '💰 Winning & up', nCalls({ ...F, up: 'win' }), 't-up', true)}${chip('fav', 'on', '⭐ My favs', nCalls({ ...F, fav: 'on' }), 't-fav', true)}${chip('cf', TOP_CF, '🎯 Top 10% sure', nTop, 't-top', true)}${B.fc ? FCF.map(([v, l]) => chip('fc', v, l, cm ? nCalls({ ...F, fc: v }) : nPicks({ ...F, fc: v }), 'f-' + v, true)).join('') : ''}</div>
     ${tops}${note ? `<p class="bf-note">${note}</p>` : ''}
     ${Object.keys(BF0).some(k => String(F[k] ?? BF0[k]) !== String(BF0[k])) ? '<button type="button" class="bf-reset" data-act="bfreset">Show everything</button>' : ''}</div>`;
 }
@@ -1042,7 +1077,7 @@ function gameHtml(g, i) {
       ${g.q && g.q.title ? `<div class="ask"><b>${esc(g.q.title)}</b><span>${esc((g.q.opts || []).join(' or '))}? Make your case in the members’ chat.</span><button type="button" class="btn foil" data-go="chat">Open the chat</button></div>` : ''}</div>`;
   }
   return `<div class="game ${(i || 0) % 2 ? 'zb' : 'za'}${open ? ' g-open' : ''}${b && b.picks && b.picks.length ? ' g-has' : ''}"><button type="button" data-act="game" data-k="${esc(g.k)}" aria-expanded="${open}">${t}
-    <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${b && !open ? `<div class="g-bp" data-act="game" data-k="${esc(g.k)}">${callsMode(F) ? callRowsHtml(b, F) : boardPicksHtml(b, rowF(F), heavy, false)}${halfRowHtml(b, F)}</div>` : ''}${open ? '' : ddRow(g)}${more}</div>`;
+    <div class="g-teams">${side(g.a, live ? L.a : null)}${side(g.h, live ? L.h : null)}${on ? `<span><span class="star">On today’s card: ${esc(readPick(on).big)} ${esc(odds(on.price))}</span></span>` : ''}</div>${ln}</button>${b && !open ? `<div class="g-bp" data-act="game" data-k="${esc(g.k)}">${callsMode(F) ? callRowsHtml(b, F) : boardPicksHtml(b, rowF(F), heavy, false)}${halfRowHtml(b, F)}</div>` : ''}${L && L.id && L.state !== 'pre' ? `<button type="button" class="g-gc${L.state === 'in' ? ' live' : ''}" data-go="gc=${esc(g.sp)}:${esc(L.id)}">📺 Gamecast${L.state === 'in' ? ' · live' : ' · every play'}</button>` : ''}${open ? '' : ddRow(g)}${more}</div>`;
 }
 /* the rows with no filter on show the strongest colored picks (unanimous, supreme, strong); any strength, bet type or Forecast filter shows what passes it */
 /* v64 · Nov 23, Chris: "I also think the pick bars should be visible before a game expands". Every colored pick shows on its game's row
@@ -1395,7 +1430,7 @@ function viewCast() {
       ${fresh.length ? `<div class="newheir">${fresh.map(c => `<button type="button" class="nh" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}">${crestSvg(c.kid, 40)}<span><b>👶 New on the desk: ${esc(c.name)}</b><small>Child of ${esc(c.kid.a)} and ${esc(c.kid.b)} · born ${esc(shortDay(String(c.kid.born).slice(0, 10)))}</small></span><i>Meet →</i></button>`).join('')}</div>` : ''}
       <div class="castgrid">${C.map(c => { const g = c.record || {}, pr = c.props || {}, today = (c.picks || []).length, PS = parSum(c.par);
         return `<button type="button" class="castcard mini${c.kid ? ' kid' : ''}" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${kidTag(c)}${legTag(c)}<span class="cc-rec">${todayTxt(c) || (today ? `${today} pick${today === 1 ? '' : 's'} today` : 'No pick today')}</span></div>
-          <h3>${c.kid ? crestSvg(c.kid, 30, 'cc-crest') : ''}${esc(c.name)}</h3>${c.title ? `<p class="cc-title">${esc(c.title)}</p>` : ''}<div class="cc-stats"><span><b>${rec(g)}</b>games${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span><span><b>${rec(pr)}</b>props</span><span class="ccp"><b>${parRec(PS)}</b>parlays${PS.w + PS.l ? `, <em class="${uCls(PS.u)}">${signed(PS.u, 1)}u</em>` : ''}</span></div>${(n => n ? `<span class="cc-par">🎟 ${n} parlay${n === 1 ? '' : 's'} today</span>` : '')(parToday(F, c.v).length)}<span class="cc-more">See profile →</span></button>`; }).join('')}</div>
+          <h3>${c.kid ? crestSvg(c.kid, 30, 'cc-crest') : ''}${esc(c.name)}</h3>${c.title ? `<p class="cc-title">${esc(c.title)}</p>` : ''}<div class="cc-stats"><span><b>${rec(g)}</b>games${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span><span><b>${rec(pr)}</b>props</span><span class="ccp"><b>${parRec(PS)}</b>parlays${PS.w + PS.l ? `, <em class="${uCls(PS.u)}">${signed(PS.u, 1)}u</em>` : ''}</span></div>${(n => n ? `<span class="cc-par">🎟 ${n} parlay${n === 1 ? '' : 's'} today</span>` : '')(parToday(F, c.v).length)}${(n => n ? `<span class="cc-par cc-fav">⭐ ${n} lane${n === 1 ? '' : 's'} starred</span>` : '')([...S.favs].filter(id => id.startsWith(c.v + '#')).length)}<span class="cc-more">See profile →</span></button>`; }).join('')}</div>
       ${lane.length ? `<section class="crown parboard"><div class="vh"><h2 class="h2">The parlay lane</h2></div><p class="note">Every character builds its own tickets: a game parlay from its 70%+ calls, a strong-suit ticket and a prop parlay. A unit a ticket, last 60 days. Who’s up and who’s down:</p>
         <div class="paper race">${lane.map(({ c, T }, i) => `<button type="button" class="rcr pl-b" data-act="castpick" data-v="${esc(c.v)}"><span class="n">${i + 1}</span><span class="t"><i style="background:${okColor(c.color)}"></i>${esc(c.name)} <em>${parRec(T)}</em><small>${Object.keys(PAR_K).filter(k => c.par[k] && parN(c.par[k])).map(k => `${PAR_K[k][0]} ${parRec(c.par[k])}`).join(' · ')}</small></span><span class="wst ${uCls(T.u)}">${signed(T.u, 1)}u</span></button>`).join('')}</div></section>` : ''}
       ${race.length ? `<section class="crown"><div class="vh"><h2 class="h2">Bloodlines</h2>${vipBadge()}</div><p class="note">Every character has heirs learning in the background. When one proves it’s better, it takes over: a new generation.</p>
@@ -1416,6 +1451,7 @@ function viewCast() {
       ${c.origin ? `<div class="origin"><b>Where the eye comes from</b><p>${esc(c.origin)}</p></div>` : ''}
       <div class="statrow"><div><b>${rec(g)}</b><span>Official game picks${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span></div><div><b>${rec(pr)}</b><span>Props</span></div><div class="sr-par"><b>${parRec(PS)}</b><span>Parlays${PS.w + PS.l ? `, <em class="${uCls(PS.u)}">${signed(PS.u, 1)}u</em>` : ''}</span></div><div><b>${(c.picks || []).length}</b><span>Picks today</span></div></div>
       ${(c.best || []).length ? `<h2 class="h2">Best at</h2><div class="lanes">${c.best.map(x => `<span class="lane good">${esc(x.lane)} <b>${x.w}–${x.l}</b>${x.u ? ` ${x.u > 0 ? '+' : ''}${x.u}u` : ''}</span>`).join('')}${(c.still || []).map(x => `<span class="lane meh">Still learning: ${esc(x.lane)} <b>${x.w}–${x.l}</b></span>`).join('')}</div>` : ''}
+      ${lanesHtml(c)}
       ${c.par || parToday(F, c.v).length ? parHtml(c.par, parToday(F, c.v), parToday(F).length > 0) : ''}
       <h2 class="h2">Today’s official picks</h2>${todayTxt(c) ? `<p class="tk-sum castday">${todayTxt(c)}${S.liveAt && todayLive(c).on ? ` · <span class="tk-upd">Scores updated ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}</span>` : ''}</p>` : ''}${games.length || props.length ? `<div class="paper tix">${games.map(pickRow).join('')}${props.length ? `<div class="tix-h sub"><b>Props</b></div>${props.map((p, i) => pickRow(p, i + games.length)).join('')}` : ''}</div>` : '<p class="note">Nothing official today. It only speaks when it’s sure.</p>'}
       ${(c.recent || []).length ? `<h2 class="h2">Recent results</h2><div class="paper tix">${c.recent.map(r => `<div class="leg"><div class="li">${mark(r.r)}<span class="pk">${esc(r.kind === 'prop' ? r.pick : readPick(r).big)}${r.price != null ? ' ' + esc(odds(r.price)) : ''}<small>${esc([LEAGUE[r.sp], r.gl, shortDay(r.d)].filter(Boolean).join(' · '))}</small></span><span class="u"></span></div></div>`).join('')}</div>` : ''}
@@ -2123,23 +2159,36 @@ function pubRecHtml(P) { const M = AC.me || {};
     <label class="chk"><input type="checkbox" data-act="pubtoggle" data-k="pub"${M.pub || M.cap ? ' checked' : ''}${M.cap ? ' disabled' : ''}> Make my record public${M.cap ? ' (✔ verified capper: always public)' : ''}</label>
     <label class="chk"><input type="checkbox" data-act="pubtoggle" data-k="open"${M.pubOpen ? ' checked' : ''}${M.pub || M.cap ? '' : ' disabled'}> Show my open bets too</label>
     ${M.pub || M.cap ? `<div class="row"><button type="button" class="btn sm" data-act="proflink" data-name="${esc(P.name)}">Copy my link</button><button type="button" class="btn ghost sm" data-act="prof" data-name="${esc(P.name)}">See it</button></div>` : ''}</div>`; }
-const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, tix: viewTix, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, admin: viewAdmin, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin, u: viewProfile };
+let GCM = null, GC_ON = '';
+/* the game's own entry on the Slate: its ESPN id rides on the live scores */
+const gcGame = g => { const k = Object.keys(S.live || {}).find(x => x.startsWith(g.sp + '|') && String((S.live[x] || {}).id) === String(g.id)); return k ? k.slice(g.sp.length + 1) : ''; };
+function gcPicks(g) { const B = boardOf(), gm = gcGame(g), b = B && gm ? (B.games || []).find(x => x.sp === g.sp && x.game === gm) : null; if (!b) return '';
+  const h = boardPicksHtml(b, { ...BF0 }, B.heavy || -500, true); return h ? `<h2 class="h2 gc-h">The desk’s picks on this game</h2>${h}` : ''; }
+function gcBack() { if (S.gcFrom) history.back(); else go('slate', true); }
+async function viewGc() {
+  const el = $('#v-gc'), g = S.gc; if (!g) return; const key = g.sp + ':' + g.id; if (GC_ON === key && el.querySelector('.gc-top')) return;
+  if (!GCM) { el.innerHTML = '<div class="shimmer"></div>'; try { GCM = await import('./gamecast.js?v=1'); } catch (e) { el.innerHTML = '<div class="paper blank"><b>Gamecast didn’t load</b><p>Check your connection, then <button type="button" class="link" data-go="slate">go back to the Slate</button>.</p></div>'; return; } }
+  if (S.tab !== 'gc' || S.gc !== g) return; GC_ON = key; GCM.mount(el, { sp: g.sp, id: g.id, back: gcBack, picksHtml: () => gcPicks(g) }); }
+const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, tix: viewTix, gc: viewGc, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, admin: viewAdmin, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin, u: viewProfile };
 function render() { VIEWS[S.tab](); }
 function go(tab, push) {
   /* v3.3 · #u=<name> opens a member's public record (the Open Scoreboard) */
   if (typeof tab === 'string' && tab.startsWith('u=')) { try { S.profile = decodeURIComponent(tab.slice(2)); } catch { S.profile = tab.slice(2); } tab = 'u'; }
   /* v58 · #lg=<id>: a shared league opens on the Leagues tab, its standings open, scrolled to and lit up */
   if (typeof tab === 'string' && tab.startsWith('lg=')) { const lid = String(tab.slice(3)).replace(/[^a-z0-9]/gi, '').slice(0, 24); tab = 'leagues'; if (lid) { LGX.open = lid; LGX.focus = lid; } }
-  if (!TABS.includes(tab) || (tab === 'u' && !S.profile)) tab = 'today';
+  /* v78 · #gc=<sport>:<ESPN game id> opens the Gamecast; Back (the button, the phone's back gesture) returns to where it was opened */
+  if (typeof tab === 'string' && tab.startsWith('gc=')) { const [sp, id] = tab.slice(3).split(':'); if (sp && /^\d+$/.test(id || '')) S.gc = { sp, id }; tab = 'gc'; }
+  if (!TABS.includes(tab) || (tab === 'u' && !S.profile) || (tab === 'gc' && !S.gc)) tab = 'today';
+  if (tab === 'gc' && S.tab !== 'gc') S.gcFrom = push ? S.tab : ''; if (S.tab === 'gc' && tab !== 'gc' && GCM) { GCM.unmount(); GC_ON = ''; }
   S.tab = tab;
   for (const t of TABS) $('#v-' + t).hidden = t !== tab;
   for (const b of $$('[data-go]')) { if (b.closest('.tabs,.nav-top') || b.id === 'tixBtn') { if (b.dataset.go === tab || (b.dataset.also || '').split(' ').includes(tab)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); } }
-  const hash = '#' + (tab === 'u' ? 'u=' + encodeURIComponent(S.profile) : tab); if (push && location.hash !== hash) history.pushState(null, '', hash);
+  const hash = '#' + (tab === 'u' ? 'u=' + encodeURIComponent(S.profile) : tab === 'gc' ? `gc=${S.gc.sp}:${S.gc.id}` : tab); if (push && location.hash !== hash) history.pushState(null, '', hash);
   render(); window.scrollTo(0, 0);
   try { if (TG && TG.BackButton) { if (tab === 'today') TG.BackButton.hide(); else TG.BackButton.show(); } } catch (e) { }
   if (tab === 'slate') { if (!S.slate) loadSlate(); else slateLive(); }
   if (tab === 'u') profLoad(S.profile);
-  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your account — TheDesk', tix: 'My tickets — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', challenges: 'Challenges — TheDesk', leagues: 'Leagues — TheDesk', admin: 'Admin — TheDesk', cast: 'The characters — TheDesk', chat: 'Chat — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk', u: `${S.profile || 'A member'}: the record — TheDesk` }[tab];
+  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your account — TheDesk', tix: 'My tickets — TheDesk', gc: 'Gamecast — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', challenges: 'Challenges — TheDesk', leagues: 'Leagues — TheDesk', admin: 'Admin — TheDesk', cast: 'The characters — TheDesk', chat: 'Chat — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk', u: `${S.profile || 'A member'}: the record — TheDesk` }[tab];
 }
 document.addEventListener('click', async e => {
   const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, true); return; }
@@ -2265,12 +2314,14 @@ document.addEventListener('click', async e => {
     /* 👑 #1s only and the Forecast chips switch on and off; a strength chip goes back to the desk's colored picks */
     S.bf[k] = a.dataset.tog && String(S.bf[k]) === v ? BF0[k] : k === 'cf' ? (v === TOP_CF ? TOP_CF : +v || 0) : v;
     if (k === 'say' && S.bf.say !== 'top') S.bf.lane = '';
-    if (k === 'tier') Object.assign(S.bf, { ch: 'all', cf: 0, say: 'all', lane: '', up: 'all' });
+    if (k === 'tier') Object.assign(S.bf, { ch: 'all', cf: 0, say: 'all', lane: '', up: 'all', fav: 'all' });
     store.set('bf', S.bf); S.openGame = ''; render(); }
   else if (act === 'bfscope') { /* from a game's 👑 line: every pick that #1 has in its kind of bet, across the sheet */
-    S.bf = { ...S.bf, tier: 'all', bt: 'all', ch: 'all', cf: 0, fc: 'all', up: 'all', say: 'top', lane: a.dataset.lab || '' }; store.set('bf', S.bf); S.openGame = ''; render();
+    S.bf = { ...S.bf, tier: 'all', bt: 'all', ch: 'all', cf: 0, fc: 'all', up: 'all', fav: 'all', say: 'top', lane: a.dataset.lab || '' }; store.set('bf', S.bf); S.openGame = ''; render();
     const f = $('#v-slate .bf'); if (f) f.scrollIntoView({ block: 'start' }); }
   else if (act === 'bfreset') { S.bf = { ...BF0, view: S.bf.view || 'time' }; store.set('bf', S.bf); render(); }
+  else if (act === 'fav') { favToggle(a.dataset.v, a.dataset.k); render(); }
+  else if (act === 'favgo') { S.bf = { ...S.bf, tier: 'all', fav: 'on' }; store.set('bf', S.bf); S.openGame = ''; go('slate', true); }
   else if (act === 'gobf') { S.bf = { ...S.bf, ...BF0, tier: a.dataset.tier || 'all', view: 'time' }; store.set('bf', S.bf); S.slateDay = 0; go('slate', true); }
   else if (act === 'ranksp') { S.rankSp = a.dataset.sp; S.rankAll = false; render(); }
   else if (act === 'rankall') { S.rankAll = !S.rankAll; render(); }
