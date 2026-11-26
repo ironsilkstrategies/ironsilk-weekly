@@ -29,7 +29,14 @@ setTimeout(async () => { try {
   const card = E(`(()=>{const CPI=new Map([['nba|CHA',[{id:'a',sp:'nba',player:'Ryan Kalkbrenner',team:'CHA',k:'reb',thr:8,p:0.8,d:today()},{id:'b',sp:'nba',player:'Brandon Miller',team:'CHA',k:'pts',thr:30,p:0.83,d:today()},{id:'c',sp:'nba',player:'Brandon Miller',team:'CHA',k:'ast',thr:6,side:'under',p:0.78,d:today()}]]]);
     return slotPropsHtml({sp:'nba',game:'CHI@CHA',day:today(),props:[]},CPI).replace(/<[^>]+>/g,' ').replace(/\\s+/g,' ');})()`);
   T('the game card\'s character prop calls: a player ruled out is gone', !/Kalkbrenner/.test(card) && /Brandon Miller 30\+ PTS/.test(card), card);
-  T('…and an under call reads as an under (not "6+ AST")', /Brandon Miller under 5\.5 AST/.test(card), card);
+  /* v3.5.28 · Nov 25, 6:28 PM, Chris: "A lot of bets on my book in regards to props can't even be made by unders so we like to lean to overs" */
+  T('…and no unders on the card (the day\'s earlier logged unders included): the characters lean to overs (v3.5.28)', !/under/.test(card) && !/6\+ AST/.test(card), card);
+  const ov = P(`(()=>{const D=pstDb('nba');const mk=(n,team,pts)=>{D.p[pstId(n)]={name:n,team,n:20,s:{pts:{sum:pts*20,sq:pts*pts*20+20*30,ema:pts,gp:20},reb:{sum:60,sq:220,ema:3,gp:20}}};};
+    mk('Star Guard','CHA',28);mk('Bench Wing','CHA',6);teamsToday=()=>new Set(['CHA','CHI']);delete window.cpropToday;CPT_MEMO=null;
+    return JSON.stringify((typeof cpropToday0==='function'?cpropToday0():[]).filter(c=>/Star Guard|Bench Wing/.test(c.player)).map(c=>({pl:c.player,k:c.k,thr:c.thr,side:c.side,p:c.p})));})()`);
+  T('the characters call overs only: no unders at all (unders are off at the source)', E('CPROP_UNDERS_ON') === false && ov.length > 0 && ov.every(c => c.side === 'over'), J(ov));
+  T('…a scorer\'s over is at the highest line it\'s still 70%+ sure of (not a gimme "10+ PTS")', ov.filter(c => c.pl === 'Star Guard' && c.k === 'pts').every(c => c.thr >= 20 && c.p >= 0.7), J(ov.filter(c => c.pl === 'Star Guard')));
+  T('…a bench player with no 70% over gets no call (it used to be "under 14.5 PTS" at 90%)', !ov.some(c => c.pl === 'Bench Wing' && c.k === 'pts'), J(ov.filter(c => c.pl === 'Bench Wing')));
   /* a prop parlay's legs grade by their side, combos from their parts */
   E(`set('d4.pstlast.nba',{nicdowd:{d:'2026-11-24',v:{pts:2,reb:1,ast:0}},tremann:{d:'2026-11-24',v:{pts:10,reb:5,ast:3}}});delete RO_CACHE['d4.pstlast.nba'];`);
   const g1 = P(`(()=>{const a={kind:'prop',sp:'nba',player:'Nic Dowd',k:'ast',thr:2,side:'under',pick:'Nic Dowd under 1.5 AST',price:-300};const b={kind:'prop',sp:'nba',player:'Tre Mann',k:'pra',thr:20,pick:'Tre Mann 20+ PTS+REB+AST',price:-150};const c={kind:'prop',sp:'nba',player:'Tre Mann',k:'pra',thr:20,pick:'Tre Mann under 19.5 PTS+REB+AST',price:-150};

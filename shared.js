@@ -3601,7 +3601,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261125g',DESK_VER='3.5.27';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261125h',DESK_VER='3.5.28';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -16530,6 +16530,11 @@ const LIKELY_LADDER={nba:{pts:[15,20,25,30],reb:[6,8,10],ast:[4,6,8],fg3:[2,3,4]
   mlb:{h:[1,2],tb:[2,3],hr:[1],k:[5,6,7]},nhl:{s:[2,3,4],pts:[1],g:[1],a:[1],bs:[1,2,3],ht:[2,3,4],sv:[20,25,30],ga:[2,3,4]},
   ncaab:{pts:[10,15,20,25],reb:[5,7,10],ast:[3,5,7],fg3:[1,2,3],pra:[15,20,25,30],pr:[12,15,20],pa:[12,15,20],ra:[6,8,10],stl:[1,2],blk:[1,2],to:[2,3,4]}};
 /* unders only where the stat has room on both sides (never "no touchdown" or "no goal") */
+/* v3.5.28 · Nov 25, 6:27 PM, Chris: "Now it's only betting unders?!" … "A lot of bets on my book in regards to props can't even be made by unders
+   so we like to lean to overs." They were always mostly unders — the screens printed them as overs until v3.5.27 ("4+ turnovers" was "under
+   3.5"): 69% of the day's calls, set where a player's average was about two-thirds of the line. The characters now call overs only — the
+   milestone props a book actually offers ("25+ PTS"), each at the highest line it's still 70%+ sure of. Flip this to bring unders back. */
+const CPROP_UNDERS_ON=false;
 const CPROP_UNDER=new Set(['pts','reb','ast','fg3','pra','pr','pa','ra','to','py','ry','wy','rec','cmp','att','car','rry','pry','tkl','s','ht','bs','sv','ga','k','tb','lwy','lry','kpts']);
 /* v2.50 · only teams playing TODAY: the football boards hold the whole week, so Sunday's players no longer show as Thursday props */
 function teamsToday(sp){const s=new Set();const d=today();try{(sportGames(sp)||[]).forEach(g=>{const a=String(g.abstract||'').toLowerCase();if(a&&a!=='pre'&&a!=='preview')return;const gd=gameDayOf(g);if(gd&&gd!==d)return;s.add(g.away.abbr);s.add(g.home.abbr);});}catch(e){}
@@ -19738,7 +19743,7 @@ function cpropToday0(){const d=today();const out=[];const BR=cpropBrier();const 
         const best={},bestU={};ths.forEach(t=>{const R0=cpropReads(sp,P.name,k,t,BR);if(!R0)return;
           CPROP_VOICES.forEach(v=>{const p=R0.r[v];if(p!=null&&p>=0.70)best[v]={p,thr:t,mu:R0.J.mu,why:v==='Coach'&&R0.J.match?R0.J.match.why:''};
             /* v2.99 · its lowest line it's 70%+ sure he stays UNDER — used only when no over clears for this character */
-            if(p!=null&&CPROP_UNDER.has(k)&&t>=2&&1-p>=0.70&&!bestU[v]&&pstPlays(sp,P,k,t,'under'))bestU[v]={p:1-p,thr:t,mu:R0.J.mu,why:v==='Coach'&&R0.J.match?R0.J.match.why:'',side:'under'};});});
+            if(CPROP_UNDERS_ON&&p!=null&&CPROP_UNDER.has(k)&&t>=2&&1-p>=0.70&&!bestU[v]&&pstPlays(sp,P,k,t,'under'))bestU[v]={p:1-p,thr:t,mu:R0.J.mu,why:v==='Coach'&&R0.J.match?R0.J.match.why:'',side:'under'};});});
         Object.entries(bestU).forEach(([v,b])=>{if(!best[v])best[v]=b;});
         Object.entries(best).forEach(([v,b])=>{let cal=cpropCal(C,v,b.p);const o=REC[v+'|'+sp+'|'+pstId(P.name)];let fav=null;
           /* v2.02 · its record on THIS player is evidence too — 6 games of prior weight on the calibrated % */

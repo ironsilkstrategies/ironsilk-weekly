@@ -322,7 +322,7 @@ function deskTicket(legs,v){const dec=legs.reduce((a,x)=>a*americanToDecimal(x.p
     ...(x.kind==='prop'?{player:x.player,team:x.team,k:x.k,thr:x.thr,side:x.side||'over',est:true}:{}),...(x.skill?{skill:true}:{})})),dec:+dec.toFixed(4),p,alloc:true};}
 /* the character props the desk can use: official (70%+ calibrated), never a player the character fades */
 function deskPropCands(){let C=[];try{C=cpropToday();}catch(e){}
-  return C.filter(c=>c.cal>=DESK_PROP_MIN&&c.fav!=='fade').map(c=>({...c,kind:'prop',game:cpxPropGame(c.sp,c.team),pick:cpropLine(c),price:cpxPropPrice(c.cal),p:c.cal,fit:c.cal+(c.fav==='fav'?0.03:0),key:deskPropKey(c),
+  return C.filter(c=>c.cal>=DESK_PROP_MIN&&c.fav!=='fade'&&(c.side!=='under'||(typeof CPROP_UNDERS_ON!=='undefined'&&CPROP_UNDERS_ON))).map(c=>({...c,kind:'prop',game:cpxPropGame(c.sp,c.team),pick:cpropLine(c),price:cpxPropPrice(c.cal),p:c.cal,fit:c.cal+(c.fav==='fav'?0.03:0),key:deskPropKey(c),
     why:[`${Math.round(c.cal*100)}% calibrated`+(c.rec?` · ${c.rec} on this player`:'')+(c.why?` · ${c.why}`:'')]})).filter(c=>c.game&&!deskStarted(c));}
 function deskAllocate(V,d){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();const C=deskCands(V,d);const use={},where={};
   const take=(k,place)=>{use[k]=(use[k]||0)+1;(where[k]=where[k]||[]).push(place);};
@@ -2484,7 +2484,8 @@ function slotAgreeHtml(g,VI){const C=VI.get(g.sp+'|'+g.game)||[];if(!C.length)re
   return P.length?`<div class="mono" style="font-size:10.5px;margin-top:3px">🗣 Characters: ${P.join(' · ')}</div>`:'';}
 function slotPropsHtml(g,CPI){const[a,h]=g.game.split('@');const tc=g.props.slice().sort((x,y)=>(y.p||0)-(x.p||0));
   const out=n=>{try{return typeof rsOut==='function'&&rsOut(rsInjury(g.sp,n));}catch(e){return false;}};   /* v3.5.27 · ruled out → off the card */
-  const M=new Map();[a,h].forEach(t=>(CPI.get(g.sp+'|'+t)||[]).forEach(x=>{if(String(x.d).slice(0,10)!==g.day||out(x.player))return;const k=x.player+'|'+x.k+'|'+x.thr+'|'+(x.side||'over');
+  const M=new Map();[a,h].forEach(t=>(CPI.get(g.sp+'|'+t)||[]).forEach(x=>{if(String(x.d).slice(0,10)!==g.day||out(x.player))return;if(x.side==='under'&&!(typeof CPROP_UNDERS_ON!=='undefined'&&CPROP_UNDERS_ON))return;   /* v3.5.28 · overs only (the day's earlier unders too) */
+const k=x.player+'|'+x.k+'|'+x.thr+'|'+(x.side||'over');
     const o=M.get(k)||{player:x.player,k:x.k,thr:x.thr,side:x.side||'over',p:0,n:0};o.p=Math.max(o.p,+x.p||0);o.n++;M.set(k,o);}));
   const cp=[...M.values()].sort((x,y)=>y.p-x.p||y.n-x.n);if(!tc.length&&!cp.length)return'';
   const cpl=o=>`${txtEsc(cpropLine(o))} <b style="color:var(--win)">${Math.round(o.p*100)}%</b>${o.n>1?` <span style="color:var(--mute)">(${o.n} characters)</span>`:''}`;
