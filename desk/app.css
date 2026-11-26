@@ -1213,3 +1213,6 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .tb3 tr.now th{box-shadow:inset 3px 0 0 var(--brass)}
 /* v69 · the characters' 1st-half calls on a game's row */
 .g-half{font-size:11.5px;color:var(--ink-2);padding:5px 0 0;line-height:1.4}.g-half b{color:var(--ink);font-weight:700}.g-half small{color:var(--ink-3)}
+/* v75 · a profile's parlays for today sit first in its lane; the roster marks who has one today */
+.pl-none{margin:4px 0 14px;font-size:14px;color:var(--cream-2)}
+.cc-par{display:inline-block;margin-top:12px;padding:4px 10px;border-radius:999px;background:rgba(242,208,103,.14);box-shadow:inset 0 0 0 1px rgba(242,208,103,.35);color:var(--foil);font:700 12.5px/1.2 var(--text)}

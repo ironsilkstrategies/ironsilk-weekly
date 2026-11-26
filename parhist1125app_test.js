@@ -40,7 +40,7 @@ const feed = chars => ({ v: 4, beta: true, brand: 'TheDesk', generated: AT - 20 
         sum: (document.querySelector('#v-cast .ph-sum') || {}).innerText || '', kinds: [...document.querySelectorAll('#v-cast .ph-k button')].map(x => ({ t: x.innerText.replace(/\s+/g, ' ').trim(), on: x.getAttribute('aria-pressed') })),
         rows: [...document.querySelectorAll('#v-cast .ph')].map(d => ({ s: d.querySelector('summary').innerText.replace(/\s+/g, ' ').trim(), open: d.open, legs: [...d.querySelectorAll('.ph-legs .leg .pk')].map(x => x.childNodes[0].textContent.trim()), marks: [...d.querySelectorAll('.ph-legs .mk')].map(x => x.textContent) })) }; });
     let s = await st();
-    T('the character\'s profile: the parlay lane with its record, today\'s tickets, then its parlay history', s.title === 'The Scout' && s.lane && s.th.join('|') === 'Today’s tickets|Parlay history', JSON.stringify(s.th));
+    T('the character\'s profile: the parlay lane with today\'s parlays first (v75), its record, then its parlay history', s.title === 'The Scout' && s.lane && s.th.join('|') === 'Today’s parlays|Parlay history', JSON.stringify(s.th));
     T('…every ticket of the last 60 days, newest first: the day, the kind, legs hit, price, chance to cash, what it paid', s.rows.length === 4 && /Tue, Nov 24/.test(s.rows[0].s) && /Strong-suit ticket/i.test(s.rows[0].s) && /3\/3 legs hit · \+226 · 31% to cash/.test(s.rows[0].s) && /\+2\.26u/.test(s.rows[0].s) && /−1\.00u/.test(s.rows[1].s) && /Waiting/.test(s.rows[3].s), JSON.stringify(s.rows.map(r => r.s)));
     T('…the history adds up at the top (4 tickets, 1–2, +0.26u; one still waiting)', /4 tickets · 1–2 · \+0\.26u/.test(s.sum), s.sum);
     T('…closed until tapped (the list stays short); the old last-six chips give way to it', s.rows.every(r => !r.open) && !s.chips, JSON.stringify([s.rows.map(r => r.open), s.chips]));
@@ -55,7 +55,7 @@ const feed = chars => ({ v: 4, beta: true, brand: 'TheDesk', generated: AT - 20 
     T('no page errors', errs.length === 0, errs.join(' | ')); await ctx.close();
     ({ ctx, p, errs } = await open(feed([ch('Scout', 'The Scout', OLDPAR)])));
     s = await st();
-    T('an older feed (no history yet) keeps the last-six chips', s.chips && !s.rows.length && s.th.join('|') === 'Today’s tickets', JSON.stringify(s));
+    T('an older feed (no history yet) keeps the last-six chips', s.chips && !s.rows.length && s.th.join('|') === 'Today’s parlays', JSON.stringify(s));
     T('…no page errors', errs.length === 0, errs.join(' | ')); await ctx.close();
   } catch (e) { T('test ran', false, String(e && e.stack || e).slice(0, 900)); }
   await b.close(); console.log(`\n${pass}/${pass + fail} passed`); process.exit(fail ? 1 : 0);
