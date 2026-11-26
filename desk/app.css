@@ -1317,3 +1317,7 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .wf{list-style:none;margin:0;padding:0}.wf li{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:12px 0;border-bottom:1px solid rgba(243,238,223,.09);font-size:14.5px;line-height:1.4}
 .wf .wf-i{font-size:18px;line-height:1.2}.wf b{color:var(--cream);font-weight:800}.wf b a{color:var(--cream);text-decoration:none}.wf b a:hover{text-decoration:underline}.wf b em{font-style:normal;font-size:11px;font-weight:800;color:#1a1405;background:var(--foil);padding:1px 6px;border-radius:999px;margin-left:4px}
 .wf p{margin:3px 0 0;color:var(--cream-2)}.wf small{display:block;margin-top:4px;color:var(--cream-3);font-size:12px}.wf li.wf-score b{color:#ffd9a0}
+
+/* v79 · the player's team beside his name, and every ticket card's text in dark ink (a card on the green page used to inherit the page's cream) */
+.pc-tm{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:6px;font-size:.62em;font-weight:800;letter-spacing:.02em;vertical-align:middle;background:rgba(21,19,15,.08);color:var(--ink-2)}
+.rtk,.mytk .slip-main,.fl-pk{color:var(--ink)}

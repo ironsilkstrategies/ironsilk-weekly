@@ -159,7 +159,7 @@ function isCounterPunch(x){try{if(!x||!CHARS[x.voice]||META_VOICES.has(x.voice)&
 function cpRecordHtml(){const M=get(CP_KEY,{})||{};const V=get(VOICES_KEY,[])||[];const ix={};V.forEach(v=>{if(v&&v.graded)ix[cpId(v)]=v;});let w=0,l=0,u=0;const td=[];
   Object.entries(M).forEach(([id,x])=>{const g=ix[id];if(g&&g.hit!=null){g.hit?w++:l++;u+=g.units||0;}if(x.d===today())td.push(x);});
   return`<div class="tkt"><h3>🥊 Counter-punches</h3><div class="sub">Under the bar, but ${CP_RULE.proven}+ proven characters agree, the price pays ${Math.round(CP_RULE.ev*100)}%+ and sharp money isn't against it.</div>
-    <div style="margin-top:4px">Record: <b>${w}-${l}</b> (${u>=0?'+':''}${u.toFixed(1)}u)</div>${td.length?`<div class="mono" style="font-size:10.5px;margin-top:4px">Today: ${td.map(x=>`🥊 ${txtEsc(x.pick)} ${tcSgn(x.price)} (${Math.round(x.cf*100)}% · ${x.on.length} proven)`).join(' · ')}</div>`:''}</div>`;}
+    <div style="margin-top:4px">Record: <b>${w}-${l}</b> (${u>=0?'+':''}${u.toFixed(1)}u)</div>${td.length?`<div class="mono" style="font-size:10.5px;margin-top:4px">Today: ${td.map(x=>`🥊 ${txtEsc(pkShow(x))} ${tcSgn(x.price)} (${Math.round(x.cf*100)}% · ${x.on.length} proven)`).join(' · ')}</div>`:''}</div>`;}
 const confPct=c=>c==null?'—':Math.round(c*100)+'%';
 /* calls logged before the meter existed (or locked before it loaded) get their
    confidence once, from what's known now — the pick itself never changes */
@@ -879,7 +879,7 @@ function ch2Card(c){const pct=Math.max(0,Math.min(100,(c.pot-0)/(c.goal)*100));c
   const col=c.status==='won'?'var(--gold)':c.status==='active'?(c.pot>=c.start?'var(--win)':'var(--rust)'):'var(--mute)';
   const plays=c.status==='active'?ch2Plays(c):[];const open=c.steps.filter(s=>!s.done);
   const playHtml=c.status!=='active'?'':plays.length?plays.map((o,i)=>`<div class="ch-play"><div style="min-width:0;flex:1"><b>${txtEsc(o.label)}</b> <span class="mono" style="color:var(--gold);font-size:11px">${decimalToAmerican(o.dec)}</span>
-        <div class="mono" style="font-size:9.5px;color:var(--mute)">${o.legs.length>1?o.legs.map(l=>txtEsc(l.pick)).join(' · ')+' · ':''}${Math.round((o.p||0)*100)}% · stake ${deskMoney(o.stake)} → wins ${deskMoney(o.stake*(o.dec-1))}</div></div>
+        <div class="mono" style="font-size:9.5px;color:var(--mute)">${o.legs.length>1?o.legs.map(l=>txtEsc(pkShow(l))).join(' · ')+' · ':''}${Math.round((o.p||0)*100)}% · stake ${deskMoney(o.stake)} → wins ${deskMoney(o.stake*(o.dec-1))}</div></div>
         ${o.taken?'<span class="mono" style="color:var(--win);font-size:10px">✓ locked</span>':o.stake?`<button class="primary" onclick="ch2Lock(${jsArg(c.id)},${i})">Lock it</button>`:'<span class="mono" style="font-size:10px;color:var(--mute)">pot too small</span>'}</div>`).join('')
       :`<div class="sub" style="font-size:10.5px">${deskFrozen()?'Nothing from '+ch2SrcLab(c.src)+' today — no play is a play.':'Today\'s move shows up after the master evaluation.'}</div>`;
   return`<div class="tkt ch-card" style="border-left:3px solid ${col}"><div class="ch-top"><b>${c.ico} ${txtEsc(c.name)}</b><span class="mono" style="font-size:10px;color:${col}">${c.status==='active'?left+' day'+(left===1?'':'s')+' left':c.status.toUpperCase()}</span></div>
@@ -1035,11 +1035,11 @@ function renderMoneyTab(){const S=bankState();const col=S.avail>=S.start+S.adj?'
   /* today's plan from the Banker */
   let D=null;try{const st=bkDayState();D=st.locked?st:st.preview;}catch(e){}
   const best=(()=>{try{return best5State().top3||[];}catch(e){return[];}})();
-  const bRow=x=>{const dec=americanToDecimal(+x.price);const t={p:x.p,dec};const s=deskStake(t,Math.max(0,S.avail));return`<div class="plan-row"><div><b>${txtEsc(x.pick)}</b> <span class="mono" style="color:var(--gold);font-size:11px">${sgnP(x.price)}</span><div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(x.sp,x.game))}${gameWhenHtml(x.sp,x.game,x.start)} · ${Math.round(x.p*100)}% sure</div></div><div class="plan-st">${s?deskMoney(s):'—'}</div></div>`;};
+  const bRow=x=>{const dec=americanToDecimal(+x.price);const t={p:x.p,dec};const s=deskStake(t,Math.max(0,S.avail));return`<div class="plan-row"><div><b>${txtEsc(pkShow(x))}</b> <span class="mono" style="color:var(--gold);font-size:11px">${sgnP(x.price)}</span><div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(x.sp,x.game))}${gameWhenHtml(x.sp,x.game,x.start)} · ${Math.round(x.p*100)}% sure</div></div><div class="plan-st">${s?deskMoney(s):'—'}</div></div>`;};
   h+=`<div class="sbar"><h2>Today's plan · from the Banker</h2><div class="ln"></div></div><div class="tkt">
     ${deskFrozen()?'':'<div class="sub" style="font-size:10.5px;margin-bottom:4px">Preview — it locks at the master evaluation.</div>'}
     ${best.length?`<div class="mktlab">⭐ Best 3 — singles</div>${best.map(bRow).join('')}`:'<div class="sub" style="font-size:10.5px">No Best 3 today.</div>'}
-    ${D&&D.own?`<div class="mktlab">🏦 The Banker's parlay · ${decimalToAmerican(D.own.dec)} · ${Math.round(D.own.p*100)}% to cash</div><div class="plan-row"><div class="mono" style="font-size:10.5px">${D.own.legs.map(l=>txtEsc(l.pick)).join(' · ')}</div><div class="plan-st">${D.own.stake?deskMoney(D.own.stake):'—'}</div></div>`:''}
+    ${D&&D.own?`<div class="mktlab">🏦 The Banker's parlay · ${decimalToAmerican(D.own.dec)} · ${Math.round(D.own.p*100)}% to cash</div><div class="plan-row"><div class="mono" style="font-size:10.5px">${D.own.legs.map(l=>txtEsc(pkShow(l))).join(' · ')}</div><div class="plan-st">${D.own.stake?deskMoney(D.own.stake):'—'}</div></div>`:''}
     <div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:6px">Stakes: ¼-Kelly of ${deskMoney(S.avail)}, max 2% a play, every bet wins at least $1. Nothing forced — if it isn't official, it isn't here.</div></div>`;
   h+=leagueHtml(false);
   h+=ch2Html();
@@ -1417,7 +1417,7 @@ function pubParRec(v,from,d,CPA,CPXA){const z=()=>({w:0,l:0,p:0,u:0,lw:0,ll:0}),
     const live=P.legs.filter(x=>!x.push),dec=live.reduce((a,x)=>a*(americanToDecimal(+x.price)||1.91),1),am=live.length?(dec>=2?Math.round((dec-1)*100):-Math.round(100/(dec-1))):null;
     if(day<d){const r0=!P.done?null:!live.length?'push':P.won?'win':'loss';
       o.hist.push({d:day,k,r:r0,price:am,u:r0==='win'?+(dec-1).toFixed(2):r0==='loss'?-1:0,p:P.p!=null&&isFinite(+P.p)?+(+P.p).toFixed(3):null,
-        legs:P.legs.map(x=>({sp:x.sp,g:x.game||'',pk:x.pick||(x.player?(()=>{try{return cpropLine(x);}catch(e){return x.player;}})():''),pr:x.price!=null&&isFinite(+x.price)?+x.price:null,h:x.push?2:x.hit===true?1:x.hit===false?0:null}))});}
+        legs:P.legs.map(x=>({sp:x.sp,g:x.game||'',pk:x.pick||(x.player?(()=>{try{return cpropPick(x);}catch(e){return x.player;}})():''),pr:x.price!=null&&isFinite(+x.price)?+x.price:null,h:x.push?2:x.hit===true?1:x.hit===false?0:null,...(x.player&&x.team?{pl:x.player,tm:x.team}:{})}))});}
     if(!P.done)return;
     const r=!live.length?'push':P.won?'win':'loss';
     if(r==='push')R.p++;else if(r==='win'){R.w++;R.u+=dec-1;}else{R.l++;R.u-=1;}
@@ -1449,7 +1449,7 @@ function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEac
         for(const x of cands){if(mine.length>=6)break;const k=key(x);if(mine.some(m=>m.key===k))continue;
           mine.push({key:k,sp:x.sp,player:x.player,k:x.k,thr:x.thr,side:x.side||'over',team:x.team,p:+(+(x.cal||x.p)).toFixed(3),note:x.rec?`${x.rec} on him before`:''});PL.dirty=true;}
         const logged=new Map(CP.filter(x=>x.voice===v&&String(x.d).slice(0,10)===d).map(x=>[key(x),x]));
-        mine.forEach(m=>{const g=logged.get(m.key);picks.push({kind:'prop',sp:m.sp,pick:(()=>{try{return cpropLine(m);}catch(e){return m.player;}})(),team:m.team,side:m.side,p:m.p,hit:g&&g.hit!=null?g.hit:null,push:!!(g&&g.push),note:m.note});});}
+        mine.forEach(m=>{const g=logged.get(m.key);picks.push({kind:'prop',sp:m.sp,pick:(()=>{try{return cpropPick(m);}catch(e){return m.player;}})(),team:m.team,side:m.side,p:m.p,hit:g&&g.hit!=null?g.hit:null,push:!!(g&&g.push),note:m.note});});}
       let best=[],still=[];try{const P=charProfile(v);best=(P.strong||[]).map(x=>({lane:pubLaneName(x.k),w:x.w,l:x.n-x.w,u:+(+x.u).toFixed(1)}));still=(P.weak||[]).slice(0,1).map(x=>({lane:pubLaneName(x.k),w:x.w,l:x.n-x.w}));}catch(e){}
       const top=(o,n)=>Object.values(o).map(x=>({...x,n:(x.for?x.for.w+x.for.l+x.vs.w+x.vs.l:x.over.w+x.over.l+x.under.w+x.under.l)})).sort((a,b)=>b.n-a.n).slice(0,n).map(x=>{delete x.n;return x;});
       /* v3.5.31 · Nov 26, Chris: "give the subscribers a chance to pick their fav characters per sport per option… the scorekeeper on nba ml's
@@ -1486,7 +1486,7 @@ function pubLiveQ(l,st,d){try{if(!l||!l.game||!st||Date.parse(st)>Date.now())ret
     ...(l.player?{bbProp:1}:{})};let r=null;try{r=gradeLeg(x,d||today());}catch(e){}const q=liveLegProb(x,r,d||today());return q==null?null:+(+q).toFixed(3);}catch(e){return null;}}
 function pubLeg(l,V){const st=l.start||(()=>{try{return deskGameStart(l.sp,l.game)||'';}catch(e){return'';}})();
   /* v3.5.27 · the leg's own text: rebuilt from a leg that had lost its side, every under read as an over ("under 9.5 REB" → "10+ REB") */
-  const pick=l.player?(l.pick||(()=>{try{return cpropLine(l);}catch(e){return'';}})()):l.pick;
+  const pick=l.player?(l.pick||(()=>{try{return cpropPick(l);}catch(e){return'';}})()):l.pick;
   return{sp:l.sp,game:l.game||'',gl:l.game?gameLabel(l.sp,l.game):'',pick,price:l.price,p:l.p!=null?+(+l.p).toFixed(3):null,q:l.player?null:pubLiveQ({...l,pick},st),start:st,hit:l.hit==null?null:l.hit,push:!!l.push,
     by:l.by?(Array.isArray(l.by)?l.by:[l.by]).map(charName):l.v?[charName(l.v)]:[],voices:l.player?[]:pubVoicesOn(l,V)};}
 function pubVip(V){try{const C=subCard();const par=P=>({who:charName(P.v),v:P.v,skill:!!P.skill,px:!!P.px,price:decimalToAmerican(P.dec),p:+(+P.p).toFixed(3),legs:P.legs.map(l=>pubLeg({...l,v:P.v},V))});
@@ -1746,7 +1746,7 @@ async function deskTgPostCard(force){const tok=String(get('d4.tgbot','')||'').tr
 function pubLockText(day,n,beta){const head=`🔒 <b>TheDesk — ${day}</b>`;if(!n)return`${head}\nNo play cleared the bar today — we don't force picks.\n<i>Every pick locked before the games, graded at the final.</i>`;
   if(!beta)return`${head}\nToday's Best ${n} are locked. Each one unlocks here and on the public page <b>30 minutes before its game</b>.${get('d4.sublink','')?`\nVIP has every pick now → ${txtEsc(get('d4.sublink',''))}`:''}\n<i>Every pick locked before the games, graded at the final.</i>`;
   let L=[];try{const T=(publicFeedCore(true).today)||{};const tm=t=>{try{return new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'})+' CT';}catch(e){return'';}};
-    L=(T.picks||[]).filter(x=>x&&!x.hidden&&x.pick).map((x,i)=>`⭐ #${i+1} <b>${txtEsc(x.pick)}</b> (${tcSgn(x.price)})${x.game?' · '+txtEsc(String(x.game).replace('@',' at ')):''}${x.start?' · '+tm(x.start):''}`)
+    L=(T.picks||[]).filter(x=>x&&!x.hidden&&x.pick).map((x,i)=>`⭐ #${i+1} <b>${txtEsc(pkShow(x))}</b> (${tcSgn(x.price)})${x.game?' · '+txtEsc(String(x.game).replace('@',' at ')):''}${x.start?' · '+tm(x.start):''}`)
       .concat((T.props||[]).filter(x=>x&&!x.hidden&&x.label).map(x=>`🎯 <b>${txtEsc(x.label)}</b>`));}catch(e){}
   return`${head}\n${L.length?`Today's free picks:\n${L.join('\n')}`:`Today's Best ${n} are locked`}\n\nEach one comes back here 30 minutes before its game. The full card is on the public page → ironsilkweekly.com/desk/\n<i>Every pick locked before the games, graded at the final.</i>`;}
 /* v3.0.8 · Nov 13: "once the public lounge hits 100 members the public lounge will be locked and renamed the VIP lounge". The worker
@@ -1852,7 +1852,7 @@ function todayBestHero(){let S=null;try{S=best5State();}catch(e){return'';}const
   return`<div class="tkt today-best" id="todayBestHero"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><h3 style="margin:0">🏆 Today's Best ${top.length}</h3><span class="mono" style="font-size:10.5px;color:${R.u>=0?'var(--win)':'var(--rust)'}">${rec}</span></div>
     <div class="sub mono" style="font-size:9.5px;margin:2px 0 6px">Straight bets${S.locked?' · 🔒 locked '+deskT(S.lockedAt):' · building'} — every one official (a character 70%+ sure).</div>
     ${top.map((x,i)=>{const p=x.cf!=null?x.cf:x.p!=null?x.p:best5Prob(x);return`<div class="tb-row"><div class="tb-n">${i+1}</div>
-      <div style="flex:1;min-width:0"><b style="font-size:14px">${txtEsc(x.pick)}</b> <span class="mono" style="font-size:11px;color:var(--gold)">${x.price!=null?tcSgn(x.price):''}</span>
+      <div style="flex:1;min-width:0"><b style="font-size:14px">${txtEsc(pkShow(x))}</b> <span class="mono" style="font-size:11px;color:var(--gold)">${x.price!=null?tcSgn(x.price):''}</span>
       <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(gameLabel(x.sp,x.game))}${gameWhenHtml(x.sp,x.game,x.start)}${(x.confBy||[]).length?' · '+x.confBy.map(v=>txtEsc(charName(v).replace(/^The /,''))).join(', '):x.unan?' · <span style="color:#ff6fae">★ unanimous</span>':''}</div></div>
       <div style="text-align:right"><div class="tb-p" style="color:${recColor(p,9)}">${Math.round((p||0)*100)}%</div><div class="mono" style="font-size:10px">${res(x)}</div></div></div>`;}).join('')}</div>`;}
 if(typeof renderToday==='function'){const RT0=renderToday;renderToday=function(noSnap){const r=RT0(noSnap);try{const el=document.getElementById('todayBody');if(el)el.insertAdjacentHTML('afterbegin',`<div id="todayTop">${todayTopHtml()}</div>`);}catch(e){console.warn('today top',e);}return r;};}
@@ -2159,7 +2159,7 @@ if(typeof window!=='undefined'&&typeof renderBest==='function'&&!window.__UNFRZ_
 /* v2.58 · a prop says whose player it is and which game: "Jalen Hurts 200+ pass yds (PHI · PHI@NYG 3:25 PM)" */
 function propWhere(c){if(!c)return'';let g=c.game||'';try{if(!g&&typeof cpxPropGame==='function')g=cpxPropGame(c.sp,c.team)||'';}catch(e){}
   let t='';try{const st=c.start||(typeof deskTeamStart==='function'?deskTeamStart(c.sp,c.team):'');if(st){const d=new Date(st);if(isFinite(d))t=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'})+' CT';}}catch(e){}
-  const bits=[c.team||'',g&&g!==c.team?g:'',t].filter(Boolean);return bits.length?` (${bits.join(' · ')})`:'';}
+  const bits=[c.team&&!c.player?c.team:'',g&&g!==c.team?g:'',t].filter(Boolean);   /* v3.5.33 · a player's team sits beside his name now (cpropLine) */return bits.length?` (${bits.join(' · ')})`:'';}
 
 /* v2.59 · who of the PROVEN characters (their lane in this sport and bet type is proven) is on this leg, and who is on the other side */
 function legStrength(l){const on=[],fade=[];if(!l||l.player||!l.game)return{on,fade};try{const V=roGet(VOICES_KEY,[],30e3)||[];const d=today();const m=l.m||l.market;

@@ -76,7 +76,12 @@ const teamName = (sp, a) => (NAMES[sp] || {})[ab(sp, a)] || String(a || '');
 const matchup = x => { const [a, h] = String(x.game || '').split('@'); return a && h ? `${teamName(x.sp, a)} at ${teamName(x.sp, h)}` : ''; };
 
 /* a pick, the way a bettor says it — and the same thing in plain words */
+/* v79 · Nov 26, Chris: "when it's a prop can we label what team they play for next to their names" — display only: the pick text
+   itself stays as is (the live box score reads the name out of it) */
+function propTeamTxt(l) { const t = l && l.team, pk = String((l && l.pick) || ''); if (!t || !pk) return null; const P = parseProp(pk), nm = (l.player && pk.startsWith(l.player) ? l.player : P && P.name) || '';
+  if (!nm || !pk.startsWith(nm) || /^\s*\(/.test(pk.slice(nm.length))) return null; return `${nm} (${t})${pk.slice(nm.length)}`; }
 function readPick(x) {
+  { const pt = (x.prop || x.player || x.kind === 'prop') ? propTeamTxt(x) : null; if (pt) return { big: pt, plain: pt }; }
   const p = String(x.pick || '').trim(); let m;
   if ((m = p.match(/^(Over|Under)\s+([\d.]+)$/i))) {
     const over = /over/i.test(m[1]);
@@ -388,7 +393,7 @@ function viewToday() {
 const decAm = d => !d || d <= 1 ? '' : d >= 2 ? '+' + Math.round((d - 1) * 100).toLocaleString('en-US') : '−' + Math.round(100 / (d - 1));
 const FST = { hit: ['✓', 'hit'], miss: ['✗', 'miss'], push: ['↺', 'push'], live: ['●', 'live'], open: ['·', 'open'] };
 const nmShort = pk => (parseProp(pk) || {}).name || '';
-const legText = l => l.prop || !l.game ? l.pick : (readPick({ sp: l.sp, game: l.game, pick: l.pick }).big || l.pick);
+const legText = l => l.prop || l.player || !l.game ? (propTeamTxt(l) || l.pick) : (readPick({ sp: l.sp, game: l.game, pick: l.pick }).big || l.pick);
 function founderLeg(l) {
   const [ic, cls] = FST[l.st] || FST.open, bar = l.prog && l.st !== 'open' ? Math.max(0, Math.min(100, l.prog.d === 'under' ? (l.prog.v <= l.prog.t ? 100 : 0) : (l.prog.v / l.prog.t) * 100)) : null;
   return `<li class="fl ${cls}"><span class="fl-ic">${ic}</span><span class="fl-pk">${esc(legText(l))}${l.price != null ? ` <small>${esc(odds(l.price))}</small>` : ''}
@@ -588,7 +593,7 @@ function scoreRing(n) { const c = n >= 75 ? 'var(--foil)' : n >= 60 ? 'var(--win
   return `<div class="pring" style="--n:${n};--c:${c}"><b>${n}</b><small>Desk</small></div>`; }
 function propCard(x) { const inSlip = S.slip.includes(x.id), PL = propLeg(x), PX = PL.game ? legState(PL) : { st: 'o' }, ll = PL.game ? liveLine(PL) : '';
   const room = x.by.map(b => { const k = pCast(b.v); return `<span class="seat" style="--c:${k.color}" title="${esc(k.name)}: ${Math.round(b.p * 100)}%"><i></i>${esc(k.name.replace(/^The /, ''))} <b>${Math.round(b.p * 100)}%</b></span>`; }).join('');
-  return `<article class="pcard${inSlip ? ' on' : ''} ps-${PX.st}">${PX.st !== 'o' ? `<span class="pstamp ${PX.st}">${PX.st === 'w' ? 'HIT' : PX.st === 'l' ? 'MISS' : PX.st === 'p' ? 'PUSH' : '● LIVE'}</span>` : ''}<div class="pc-top">${scoreRing(x.score)}<div class="pc-who"><h3>${esc(x.player)}</h3><p class="pc-line">${esc(pLine(x))}</p>
+  return `<article class="pcard${inSlip ? ' on' : ''} ps-${PX.st}">${PX.st !== 'o' ? `<span class="pstamp ${PX.st}">${PX.st === 'w' ? 'HIT' : PX.st === 'l' ? 'MISS' : PX.st === 'p' ? 'PUSH' : '● LIVE'}</span>` : ''}<div class="pc-top">${scoreRing(x.score)}<div class="pc-who"><h3>${esc(x.player)}${x.team ? ` <span class="pc-tm">${esc(x.team)}</span>` : ''}</h3><p class="pc-line">${esc(pLine(x))}</p>
       <small>${esc([LEAGUE[x.sp], x.opp ? (x.home ? 'vs ' : 'at ') + x.opp : x.team, x.start && PX.st === 'o' ? whenLabel(x.start) : ''].filter(Boolean).join(' · '))}</small>${ll ? `<div class="plive">${ll}</div>` : ''}</div></div>
     ${runStrip(x)}
     <div class="pchips"><span class="pchip ${pRate(x.l5) >= 0.8 ? 'hot' : ''}">L5 <b>${x.l5[0]}/${x.l5[1]}</b></span><span class="pchip ${pRate(x.l10) >= 0.7 ? 'hot' : ''}">L10 <b>${x.l10[0]}/${x.l10[1]}</b></span>
@@ -597,7 +602,7 @@ function propCard(x) { const inSlip = S.slip.includes(x.id), PL = propLeg(x), PX
     <button type="button" class="pslip-btn" data-act="pslip" data-id="${esc(x.id)}">${inSlip ? '✓ On your slip' : '＋ Add to slip'}</button></article>`; }
 function propSheet(L) { const th = (k, t) => `<button type="button" class="${S.pf.sort === k ? 'on' : ''}" data-act="psort" data-v="${k}">${t}</button>`;
   return `<div class="psheet"><div class="ps-h"><span>Prop</span>${th('score', 'Desk')}${th('l10', 'L10')}${th('streak', 'Run')}${th('votes', 'Room')}</div>${L.map(x => `<div class="ps-r${S.slip.includes(x.id) ? ' on' : ''}" data-act="pslip" data-id="${esc(x.id)}">
-    <span><b>${(() => { const st = legState(propLeg(x)).st; return st === 'o' ? '' : `<em class="mkk ${st}">${markOf(st)}</em> `; })()}${esc(x.player)}</b><small>${esc(pLine(x))} · ${esc(x.opp ? (x.home ? 'vs ' : '@') + x.opp : LEAGUE[x.sp])}</small>${(() => { const l = liveLine(propLeg(x)); return l; })()}</span><span class="ps-s">${x.score}</span><span>${x.l10[0]}/${x.l10[1]}</span><span>${x.streak > 0 ? '🔥' + x.streak : '🧊' + -x.streak}</span><span>${x.votes}🪑</span></div>`).join('')}</div>`; }
+    <span><b>${(() => { const st = legState(propLeg(x)).st; return st === 'o' ? '' : `<em class="mkk ${st}">${markOf(st)}</em> `; })()}${esc(x.player)}${x.team ? ` <span class="pc-tm">${esc(x.team)}</span>` : ''}</b><small>${esc(pLine(x))} · ${esc(x.opp ? (x.home ? 'vs ' : '@') + x.opp : LEAGUE[x.sp])}</small>${(() => { const l = liveLine(propLeg(x)); return l; })()}</span><span class="ps-s">${x.score}</span><span>${x.l10[0]}/${x.l10[1]}</span><span>${x.streak > 0 ? '🔥' + x.streak : '🧊' + -x.streak}</span><span>${x.votes}🪑</span></div>`).join('')}</div>`; }
 function slipBar() { const all = propsAll(); const L = S.slip.map(id => all.find(x => x.id === id)).filter(Boolean); if (!L.length) return '';
   const p = L.reduce((a, x) => a * (x.p || 0.5), 1); const am = p >= 0.5 ? -Math.round(100 * p / (1 - p)) : Math.round(100 * (1 - p) / p);
   return `<div class="pslipbar"><div><b>Your slip · ${L.length} leg${L.length > 1 ? 's' : ''}</b><small>The room gives it ${(p * 100).toFixed(p < 0.1 ? 1 : 0)}% · fair ${esc(odds(am))}</small></div>
@@ -1290,7 +1295,7 @@ function liveLine(l0) { const X = legState(l0), l = X.l, lv = X.lv; if (X.st ===
   return `<small class="lvg ${X.st}">${X.st === 'w' ? '✓ Hit' : X.st === 'l' ? '✗ Missed' : '↺ Push'}${P ? ` · ${esc((parseProp(l.pick) || {}).name || '')} had ${P.v}` : ''}${lv && lv.state === 'post' ? ' · ' + scoreBit(l, lv) : ''}</small>`; }
 /* a prop off the Props board as a leg: its game from team/opponent, its line in words the box-score reader knows */
 function propLeg(x) { const game = x.opp ? (x.home ? x.opp + '@' + x.team : x.team + '@' + x.opp) : '', ln = x.side === 'under' ? (Number.isInteger(+x.thr) ? +x.thr - 0.5 : +x.thr) : null;
-  return { sp: x.sp, game, start: x.start, p: x.p, prop: true, pick: x.side === 'under' ? `${x.player} under ${ln} ${x.lab}` : `${x.player} ${x.thr}+ ${x.lab}` }; }
+  return { sp: x.sp, game, start: x.start, p: x.p, prop: true, player: x.player, team: x.team, pick: x.side === 'under' ? `${x.player} under ${ln} ${x.lab}` : `${x.player} ${x.thr}+ ${x.lab}` }; }
 /* a VIP "prop of the day" names its game inside the text: "… (SEA · SEA@LV · 3:05 PM CT)" */
 const vipPropLeg = c => { const m = String(c.pick || '').match(/\b([A-Z0-9&]{2,6}@[A-Z0-9&]{2,6})\b/); return { sp: c.sp, game: m ? m[1] : '', pick: c.pick, p: c.p, price: c.price, prop: true }; };
 /* how a ticket stands: hit / missed / live / to go */
@@ -1403,8 +1408,8 @@ const PH_MK = { 1: ['w', '✓'], 0: ['l', '✗'], 2: ['p', '='] }, PH_R = { win:
 function parHistHtml(H) {
   const kf = H.some(t => t.k === S.phK) ? S.phK : 'all', HK = H.filter(t => kf === 'all' || t.k === kf), kinds = Object.keys(PAR_K).filter(k => H.some(t => t.k === k));
   const sum = HK.reduce((o, t) => { if (t.r === 'win') o.w++; else if (t.r === 'loss') o.l++; if (t.r) o.u += +t.u || 0; return o; }, { w: 0, l: 0, u: 0 });
-  const leg = l => { const L = { sp: l.sp, game: l.g, pick: l.pk, price: l.pr }, [c, mk] = PH_MK[l.h] || ['o', '•'];
-    return `<div class="leg"><div class="li"><span class="mk ${c}">${mk}</span><span class="pk">${esc(l.g ? readPick(L).big : l.pk)}${l.pr != null ? ' ' + esc(odds(l.pr)) : ''}<small>${esc([LEAGUE[l.sp], l.g ? matchup(L) : ''].filter(Boolean).join(' · '))}</small></span><span class="u"></span></div></div>`; };
+  const leg = l => { const L = { sp: l.sp, game: l.g, pick: l.pk, price: l.pr, ...(l.pl ? { player: l.pl, team: l.tm, prop: true } : {}) }, [c, mk] = PH_MK[l.h] || ['o', '•'];
+    return `<div class="leg"><div class="li"><span class="mk ${c}">${mk}</span><span class="pk">${esc(l.g || l.pl ? readPick(L).big : l.pk)}${l.pr != null ? ' ' + esc(odds(l.pr)) : ''}<small>${esc([LEAGUE[l.sp], l.g ? matchup(L) : ''].filter(Boolean).join(' · '))}</small></span><span class="u"></span></div></div>`; };
   const row = t => { const [ic, lab] = PAR_K[t.k], [c, mk] = PH_R[t.r] || ['o', '•'], hit = t.legs.filter(l => l.h === 1).length;
     return `<details class="ph ${c}"><summary><span class="mk ${c}">${mk}</span><span class="ph-t"><b>${esc(shortDay(t.d))} · ${ic} ${lab}</b><small>${hit}/${t.legs.length} legs hit${t.price != null ? ' · ' + esc(odds(t.price)) : ''}${t.p != null ? ` · ${pct(t.p)}% to cash` : ''}</small></span><span class="ph-u ${t.r ? uCls(t.u) : ''}">${t.r === 'push' ? 'Push' : t.r ? `${signed(+t.u || 0, 2)}u` : 'Waiting'}</span></summary><div class="ph-legs">${t.legs.map(leg).join('')}</div></details>`; };
   return `<h3 class="pl-th">Parlay history</h3>${kinds.length > 1 ? `<div class="seg tight ph-k" role="group" aria-label="Kind of ticket">${['all', ...kinds].map(k => `<button type="button" data-act="phk" data-v="${k}" aria-pressed="${kf === k}">${k === 'all' ? 'Every ticket' : PAR_K[k][0] + ' ' + PAR_K[k][1]} <span class="n">${k === 'all' ? H.length : H.filter(t => t.k === k).length}</span></button>`).join('')}</div>` : ''}

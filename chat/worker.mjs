@@ -320,9 +320,16 @@ export class Accounts {
   async scores(sp, day) { const k = sp + day; this._sc = this._sc || new Map(); const c = this._sc.get(k); if (c && this.now() - c.t < 5 * 60e3) return c.v;
     const f = this.fetchFn || fetch; const r = await f(`https://site.api.espn.com/apis/site/v2/sports/${ESPN_PATH[sp]}/scoreboard?dates=${day}&limit=400${ESPN_GROUP[sp] || ''}`); const v = new Map();
     if (r.ok) { const j = await r.json(); (j.events || []).forEach(e => { const c0 = e.competitions && e.competitions[0]; if (!c0) return; const A = c0.competitors.find(x => x.homeAway === 'away'), Hm = c0.competitors.find(x => x.homeAway === 'home');
-      if (!A || !Hm) return; v.set(A.team.abbreviation + '@' + Hm.team.abbreviation, { done: !!(c0.status && c0.status.type && c0.status.type.completed), a: +A.score, h: +Hm.score }); }); }
+      if (!A || !Hm) return; const done = !!(c0.status && c0.status.type && c0.status.type.completed), ka = A.team.abbreviation + '@' + Hm.team.abbreviation, kr = Hm.team.abbreviation + '@' + A.team.abbreviation;
+      v.set(ka, { done, a: +A.score, h: +Hm.score });
+      /* v3.5.33 · neutral sites (Thanksgiving tournaments): our board can list a game the other way round from ESPN — SC@ASU on the
+         slate, ASU@SC on ESPN — and the bet never found its final. The flipped key carries the scores flipped to match. */
+      if (!v.has(kr)) v.set(kr, { done, a: +Hm.score, h: +A.score, flip: true }); }); }
     this._sc.set(k, { t: this.now(), v }); return v; }
-  async alarm() { const S = this.ctx.storage, O = await S.list({ prefix: 'o:' }); const dayOf = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(t)).replace(/-/g, '');
+  /* v3.5.33 · the settle pass always books its next run, even if one bet in it throws — one bad record used to stop every bet from settling */
+  async alarm() { try { await this.alarm0(); } catch (e) { console.warn('settle pass', e && e.message); }
+    try { const S = this.ctx.storage; if (((await S.list({ prefix: 'o:', limit: 1 })).size || (await S.list({ prefix: 'r:', limit: 1 })).size || (await S.list({ prefix: 'Gp:', limit: 1 })).size) && (await S.getAlarm()) == null) await S.setAlarm(this.now() + 10 * 60e3); } catch (e) { } }
+  async alarm0() { const S = this.ctx.storage, O = await S.list({ prefix: 'o:' }); const dayOf = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(t)).replace(/-/g, '');
     for (const ok of O.keys()) { const [, key, id] = ok.split(':'); const bk = 'b:' + key + ':' + id, bet = await S.get(bk); if (!bet || bet.status !== 'open') { await S.delete(ok); continue; }
       let changed = false; for (const l of bet.legs) { if (l.res || l.t > this.now()) continue; let sc = null; try { sc = (await this.scores(l.sp, dayOf(l.t))).get(l.game); } catch (e) { }
         if (sc && sc.done) { l.res = ddGrade(l, sc.a, sc.h); changed = true; }

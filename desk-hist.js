@@ -72,7 +72,7 @@ function histPredFor(sp,g){return HIST_PS[sp+'|'+g.away.abbr+'@'+g.home.abbr]||n
 /* his card ─────────────────────────────────────────────────────────────────────────────────────────────────────────── */
 function histCardHtml(){try{const V=roGet(VOICES_KEY,[],30e3)||[];const d=today();const D=histData();
   const L=V.filter(x=>x&&x.voice==='Trends'&&String(x.date).slice(0,10)===d&&!x.graded&&x.hG!=null).sort((a,b)=>(+b.hG||0)-(+a.hG||0)).slice(0,8);
-  const rows=L.map(x=>`<div class="mono" style="font-size:10.5px;padding:5px 0;border-bottom:1px solid var(--rule)">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(x.pick)}</b>${x.price!=null?` <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span>`:''} · gut <b style="color:${x.hG>=78?'var(--win)':'var(--gold)'}">${x.hG}</b>
+  const rows=L.map(x=>`<div class="mono" style="font-size:10.5px;padding:5px 0;border-bottom:1px solid var(--rule)">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(pkShow(x))}</b>${x.price!=null?` <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span>`:''} · gut <b style="color:${x.hG>=78?'var(--win)':'var(--gold)'}">${x.hG}</b>
       ${x.pa!=null?`<br><span style="color:var(--mute)">his score: ${txtEsc(x.game.split('@')[0])} ${Math.round(x.pa)} – ${Math.round(x.ph)} ${txtEsc(x.game.split('@')[1])}</span>`:''}<br><span style="color:var(--mute);font-size:9.5px">${(x.why||[]).slice(0,3).map(txtEsc).join(' · ')}</span></div>`).join('');
   const n=D?Object.keys(D.t||{}).length:0,p=D?Object.keys(D.h2h||{}).length:0,r=D?Object.keys(D.ref||{}).length:0;
   return`<div class="tkt" style="margin-top:8px;border-left:3px solid #34d399"><h3 style="margin:0 0 2px">📜 The Historian</h3>

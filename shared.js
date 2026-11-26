@@ -1070,7 +1070,7 @@ function dogProbation(){try{const V=roGet(VOICES_KEY,[],60e3)||[];let w=0,n=0,u=
 function dogCardHtml(){try{const V=roGet(VOICES_KEY,[],30e3)||[];const d=today();const pr=dogProbation();
   const L=V.filter(x=>x&&x.voice==='Dog'&&String(x.date).slice(0,10)===d&&!x.graded&&x.price!=null).sort((a,b)=>(+b.dEdge||0)-(+a.dEdge||0)).slice(0,6);
   const t=x=>{const g=(sportGames(x.sp)||[]).find(z=>z.away&&z.home&&z.away.abbr+'@'+z.home.abbr===x.game);const s=g&&(g.start||g.date);const v=Date.parse(s||'');return isFinite(v)?new Date(v).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';};
-  const rows=L.map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(x.pick)}</b> <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span> · ${txtEsc(x.game)}${t(x)?' · '+t(x):''}<br><span style="color:var(--mute)">its chance ${Math.round(+x.dP*100)}% vs the price's ${Math.round((+x.dP-(+x.dEdge||0))*100)}% · edge +${(+x.dEdge*100).toFixed(1)} pts</span></div>`).join('');
+  const rows=L.map(x=>`<div class="mono" style="font-size:10.5px;padding:4px 0;border-bottom:1px solid var(--rule)">${(SP_LAB[x.sp]||'').split(' ')[0]} <b style="color:var(--chalk)">${txtEsc(pkShow(x))}</b> <span style="color:var(--gold)">${x.price>0?'+':''}${x.price}</span> · ${txtEsc(x.game)}${t(x)?' · '+t(x):''}<br><span style="color:var(--mute)">its chance ${Math.round(+x.dP*100)}% vs the price's ${Math.round((+x.dP-(+x.dEdge||0))*100)}% · edge +${(+x.dEdge*100).toFixed(1)} pts</span></div>`).join('');
   const rec=pr.n?`${pr.w}-${pr.n-pr.w} · ${pr.u>=0?'+':''}${pr.u.toFixed(1)}u`:'no graded calls yet';
   return`<div class="tkt" style="margin-top:8px;border-left:3px solid #2dd4bf"><h3 style="margin:0 0 2px">🐕 The Underdog Spotter</h3>
     <div class="mono" style="font-size:10px;color:${pr.ok?'var(--win)':'var(--gold)'}">${pr.ok?`Graduated — it votes · ${rec}`:`On probation · ${rec} — these are tracked, not official, until 40+ graded dogs pay`}</div>
@@ -3160,7 +3160,7 @@ function halfCardHtml(){const T=halfToday();if(!T.length)return'';const nm=v=>(C
   const off=T.filter(x=>x.official);const by={};T.forEach(x=>{const k=x.sp+'|'+x.pick+'|'+x.game;(by[k]=by[k]||{x,v:[]}).v.push(x.voice);});
   const top=Object.values(by).sort((a,b)=>b.v.length-a.v.length).slice(0,6);
   return`<div class="tkt" style="margin-top:8px"><h3>🕐 Halves & 1st periods</h3>
-    ${off.length?off.map(x=>{const c=halfRecConf(x.rec);return`<div>✅ <b>${txtEsc(x.pick)}</b> ${tcSgn(x.price)} · ${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)} — ${txtEsc(nm(x.voice))}${c!=null?` ${Math.round(c*100)}% sure ·`:''} ${x.rec.w}-${x.rec.l} in this market</div>`;}).join(''):`<div class="sub">No official half picks yet — a character needs ${HALF_OK.n}+ graded half calls in profit and a 70%+ record-based confidence (about 26-6), per sport and market. Learning from tonight.</div>`}
+    ${off.length?off.map(x=>{const c=halfRecConf(x.rec);return`<div>✅ <b>${txtEsc(pkShow(x))}</b> ${tcSgn(x.price)} · ${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)} — ${txtEsc(nm(x.voice))}${c!=null?` ${Math.round(c*100)}% sure ·`:''} ${x.rec.w}-${x.rec.l} in this market</div>`;}).join(''):`<div class="sub">No official half picks yet — a character needs ${HALF_OK.n}+ graded half calls in profit and a 70%+ record-based confidence (about 26-6), per sport and market. Learning from tonight.</div>`}
     <details style="margin-top:4px"><summary class="sub">Most-agreed half calls today (${T.length} calls)</summary><div class="mono" style="font-size:10.5px">${top.map(o=>`<div>${txtEsc(o.x.pick)} ${tcSgn(o.x.price)} · ${txtEsc(o.x.game)} — ${o.v.length} characters</div>`).join('')}</div></details></div>`;}
 function halfRecordsHtml(sp){const L=Object.values(roGet(HALF_KEY,{})||{}).filter(x=>x.graded&&x.hit!=null&&(!sp||sp==='all'||x.sp===sp));
   const nm=v=>(CHARS[v]&&CHARS[v].label||v).replace(/^The /,'');const by={};L.forEach(x=>{const k=x.voice;const r=by[k]=by[k]||{};const m=x.mk.replace(/^(h1|p1)/,'');const c=r[m]=r[m]||{w:0,l:0,u:0};x.hit?c.w++:c.l++;c.u+=x.units||0;});
@@ -3602,7 +3602,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261126d',DESK_VER='3.5.32';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261126e',DESK_VER='3.5.33';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -4366,7 +4366,7 @@ function tgCashGroups(C,st){const L=[];if(C.banker)L.push({who:'🏦 The Banker'
 function tgCashText(p,g,st){const live=g.legs.filter(l=>st[tgLegKey(l)]==='W');const D=live.reduce((a,l)=>a*americanToDecimal(l.price!=null?l.price:-110),1);
   const day=new Date(p.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
   return[`🎉 <b>CASHED</b> — <b>${g.who.map(txtEsc).join(' + ')}</b>`,`<b>${g.legs.length}-leg parlay · ${txtEsc(decimalToAmerican(D))}</b> · 1 unit → <b>+${(D-1).toFixed(2)}u</b>`,'',
-    ...g.legs.map(l=>`${TG_MARK[st[tgLegKey(l)]]||''}<b>${txtEsc(l.pick)}</b>${l.price!=null?' ('+txtEsc(tcSgn(l.price))+')':''}${txtEsc(tgScore(l,p.d))}`),'',`<i>Locked and posted before the first game · ${txtEsc(day)}</i>`].join('\n');}
+    ...g.legs.map(l=>`${TG_MARK[st[tgLegKey(l)]]||''}<b>${txtEsc(pkShow(l))}</b>${l.price!=null?' ('+txtEsc(tcSgn(l.price))+')':''}${txtEsc(tgScore(l,p.d))}`),'',`<i>Locked and posted before the first game · ${txtEsc(day)}</i>`].join('\n');}
 
 // runs once at boot — if this device has no graded history at all (fresh install, wiped
 // site data, new domain) it tries to silently pull the last known-good snapshot back from
@@ -9520,7 +9520,7 @@ function legSetManual(tid,i,res){const L=get(LS.locked,[]);const t=L.find(x=>Str
 function gradeDoctorHtml(t){if(t.finalized||t.archived)return'';const rows=[];
   (t.legs||[]).forEach((l,i)=>{let r=null;try{r=gradeLeg(l,t.date);}catch(e){}if(r&&(r.live||r.hit===true||r.hit===false||r.push))return;if(!legOverdue(l,t))return;
     const D=legDiagnose(l,t);const id=JSON.stringify(String(t.id)).replace(/"/g,'&quot;');
-    rows.push(`<div class="mono" style="font-size:10px;padding:4px 0;border-top:1px dashed var(--rule)"><b>${txtEsc(l.pick)}</b> <span style="color:var(--mute)">${txtEsc(l.game)}</span><br><span style="color:var(--gold)">🩺 ${esc(D.msg)}</span><br>
+    rows.push(`<div class="mono" style="font-size:10px;padding:4px 0;border-top:1px dashed var(--rule)"><b>${txtEsc(pkShow(l))}</b> <span style="color:var(--mute)">${txtEsc(l.game)}</span><br><span style="color:var(--gold)">🩺 ${esc(D.msg)}</span><br>
       ${D.code==='rekey'?`<button onclick="legRekey(${id},${i},'${D.to}')">↻ Match to ${esc(D.to)}</button>`:''}
       <button onclick="legSetManual(${id},${i},'won')">✅ Won</button><button onclick="legSetManual(${id},${i},'lost')">❌ Lost</button><button onclick="legSetManual(${id},${i},'push')">↔ Push</button></div>`);});
   return rows.length?`<div class="tkt" style="margin-top:6px;border-color:var(--gold)"><b style="font-size:11px">🩺 ${rows.length} leg${rows.length>1?'s':''} should be over but aren't graded</b>${rows.join('')}
@@ -9829,7 +9829,7 @@ function renderSlipSheetBody(){
     return`<div class="slip-leg">
       <div class="slip-leg-n">${i+1}</div>
       <div class="slip-leg-info">
-        <div class="slip-leg-pick">${txtEsc(x.pick)}${price!=null?` <span class="slip-leg-price">${price>0?'+':''}${price}</span>`:' <span class="slip-leg-price" style="color:var(--mute)">no price</span>'}</div>
+        <div class="slip-leg-pick">${txtEsc(pkShow(x))}${price!=null?` <span class="slip-leg-price">${price>0?'+':''}${price}</span>`:' <span class="slip-leg-price" style="color:var(--mute)">no price</span>'}</div>
         <div class="slip-leg-game">${(SP_LAB[x.sport||window.__PAGE_SPORT__||'mlb']||'').split(' ')[0]} ${txtEsc(x.game)}${gameWhenHtml(x.sport||window.__PAGE_SPORT__||'mlb',x.game,x.start)}${x.pname?' · '+txtEsc(x.pname):''}${x.date&&x.date!==today()?' · '+txtEsc(String(x.date).slice(5)):''}</div>
         ${sg||dup?`<div class="slip-leg-warn">${sg?'⚠ same game as another leg — correlated':''}${sg&&dup?' · ':''}${dup?'⚠ already on a pending ticket':''}</div>`:''}
       </div>
@@ -16667,7 +16667,7 @@ function bestPublicCardHtml(S,opts){opts=opts||{};const em={mlb:'⚾',nfl:'🏈'
   const res=opts.res||(()=>'');
   const rows=list.map((x,i)=>{const [tl,tc]=BEST_TIER_LAB(x);const ch=(x.chars||[]).length;
     return`<div class="b3-row"><div class="b3-n">${i+1}</div><div style="flex:1;min-width:0">
-      <div class="b3-pick">${txtEsc(x.pick)} <span class="b3-price">${x.price>0?'+':''}${x.price}</span>${res(x)}</div>
+      <div class="b3-pick">${txtEsc(pkShow(x))} <span class="b3-price">${x.price>0?'+':''}${x.price}</span>${res(x)}</div>
       <div class="b3-meta">${em[x.sp]||''} ${(x.sp||'').toUpperCase()} · ${esc(x.game)}${t(x)?' · '+t(x):''}</div>
       <div class="b3-meta">${x.spread?'<b style="color:#7dd3fc">🌐 spread pick · below the 70% bar</b> · ':''}${x.tuned?'<b style="color:#c4b5fd">📏 history-tuned · under 70%, picks like it have paid</b> · ':''}${tl?`<b style="color:${tc}">${tl}</b> · `:''}${ch?ch+' of the desk\'s voices agree · ':''}EV ${x.ev>=0?'+':''}${(+x.ev).toFixed(1)}%</div></div>
       <div class="b3-pct">${Math.round(x.p*100)}%<div class="b3-pl">to hit</div></div></div>`;}).join('');
@@ -16730,9 +16730,9 @@ function renderBest(){
         prev=`<div class="sub" style="margin:10px 0 4px"><b>${fmtDate(new Date(P.d+'T12:00:00'))}'s card — still grading (${open.length} open)</b></div>`+bestPublicCardHtml(P,{id:'bestPrevShare',res:mk});}}}catch(e){}
   const pub=get('d4.pubstate',{})||{};const pubTxt=pub.d===S.d?(pub.ok?`<span style="color:var(--win)">✓ public page updated ${new Date(pub.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span>`:`<span style="color:var(--rust)">publish failed: ${esc(pub.reason||'')}</span>`):'';
   const L3=BEST_VIEW==='all'?(S.top3||[]):((S.bySport||{})[BEST_VIEW]||[]);
-  const notes=L3.length?`<div class="tkt" style="margin-top:8px"><h3>🎬 Reel notes — why each pick</h3><div class="sub" style="font-size:10px">Everything behind each play, plus a script you can read on camera.</div>${L3.map((x,i)=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><b>${i+1}. ${txtEsc(x.pick)}</b> <span class="mono" style="font-size:10px;color:var(--gold)">${sgnP(x.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)}</span>${whyHtml({...x,date:S.d},i===0)}</div>`).join('')}</div>`:'';
+  const notes=L3.length?`<div class="tkt" style="margin-top:8px"><h3>🎬 Reel notes — why each pick</h3><div class="sub" style="font-size:10px">Everything behind each play, plus a script you can read on camera.</div>${L3.map((x,i)=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)"><b>${i+1}. ${txtEsc(pkShow(x))}</b> <span class="mono" style="font-size:10px;color:var(--gold)">${sgnP(x.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)}</span>${whyHtml({...x,date:S.d},i===0)}</div>`).join('')}</div>`:'';
   let rcT='';try{const B=bkDayState();const D=B.locked?B:B.preview;if(false&&D&&D.roll&&D.roll.cut.length){   /* v2.33 · the Roll Call is retired (no pick on more than 3 tickets) */const cut=D.roll.legs.filter(l=>D.roll.cut.includes(l.sp+'|'+l.game));
-    rcT=`<div class="tkt" style="margin-top:8px;border-left:3px solid #ff6fae"><h3>📣 Tonight's Roll Call parlay ${B.locked?'🔒':''}</h3><div class="mono" style="font-size:10.5px">${cut.map(l=>`${txtEsc(l.pick)} <span style="color:var(--gold)">${sgnP(l.price)}</span>`).join(' · ')}</div>
+    rcT=`<div class="tkt" style="margin-top:8px;border-left:3px solid #ff6fae"><h3>📣 Tonight's Roll Call parlay ${B.locked?'🔒':''}</h3><div class="mono" style="font-size:10.5px">${cut.map(l=>`${txtEsc(pkShow(l))} <span style="color:var(--gold)">${sgnP(l.price)}</span>`).join(' · ')}</div>
       <div class="mono" style="font-size:10px;color:var(--mute)">${cut.length} legs · ${decimalToAmerican(D.roll.cutDec)} · ${(D.roll.cutP*100).toFixed(1)}% to cash</div><div class="bar" style="margin-top:4px"><button onclick="tab('banker',document.getElementById('navBanker'))">Open the Banker's desk →</button></div></div>`;}}catch(e){}
   /* v2.53 · the price check: what these prices need to break even, against what the card is hitting */
   let priceTxt='';try{const R3=best3Record();if(R3.be!=null&&R3.w+R3.l>=5){const hr=R3.w/(R3.w+R3.l);
@@ -18720,7 +18720,7 @@ function charCallsToday(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];
   Object.values(HL).forEach(x=>{if(!x||String(x.date).slice(0,10)!==d||!CHARS[x.voice])return;let rec=null;try{rec=halfRecord(x.sp,x.voice,x.mk);}catch(e){}
     put(x.voice,{kind:'half',v:x.voice,sp:x.sp,game:x.game,start:start.get(x.sp+'|'+x.game)||null,m:x.mk,sd:x.side,line:x.line,price:x.price,pick:x.pick,conf:halfRecConf(rec),off:halfOfficial(rec,x),rec,graded:!!x.graded,hit:x.graded?x.hit:null,tc:null});});
   const seen=new Set();CP.forEach(x=>{if(!x||String(x.d).slice(0,10)!==d||!CHARS[x.voice])return;const k=x.voice+'|'+x.sp+'|'+x.player+'|'+x.k+'|'+x.thr+'|'+(x.side||'over');if(seen.has(k))return;seen.add(k);
-    const game=team.get(x.sp+'|'+x.team)||null;put(x.voice,{kind:'prop',v:x.voice,sp:x.sp,game,team:x.team,start:game?start.get(x.sp+'|'+game)||null:null,m:'prop',pick:cpropLine(x),conf:x.p!=null?+x.p:null,off:+x.p>=0.7,graded:x.hit!=null,hit:x.hit!=null?x.hit:null,tc:null});});
+    const game=team.get(x.sp+'|'+x.team)||null;put(x.voice,{kind:'prop',v:x.voice,sp:x.sp,game,team:x.team,start:game?start.get(x.sp+'|'+game)||null:null,m:'prop',pick:cpropPick(x),conf:x.p!=null?+x.p:null,off:+x.p>=0.7,graded:x.hit!=null,hit:x.hit!=null?x.hit:null,tc:null});});
   CHC_C={d,V,CP,HL,TC,t:Date.now(),R};return R;}
 /* a character's calls through the filters: sport, bet type, and the tier row read for a character — Official = its official calls
    (70%+: a game line, a proven half market at 70%+, or a 70%+ prop), Unanimous/colors = the picks of its that made Today's card in that color */
@@ -19144,7 +19144,7 @@ function bankerHtml(){const L=bkLedger(true);const W=L.weeks[0];const rows=Objec
   const slate=S&&S.picks.length?S.picks.map((o,i)=>`<div style="padding:6px 0;border-bottom:1px solid var(--rule)">
       <div style="display:flex;justify-content:space-between;align-items:baseline"><b>${i+1}. ${chip(o.v)} ${esc(charName(o.v))}'s ${o.P.legs.length}-leg</b><span class="mono" style="font-size:11px;color:var(--gold)">${decimalToAmerican(o.dec)} · stake <b style="color:var(--win)">$${o.stake.toFixed(2)}</b></span></div>
       <div class="mono" style="font-size:9.5px;color:var(--mute)">${(o.p*100).toFixed(1)}% to cash · EV ${o.ev>=0?'+':''}${(o.ev*100).toFixed(1)}% · ¼-Kelly ${(o.stakeF*100).toFixed(2)}% of $${S.bankroll}</div>
-      <div class="mono" style="font-size:10px">${o.P.legs.map(l=>esc(l.pick)+' <span style="color:var(--gold)">'+(l.price>0?'+':'')+l.price+'</span>').join(' · ')}</div></div>`).join('')
+      <div class="mono" style="font-size:10px">${o.P.legs.map(l=>esc(pkShow(l))+' <span style="color:var(--gold)">'+(l.price>0?'+':'')+l.price+'</span>').join(' · ')}</div></div>`).join('')
     :'<div class="sub">The Banker passes today — no character parlay has positive Kelly growth. Sitting out is a position.</div>';
   return`<div class="tkt" style="border-color:#c9a227"><h3>🏦 The Banker</h3>
     <div class="sub" style="font-size:10px">The weekly race: every character gets $100 on Tuesday and plays to WIN the week — the money resets, so they swing. Official calls 5–8% of the roll, 60%+ leans 2.5%, every parlay 4%; behind the leader late in the week they press, out front they protect. The weight (×) is the Banker's say in how loud each character is, read from a separate flat-2% ledger (needs 30+ bets).</div>
@@ -19308,7 +19308,7 @@ function cpxBuild(voice,V,d,calls){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today
   gl.slice(0,3).forEach(x=>{const g=x.c.sp+'|'+x.c.game;if(used.has(g))return;used.add(g);
     legs.push({kind:'game',sp:x.c.sp,game:x.c.game,pick:charPickText(x.c),price:x.c.price,m:x.c.market,sd:x.c.side,p:x.p,score:x.score,why:x.why});});
   for(const x of props){if(legs.filter(l=>l.kind==='prop').length>=2)break;const g=x.c.sp+'|'+x.game;if(used.has(g))continue;used.add(g);
-    legs.push({kind:'prop',sp:x.c.sp,game:x.game,player:x.c.player,team:x.c.team,k:x.c.k,thr:x.c.thr,pick:cpropLine(x.c),price:cpxPropPrice(x.c.cal),est:true,p:x.c.cal,score:x.c.cal,
+    legs.push({kind:'prop',sp:x.c.sp,game:x.game,player:x.c.player,team:x.c.team,k:x.c.k,thr:x.c.thr,pick:cpropPick(x.c),price:cpxPropPrice(x.c.cal),est:true,p:x.c.cal,score:x.c.cal,
       why:[`${Math.round(x.c.cal*100)}% calibrated`+(x.c.rec?` · ${x.c.rec} on this player`:'')+(x.c.why?` · ${x.c.why}`:'')]});}
   if(legs.length<2||!legs.some(l=>l.kind==='prop'))return null;
   legs.sort((a,b)=>b.score-a.score);
@@ -19343,7 +19343,7 @@ function cpxRecord(voice){const S=get(CPX_KEY,{})||{};let w=0,l=0,u=0,lw=0,ll=0,
     P.legs.forEach(x=>{if(x.hit===true){lw++;if(x.kind==='prop')pw++;}else if(x.hit===false){ll++;if(x.kind==='prop')pl++;}});
     if(P.done){if(P.won){w++;u+=P.legs.filter(x=>!x.push).reduce((a,x)=>a*americanToDecimal(x.price),1)-1;}else{l++;u-=1;}}});
   return{w,l,u,lw,ll,pw,pl};}
-function phTicketHtml(P,title){const leg=l=>`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px;border-bottom:1px solid var(--rule)">${l.hit===true?'✅ ':l.hit===false?'❌ ':l.push?'↔ ':''}${l.kind==='prop'?'🎯 ':''}<b>${txtEsc(l.pick)}</b> <span style="color:var(--gold)">${l.est?'≈':''}${l.price>0?'+':''}${l.price}</span> <span style="color:var(--mute)">${SP_LAB[l.sp]||''} · ${esc(l.game||'')} · ${Math.round((l.p||0)*100)}%</span>${(l.why||[]).length?`<div style="color:var(--mute);font-size:9px">${l.why.map(txtEsc).join(' · ')}</div>`:''}</div>`;
+function phTicketHtml(P,title){const leg=l=>`<div class="mono" style="font-size:10px;padding:3px 0 3px 8px;border-bottom:1px solid var(--rule)">${l.hit===true?'✅ ':l.hit===false?'❌ ':l.push?'↔ ':''}${l.kind==='prop'?'🎯 ':''}<b>${txtEsc(pkShow(l))}</b> <span style="color:var(--gold)">${l.est?'≈':''}${l.price>0?'+':''}${l.price}</span> <span style="color:var(--mute)">${SP_LAB[l.sp]||''} · ${esc(l.game||'')} · ${Math.round((l.p||0)*100)}%</span>${(l.why||[]).length?`<div style="color:var(--mute);font-size:9px">${l.why.map(txtEsc).join(' · ')}</div>`:''}</div>`;
   return`<div style="margin:4px 0 2px"><span class="mono" style="font-size:9.5px;color:var(--mute)">${title}</span> <b class="mono" style="font-size:11px;color:var(--gold)">${P.legs.length}-leg ${decimalToAmerican(P.dec)}</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">· ${Math.round(P.p*100)}% to cash${P.done?(P.won?' · <b style="color:var(--win)">CASHED</b>':' · <b style="color:var(--rust)">lost</b>'):''}</span></div>${P.legs.map(leg).join('')}`;}
 function parlayHubHtml(){let A={by:{}},X={by:{}};try{cparGrade();cpxGrade();}catch(e){}try{A=cparState();}catch(e){}try{X=cpxState();}catch(e){}
   const rec=R=>R.w+R.l?`${R.w}-${R.l} · ${R.u>=0?'+':''}${R.u.toFixed(1)}u`:'—';
@@ -19778,7 +19778,12 @@ function cpropFavs(v){const L=Object.values(cpropRecIdx()).filter(o=>o.voice===v
 /* its best prop today — favorites first when they're within 3 points */
 function cpropOfDay(v,calls){calls=(calls||cpropToday()).filter(c=>c.voice===v&&c.fav!=='fade');if(!calls.length)return null;
   return calls.sort((a,b)=>(b.cal+(b.fav==='fav'?0.03:0))-(a.cal+(a.fav==='fav'?0.03:0)))[0];}
-function cpropLine(c){return c&&c.side==='under'?`${c.player} under ${(+c.thr)-0.5} ${CPROP_LAB[c.k]||c.k}`:`${c.player} ${c.thr}+ ${CPROP_LAB[c.k]||c.k}`;}
+/* cpropPick: the pick text a ticket stores and the live box score reads the name out of. cpropLine: what people see —
+   v3.5.33 · Nov 26, Chris: "when it's a prop can we label what team they play for next to their names" → "Josh Allen (BUF) 250+ pass yds" */
+function cpropPick(c){return c&&c.side==='under'?`${c.player} under ${(+c.thr)-0.5} ${CPROP_LAB[c.k]||c.k}`:`${c.player} ${c.thr}+ ${CPROP_LAB[c.k]||c.k}`;}
+/* the pick as people see it: a player prop gets his team beside his name ("Josh Allen (BUF) 250+ pass yds"); everything else as is */
+function pkShow(l){const pk=String((l&&l.pick)||'');if(!l||!l.player||!l.team||!pk.startsWith(l.player)||/^\s*\(/.test(pk.slice(l.player.length)))return pk;return`${l.player} (${l.team})${pk.slice(l.player.length)}`;}
+function cpropLine(c){const p=cpropPick(c);return c&&c.team&&c.player?p.replace(c.player,`${c.player} (${c.team})`):p;}
 /* v3.5.27 · the ledger kept the last 6,000 calls — and one college-basketball day now makes more than that (Nov 25: every row was that day's,
    4,106 of them college). So every earlier day was gone (26 graded calls left: no prop records, no calibration), and the day's own early calls
    fell out as later ones came in — the Bulls' players vanished from CHI@CHA between two looks. Now each character logs its best 30 calls a
@@ -21793,7 +21798,7 @@ function bkDayRecord(){const H={...(get(BKDAYS_KEY,{})||{})};const S=get(BKDAY_K
   return R;}
 function bkLegRow(l,opts){opts=opts||{};const mark=l.push?'↔ ':l.hit===true?'✅ ':l.hit===false?'❌ ':'';const C=CHARS[l.v]||{};
   return`<div style="padding:5px 0;border-bottom:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
-    <div>${mark}<b>${txtEsc(l.pick)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(l.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[l.sp]||'').split(' ')[0]} ${gameLabelHtml(l.sp,l.game)}${gameWhenHtml(l.sp,l.game,l.start)}</span>${opts.cut===false?' <span class="mono" style="font-size:9px;color:var(--mute)">(longshot leg)</span>':''}</div>
+    <div>${mark}<b>${txtEsc(pkShow(l))}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(l.price)}</span> <span class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[l.sp]||'').split(' ')[0]} ${gameLabelHtml(l.sp,l.game)}${gameWhenHtml(l.sp,l.game,l.start)}</span>${opts.cut===false?' <span class="mono" style="font-size:9px;color:var(--mute)">(longshot leg)</span>':''}</div>
     <div class="mono" style="font-size:10px;white-space:nowrap">${Math.round(l.p*100)}%</div></div>
     <div class="mono" style="font-size:9.5px;color:var(--mute)">${(l.by||[l.v]).map(v=>`<span style="color:${(CHARS[v]||{}).color||'var(--mute)'}">${(CHARS[v]||{}).chip||v}</span>`).join(' ')}${opts.rank>1?` · its #${opts.rank} pick (top one was a game already taken)`:''}</div>
     ${opts.why!==false?whyHtml({...l,date:opts.d}):''}</div>`;}
@@ -21809,7 +21814,7 @@ function bkShareText(t,d){const R=bkDayRecord().own;const u=bkUnits(t);const sin
   return`🏦 THE BANKER CASHED ✅\n${decimalToAmerican(u+1)} · ${t.legs.filter(l=>!l.push).length} for ${t.legs.filter(l=>!l.push).length}\n\n${t.legs.map(l=>`${l.push?'↔':'✅'} ${em[l.sp]||''} ${l.pick} (${l.price>0?'+':''}${l.price})`).join('\n')}\n\n+${u.toFixed(2)}u on a 1-unit play\nBanker's parlays: ${R.w}-${R.l} · ${R.u>=0?'+':''}${R.u.toFixed(1)}u${since?' since '+fmtDate(new Date(since+'T12:00:00')):''}\n\nTheDesk — Picks · Analysis · Edge`;}
 function bkShareHtml(t,d){if(!t||tixDone(t.legs)!==true)return'';const R=bkDayRecord().own;const u=bkUnits(t);const since=bkRecordSince();const em={mlb:'⚾',nfl:'🏈',ncaaf:'🏟',nhl:'🏒',nba:'🏀',ncaab:'🏀'};
   const n=t.legs.filter(l=>!l.push).length;
-  const rows=t.legs.map(l=>`<div class="b3-row" style="padding:8px 0"><div class="b3-n" style="font-size:18px">${l.push?'↔':'✅'}</div><div style="flex:1;min-width:0"><div class="b3-pick" style="font-size:16px">${txtEsc(l.pick)} <span class="b3-price">${l.price>0?'+':''}${l.price}</span></div>
+  const rows=t.legs.map(l=>`<div class="b3-row" style="padding:8px 0"><div class="b3-n" style="font-size:18px">${l.push?'↔':'✅'}</div><div style="flex:1;min-width:0"><div class="b3-pick" style="font-size:16px">${txtEsc(pkShow(l))} <span class="b3-price">${l.price>0?'+':''}${l.price}</span></div>
       <div class="b3-meta">${em[l.sp]||''} ${(l.sp||'').toUpperCase()} · ${txtEsc(l.game)}${gameWhenHtml(l.sp,l.game,l.start)}</div></div></div>`).join('');
   return`<div class="mktlab" style="margin-top:10px">🏆 Share the hit</div><div class="recapwrap" id="bkShareCard"><div class="recapcard">
     <style>.b3-row{display:flex;gap:10px;align-items:center;border-bottom:1px solid rgba(255,255,255,.08)}.b3-n{width:24px;text-align:center}.b3-pick{font-weight:900}.b3-price{font-family:'IBM Plex Mono';font-size:12px;color:var(--gold)}.b3-meta{font-family:'IBM Plex Mono';font-size:10px;color:var(--mute);margin-top:2px}</style>
@@ -21943,7 +21948,7 @@ function gradeBannerPaint(keepOpen){if(typeof document==='undefined')return;cons
   if(!el){el=document.createElement('div');el.id='gradeBanner';el.style.cssText='margin:8px 3px 4px;padding:10px 12px;border-radius:10px;border:1px solid var(--gold);background:rgba(245,184,46,.08);font-size:12px';
     const anchor=document.getElementById('storageBanner')||document.querySelector('nav');if(anchor&&anchor.parentNode)anchor.parentNode.insertBefore(el,anchor.nextSibling);else document.body.prepend(el);}
   const rows=left.slice(0,12).map(x=>{const id=JSON.stringify(x.tid).replace(/"/g,'&quot;');return`<div class="mono" style="font-size:10px;padding:5px 0;border-top:1px dashed var(--rule)">
-      <b>${txtEsc(x.pick)}</b> <span style="color:var(--mute)">${(x.sp||'').toUpperCase()} ${txtEsc(x.game)} · ${txtEsc(x.d)}${x.name?' · '+txtEsc(x.name):''}</span><br><span style="color:var(--gold)">🩺 ${txtEsc(x.msg)}</span><br>
+      <b>${txtEsc(pkShow(x))}</b> <span style="color:var(--mute)">${(x.sp||'').toUpperCase()} ${txtEsc(x.game)} · ${txtEsc(x.d)}${x.name?' · '+txtEsc(x.name):''}</span><br><span style="color:var(--gold)">🩺 ${txtEsc(x.msg)}</span><br>
       <button onclick="gradeBannerSet(${id},${x.i},'won')">✅ Won</button><button onclick="gradeBannerSet(${id},${x.i},'lost')">❌ Lost</button><button onclick="gradeBannerSet(${id},${x.i},'push')">↔ Push</button></div>`;}).join('');
   el.innerHTML=`<details${wasOpen?' open':''}><summary><b style="color:var(--gold)">🩺 ${left.length} leg${left.length>1?'s':''} past game day without a grade</b> <span class="mono" style="font-size:9.5px;color:var(--mute)">checked ${new Date(H.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span></summary>
     <div class="sub" style="font-size:10px;margin:4px 0">The sweeper pulled every date these games were on and still couldn't settle them. Each one says why. If the reason is a pick it can't read or a game ESPN doesn't list, set the result once and it's locked in.</div>
@@ -22019,7 +22024,7 @@ function cbHtml(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const to
   const rows=pool.map((x,i)=>{const on=CB_SEL.includes(x.k);const r=rec(x);const C=CHARS[x.v]||{};
     return`<div style="padding:6px 0;border-bottom:1px solid var(--rule);${on?'':'opacity:.55'}"><label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
       <input type="checkbox" ${on?'checked':''} onchange="cbToggle('${x.k.replace(/'/g,"\\'")}')" style="width:20px;height:20px;min-width:20px;flex:0 0 20px;margin:2px 0 0;padding:0">
-      <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><span><b>${i+1}. ${txtEsc(x.pick)}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(x.price)}</span></span><span class="mono" style="font-size:10.5px;color:${x.off?'var(--win)':'var(--mute)'}">${x.off?'✅ ':''}${Math.round(x.p*100)}%</span></div>
+      <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><span><b>${i+1}. ${txtEsc(pkShow(x))}</b> <span class="mono" style="font-size:10.5px;color:var(--gold)">${sgnP(x.price)}</span></span><span class="mono" style="font-size:10.5px;color:${x.off?'var(--win)':'var(--mute)'}">${x.off?'✅ ':''}${Math.round(x.p*100)}%</span></div>
         <div class="mono" style="font-size:9.5px;color:var(--mute)">${(SP_LAB[x.sp]||'').split(' ')[0]} ${txtEsc(x.game)}${gameWhenHtml(x.sp,x.game,x.start)}${CB_V==='__roll'?` · <span style="color:${C.color}">${C.chip||''}</span>`:''}${r?` · <span style="color:var(--win)">${txtEsc(r)}</span>`:''}</div></div></label>
       ${whyHtml({...x,date:d})}</div>`;}).join('');
   const dec=sel.reduce((a,x)=>a*americanToDecimal(x.price),1),pc=sel.reduce((a,x)=>a*x.p,1);
@@ -22073,7 +22078,7 @@ function legLiveCard(t,l,opts){opts=opts||{};let g=null;try{g=gradeLeg(l,t.date)
   /* v2.87.7 · the second opinion: the league's own feed agreed with ESPN, or didn't */
   const vfy=g&&g.verified?`<div class="mono" style="font-size:9.5px;color:var(--win);margin-top:2px">✓✓ Score checked — ESPN and ${({nhl:'NHL.com',nba:'NBA.com',ncaa:'NCAA.com'})[g.verified]||g.verified} agree</div>`:g&&g.conflict?`<div class="mono" style="font-size:9.5px;color:var(--gold);margin-top:2px">⚠ ESPN ${g.conflict.ea}–${g.conflict.eh} · ${({nhl:'NHL.com',nba:'NBA.com',ncaa:'NCAA.com'})[g.conflict.s]||g.conflict.s} ${g.conflict.a}–${g.conflict.h}${g.hit==null?' — holding the grade until they agree':''}</div>`:'';
   return`<div ${opts.link?`onclick="openTicketSheet(${tid})" `:''}style="padding:7px 9px;margin:5px 0;border-radius:9px;border:1.5px solid ${border};background:rgba(255,255,255,.02);${liveCss}${opts.link?'cursor:pointer':''}">
-    <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-weight:800;font-size:13.5px;min-width:0">${txtEsc(l.pick)}${l.price!=null?` <span class="mono" style="font-size:11px;color:var(--gold)">${sgnP(+l.price)}</span>`:''}</div>
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div style="font-weight:800;font-size:13.5px;min-width:0">${txtEsc(pkShow(l))}${l.price!=null?` <span class="mono" style="font-size:11px;color:var(--gold)">${sgnP(+l.price)}</span>`:''}</div>
       <div class="mono" style="font-size:10px;font-weight:800;color:${res[1]};white-space:nowrap">${res[0]}${state!=='pre'&&opts.gc!==false?' '+gcBtn(sp,l.game,d,''):''}</div></div>
     <div class="mono" style="font-size:${state==='in'?'12px':'10.5px'};margin-top:2px;${state==='in'?'font-weight:800;color:var(--ink,#fff)':''}">${(SP_LAB[sp]||'').split(' ')[0]} ${sc}</div>${startTxt}${vfy}${bar}${prLegHtml(l,t.date)}
     ${g&&g.detail&&!(e&&e.a!=null&&String(g.detail).includes(e.a+'–'+e.h))?`<div class="mono" style="font-size:9.5px;color:var(--mute);margin-top:2px">${txtEsc(g.detail)}</div>`:''}

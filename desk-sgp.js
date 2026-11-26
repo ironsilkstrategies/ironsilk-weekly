@@ -94,7 +94,7 @@ const sgpAm=a=>(a>0?'+':'')+a;const sgpImp=a=>a>0?100/(a+100):(-a)/((-a)+100);co
 function sgpLegHtml(x){const who=x.kind==='p'?`<b style="color:${x.nge>=5?'var(--win)':'var(--gold)'}">${x.nge}/5</b> clear it`:`${x.n} with it${x.no?` · ${x.no} against`:''}`;
   const pr=x.kind==='p'?x.dk:x.price;const edge=pr!=null?Math.round((x.p-sgpImp(pr))*100):null;
   const px=pr!=null?` <span class="mono" style="font-size:9.5px;color:var(--chalk,#ddd)">${x.kind==='p'?'DK ':''}${sgpAm(pr)}</span>${edge!=null?` <span class="mono" style="font-size:9.5px;color:${edge>=0?'var(--win)':'var(--rust)'}">${edge>=0?'+':''}${edge}</span>`:''}`:'';
-  return`<li style="margin:2px 0">${txtEsc(x.pick)} <b class="mono" style="color:var(--gold)">${Math.round(x.p*100)}%</b>${px} <span class="mono" style="font-size:9.5px;color:var(--mute)">${who}</span><div style="margin-top:1px">${sgpChips(x.by)}</div></li>`;}
+  return`<li style="margin:2px 0">${txtEsc(pkShow(x))} <b class="mono" style="color:var(--gold)">${Math.round(x.p*100)}%</b>${px} <span class="mono" style="font-size:9.5px;color:var(--mute)">${who}</span><div style="margin-top:1px">${sgpChips(x.by)}</div></li>`;}
 /* the legs' own prices multiplied, when every leg has one — what they'd pay as a straight parlay (an SGP pays less) */
 function sgpBook(legs){const pr=legs.map(x=>x.kind==='p'?x.dk:x.price);if(!pr.length||pr.some(a=>a==null))return null;const d=pr.reduce((a,b)=>a*sgpDec(b),1);return d>2?'+'+Math.round((d-1)*100).toLocaleString():null;}
 function sgpGameHtml(G,i){const st=G.start?gameWhen(G.sp,G.game,G.start):'';
