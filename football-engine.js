@@ -2217,15 +2217,38 @@ function footballAltPanel(g,s){
    lifts its players' numbers, and vice versa). Shown with or without book
    prop lines; with a PROP: line it also prices the over. Cached 12h. */
 const NFL_FORM_KEY='d4.nflform';
-const NFL_FORM_INFLIGHT={};
-function nflPlayerForm(id){
-  const C=get(NFL_FORM_KEY,{});const hit=C[id];if(hit&&Date.now()-hit.ts<12*3600e3)return Promise.resolve(hit.v);
-  return NFL_FORM_INFLIGHT[id]||(NFL_FORM_INFLIGHT[id]=_nflPlayerFormFetch(id).finally(()=>{delete NFL_FORM_INFLIGHT[id]}));
+/* v3.5.29 · Nov 26, 11:47 AM, Chris (CHI@DET and PHI@DAL Props screenshots): "I got are stats getting stuck
+   loading". Most starters sat on "loading stats…" for good. The cache kept 150 players and threw out
+   the overflow by key order, but ESPN ids are numbers and JavaScript lists number-like keys first, smallest
+   first. So every save threw out the lowest ids, the veterans: Barkley, Lamb, Gibbs, St. Brown and Goff
+   loaded and were deleted a moment later. Only rookies with new, high ids kept their logs, while two-month-old
+   college logs sat untouched behind them. Now the overflow goes oldest first by load time, a player
+   just loaded is never the one dropped, and anything older than three days is cleared. A failed load is
+   remembered so the card says so instead of "loading" forever. */
+const NFL_FORM_INFLIGHT={},NFL_FORM_ERR={};
+const NFL_FORM_TTL=12*3600e3,NFL_FORM_CAP=150;
+function nflFormFresh(e){return!!(e&&e.ts&&e.s&&Date.now()-e.ts<(e.v&&e.v.length?NFL_FORM_TTL:2*3600e3));}
+function fbFormKey(id,league){return league==='ncaaf'?'cfb:'+id:String(id);}
+function fbPlayerForm(id,league){
+  const key=fbFormKey(id,league);const hit=get(NFL_FORM_KEY,{})[key];if(nflFormFresh(hit))return Promise.resolve(hit.v);
+  return NFL_FORM_INFLIGHT[key]||(NFL_FORM_INFLIGHT[key]=_nflPlayerFormFetch(id,league).finally(()=>{delete NFL_FORM_INFLIGHT[key]}));
+}
+function nflPlayerForm(id){return fbPlayerForm(id,'nfl');}
+function nflFormPut(key,entry){
+  const W=get(NFL_FORM_KEY,{});W[key]=entry;const now=Date.now();
+  Object.keys(W).forEach(k=>{if(k!==key&&!(W[k]&&now-W[k].ts<3*864e5))delete W[k];});
+  const ks=Object.keys(W);
+  if(ks.length>NFL_FORM_CAP)ks.filter(k=>k!==key).sort((a,b)=>(W[a].ts||0)-(W[b].ts||0)).slice(0,ks.length-NFL_FORM_CAP).forEach(k=>delete W[k]);
+  set(NFL_FORM_KEY,W);
 }
 async function _nflPlayerFormFetch(id,league){
-  const slug=league==='ncaaf'?'college-football':'nfl',key=league==='ncaaf'?'cfb:'+id:id;
+  const slug=league==='ncaaf'?'college-football':'nfl',key=fbFormKey(id,league);
+  try{
   const r=await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/${slug}/athletes/${id}/gamelog`);
+  /* an error page used to parse as "no games" and stick for 12 hours */
+  if(!r||r.ok===false)throw new Error('gamelog '+(r&&r.status));
   const j=await r.json();const names=(j.names||[]).map(String);const ix=n=>names.indexOf(n);
+  if(!names.length&&!(j.seasonTypes||[]).length&&!j.events)throw new Error('gamelog: no data');
   const I={pass:ix('passingYards'),rush:ix('rushingYards'),rec:ix('receivingYards'),recs:ix('receptions'),ptd:ix('passingTouchdowns')};
   const evMeta=j.events||{};const games=[];
   (j.seasonTypes||[]).forEach(st=>{if(st.displayName&&/pre/i.test(st.displayName))return;
@@ -2233,12 +2256,26 @@ async function _nflPlayerFormFetch(id,league){
       const n=k=>{const i=I[k];if(i<0||!ev.stats)return null;const v=parseFloat(String(ev.stats[i]).replace(/,/g,''));return isNaN(v)?null:v;};
       const m=evMeta[ev.eventId]||{};games.push({id:ev.eventId,date:m.gameDate||'',opp:((m.opponent||{}).abbreviation)||'',
         pass:n('pass'),rush:n('rush'),rec:n('rec'),recs:n('recs'),ptd:n('ptd')});}));});
-  const seen=new Set();const v=games.filter(x=>!seen.has(x.id)&&seen.add(x.id)).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,8);
+  const seen=new Set();const all=games.filter(x=>!seen.has(x.id)&&seen.add(x.id)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const v=all.slice(0,8);
+  /* v3.5.29 · the whole season's totals ride along (every game this season, not just the last 8), so a
+     starter still gets "season X/g" when ESPN's big league-wide stat feed doesn't come through */
+  const S={gp:all.length};['pass','rush','rec','recs'].forEach(k=>{const L=all.filter(x=>x[k]!=null);S[k]=L.length?L.reduce((a,x)=>a+x[k],0):null;});
   /* Re-read at write time: parallel loads each started from an old snapshot,
      so the last one to finish used to overwrite the other nine. */
-  const W=get(NFL_FORM_KEY,{});W[key]={ts:Date.now(),v};const ks=Object.keys(W);if(ks.length>150)ks.slice(0,ks.length-150).forEach(k=>delete W[k]);set(NFL_FORM_KEY,W);
+  nflFormPut(key,{ts:Date.now(),v,s:S});delete NFL_FORM_ERR[key];
   return v;
+  }catch(e){NFL_FORM_ERR[key]=Date.now();throw e;}
 }
+/* What a player row says while it has no numbers: still loading, didn't load, or no games logged yet. */
+function fbFormState(key){
+  if(NFL_FORM_INFLIGHT[key])return'loading';
+  if(NFL_FORM_ERR[key])return'fail';
+  const e=get(NFL_FORM_KEY,{})[key];if(e&&nflFormFresh(e)&&!(e.v||[]).length)return'none';
+  return'loading';
+}
+function fbFormMiss(key,pos,what){const st=fbFormState(key);
+  return st==='fail'?`${pos} · ${what} didn't load`:st==='none'?`${pos} · no games logged this season`:`${pos} · loading ${what}…`;}
 function nflStarters(abbr){
   const P=((NFL_DEPTH[abbr]||{}).players||[]).filter(p=>p.id);const by=(pos,n)=>P.filter(p=>p.pos===pos).sort((a,b)=>(a.depth||9)-(b.depth||9)).slice(0,n);
   return[...by('QB',1),...by('RB',1),...by('WR',2),...by('TE',1)];
@@ -2261,17 +2298,25 @@ function nflRefreshOpenForms(){try{document.querySelectorAll('[id^="nflform-"]')
   if(g&&el.innerHTML)el.innerHTML=nflFormHTML(g,NFL_SIMS[g.id]);});}catch(e){}}
 function nflFormHTML(g,s){
   const need=!nflStarters(g.away.abbr).length||!nflStarters(g.home.abbr).length;
-  const P=nflModelProps(g,s);const pc=x=>Math.round(x*100)+'%';
+  const P=nflModelProps(g,s);const pc=x=>Math.round(x*100)+'%';let failed=0;
   const side=ab=>{const st=nflStarters(ab);
     if(!st.length)return`<div class="sub">${ab}: depth chart not loaded${typeof NFL_DEPTH_STATUS!=='undefined'&&NFL_DEPTH_STATUS?' <span style="color:var(--mute)">('+NFL_DEPTH_STATUS+')</span>':''}.</div>`;
     const rows=st.map(p=>{const mine=P.filter(x=>x.pid===String(p.id));
-      if(!mine.length)return`<div class="mono" style="font-size:10px">${p.name} <span style="color:var(--mute)">${p.pos} · loading stats…</span></div>`;
+      if(!mine.length){if(fbFormState(String(p.id))==='fail')failed++;
+        return`<div class="mono" style="font-size:10px">${p.name} <span style="color:var(--mute)">${fbFormMiss(String(p.id),p.pos,'stats')}</span></div>`;}
       return mine.map(x=>`<div class="mono" style="font-size:10px;line-height:1.6;margin-bottom:3px">${x.name} <span style="color:var(--mute)">${x.pos}</span> · ${x.lab}
         proj <b style="color:var(--gold)">${x.proj}</b> <span style="color:var(--mute)">(season ${x.seasonPG??'—'}/g${x.gp?' in '+x.gp:''} · last5 ${x.last5??'—'})</span><br>${nflLivePropHtml(g,x)}
         ${x.ladder.map(l=>`${l.line}+ <b>${pc(l.p)}</b>`).join(' · ')}${x.book?` · <span style="color:${x.book.ev>=2?'var(--win)':x.book.ev<0?'var(--rust)':'var(--gold)'}">book ${x.book.line} (${x.book.price>0?'+':''}${x.book.price}) → over ${pc(x.book.p)}, ${x.book.ev>=0?'+':''}${x.book.ev.toFixed(1)}% EV</span>`:''}</div>`).join('');}).join('');
     return`<div style="margin-top:6px"><b>${ab}</b>${rows}</div>`;};
-  return`<div class="sub mono" style="font-size:9.5px;color:var(--mute)">season stats: ${NFL_SEASONSTATS_STATUS||'not loaded yet'}</div>`+side(g.away.abbr)+side(g.home.abbr)+(need?`<div class="bar" style="margin-top:8px">
+  const body=side(g.away.abbr)+side(g.home.abbr);
+  return`<div class="sub mono" style="font-size:9.5px;color:var(--mute)">season stats: ${NFL_SEASONSTATS_STATUS||'not loaded yet'}</div>`+body+(failed?`<div class="bar" style="margin-top:8px">
+    <button onclick="nflRetryForm('${g.id}',this)">↻ Retry stats</button></div>`:'')+(need?`<div class="bar" style="margin-top:8px">
     <button class="primary" onclick="nflRefreshDepthFor('${g.id}',this)">↻ Refresh depth charts</button></div>`:'');
+}
+function nflRetryForm(gid,btn){
+  if(btn){btn.disabled=true;btn.textContent='Loading…';}
+  Object.keys(NFL_FORM_ERR).forEach(k=>{if(!/^cfb:/.test(k))delete NFL_FORM_ERR[k];});
+  const g=NFL_GAMES.find(x=>String(x.id)===String(gid));if(g)nflLoadForm(g,true).catch(()=>{});
 }
 async function nflRefreshDepthFor(gid,btn){
   if(btn){btn.disabled=true;btn.textContent='Loading rosters…';}
@@ -2279,11 +2324,17 @@ async function nflRefreshDepthFor(gid,btn){
   const g=NFL_GAMES.find(x=>String(x.id)===String(gid));
   if(g){const el=document.getElementById('nflform-'+g.id);if(el)el.innerHTML=nflFormHTML(g,NFL_SIMS[g.id]);nflLoadForm(g).catch(()=>{});}
 }
-/* Loads only when a game's Props panel is opened; 10 starters, in parallel. */
-async function nflLoadForm(g){
+/* Loads only when a game's Props panel is opened; 10 starters, in parallel.
+   v3.5.29 · the panel fills in as each player arrives: it used to wait for everything, and ESPN's
+   league-wide rushing and receiving feeds run 4 MB or more each on a phone. */
+async function nflLoadForm(g,retry){
   const ids=[...nflStarters(g.away.abbr),...nflStarters(g.home.abbr)].map(p=>p.id);
-  await Promise.all([nflLoadSeasonStats().catch(()=>null),...ids.map(id=>nflPlayerForm(id).catch(()=>null))]);
-  const el=document.getElementById('nflform-'+g.id);if(el)el.innerHTML=nflFormHTML(g,NFL_SIMS[g.id]);
+  const paint=()=>{const el=document.getElementById('nflform-'+g.id);if(el)el.innerHTML=nflFormHTML(g,NFL_SIMS[g.id]);};
+  let t=0;const soon=()=>{clearTimeout(t);t=setTimeout(paint,150);};
+  const jobs=ids.map(id=>nflPlayerForm(id).catch(()=>null).then(soon));
+  paint();
+  await Promise.all([nflLoadSeasonStats(retry?'partial':undefined).catch(()=>null).then(soon),...jobs]);
+  clearTimeout(t);paint();
 }
 
 
@@ -2292,16 +2343,27 @@ async function nflLoadForm(g){
    league for the season, cached 12h and loaded automatically on the NFL page.
    Per-player game logs remain the fallback and the "recent form" half. */
 const NFL_SEASONSTATS_KEY='d4.nflseason';
-let NFL_SEASONSTATS={},NFL_SEASONSTATS_STATUS='';
-async function nflLoadSeasonStats(force){
+let NFL_SEASONSTATS={},NFL_SEASONSTATS_STATUS='',NFL_SS_INFLIGHT=null;
+/* v3.5.29 · a load where only some of the three feeds answered was kept 12 hours as if it were whole. On
+   Thanksgiving morning only the passing feed (85 passers: QBs, a few WRs and punters) came through, so every
+   RB, WR and TE had no season numbers until evening. Now a partial load is kept, merged over the last good
+   one, and tried again in 30 minutes (right away from "Retry stats"). Two panels opening together share one
+   load instead of pulling the 4 MB feeds twice. */
+function nflLoadSeasonStats(force){
+  if(NFL_SS_INFLIGHT)return NFL_SS_INFLIGHT;
+  return(NFL_SS_INFLIGHT=_nflLoadSeasonStats(force).finally(()=>{NFL_SS_INFLIGHT=null;}));
+}
+async function _nflLoadSeasonStats(force){
   const season=+NFL_SEASON||new Date().getFullYear();const c=get(NFL_SEASONSTATS_KEY,{});
-  if(!force&&c.season===season&&c.v&&Object.keys(c.v).length&&Date.now()-c.ts<12*3600e3){
-    NFL_SEASONSTATS=c.v;NFL_SEASONSTATS_STATUS='cached '+Object.keys(c.v).length+' players';return true;}
+  const whole=c.ok===3,n0=c.v?Object.keys(c.v).length:0;
+  if(force!==true&&c.season===season&&n0&&Date.now()-c.ts<(whole?12*3600e3:force==='partial'?0:30*60e3)){
+    NFL_SEASONSTATS=c.v;NFL_SEASONSTATS_STATUS='cached '+n0+' players'+(whole?'':' (some feeds missing, retrying soon)');return true;}
   const out={};let ok=0;
   for(const cat of ['passing','rushing','receiving']){
     try{
       const r=await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/statistics/byathlete?region=us&lang=en&contentorigin=espn&isqualified=false&page=1&limit=500&category=offense:${cat}&season=${season}&seasontype=2`);
-      const j=await r.json();
+      if(!r||r.ok===false)throw new Error('HTTP '+(r&&r.status));
+      const j=await r.json();if(!(j.athletes||[]).length)throw new Error('no athletes');
       const cols={};(j.categories||[]).forEach(cc=>{cols[cc.name]=(cc.names||[]).map(String);});
       (j.athletes||[]).forEach(a=>{
         const A=a.athlete||{};const id=String(A.id||'');if(!id)return;
@@ -2315,8 +2377,10 @@ async function nflLoadSeasonStats(force){
     }catch(err){console.warn('NFL season stats',cat,err&&err.message)}
   }
   const n=Object.keys(out).length;
-  if(n){NFL_SEASONSTATS=out;set(NFL_SEASONSTATS_KEY,{season,ts:Date.now(),v:out});}
-  NFL_SEASONSTATS_STATUS=n?('loaded '+n+' players'):('unavailable ('+ok+'/3 feeds answered) — using game logs');
+  if(n){const v=ok<3&&c.season===season&&c.v?Object.assign({},c.v,out):out;NFL_SEASONSTATS=v;set(NFL_SEASONSTATS_KEY,{season,ts:Date.now(),v,ok});}
+  else if(c.season===season&&n0)NFL_SEASONSTATS=c.v;
+  const nn=Object.keys(NFL_SEASONSTATS||{}).length;
+  NFL_SEASONSTATS_STATUS=ok===3?('loaded '+n+' players'):nn?(`${nn} players (${ok}/3 feeds answered, retrying soon) · game logs fill the rest`):('unavailable ('+ok+'/3 feeds answered) · using game logs');
   return n>0;
 }
 (function(){const c=get(NFL_SEASONSTATS_KEY,{});if(c.v)NFL_SEASONSTATS=c.v;})();
@@ -2336,14 +2400,17 @@ function nflModelProps(g,s){
     const pow=NFL_POWER[ab]||{};const usual=pow.rawOffPPG||pow.offPPG||22;
     const proj=J?(isHome?J.h:J.a):usual;const scale=Math.max(0.8,Math.min(1.25,proj/usual));
     nflStarters(ab).forEach(p=>{
-      const ss=NFL_SEASONSTATS[String(p.id)]||null;const logs=(FC[p.id]&&FC[p.id].v)||[];
+      const ss=NFL_SEASONSTATS[String(p.id)]||null;const fe=FC[String(p.id)]||{};const logs=fe.v||[];const gs=fe.s||null;
       const types=p.pos==='QB'?[['pass','Pass Yds','passing yards']]:p.pos==='RB'?[['rush','Rush Yds','rushing yards']]:[['rec','Rec Yds','receiving yards'],['recs','Receptions','receptions']];
       types.forEach(([k,lab,bookStat])=>{
         const L5=logs.filter(x=>x[k]!=null).slice(0,5);const last5=L5.length?L5.reduce((a,x)=>a+x[k],0)/L5.length:null;
-        const sPG=ss&&ss.gp&&ss[k]!=null?ss[k]/ss.gp:null;
+        /* v3.5.29 · season per game from the league feed or, when that's missing, the player's own game log
+           (whichever has seen more games, so the morning's league feed doesn't hide last night's game) */
+        const bk0=ss&&ss.gp&&ss[k]!=null?{t:ss[k],gp:ss.gp}:null,gl0=gs&&gs.gp&&gs[k]!=null?{t:gs[k],gp:gs.gp}:null;
+        const src=bk0&&gl0?(gl0.gp>bk0.gp?gl0:bk0):(bk0||gl0);const sPG=src?src.t/src.gp:null;
         const base=sPG!=null&&last5!=null?0.6*sPG+0.4*last5:(sPG!=null?sPG:last5);if(base==null)return;
         const pj=base*scale;const rec={pid:String(p.id),name:p.name,team:ab,pos:p.pos,k,lab,proj:+pj.toFixed(1),
-          seasonPG:sPG!=null?+sPG.toFixed(1):null,last5:last5!=null?+last5.toFixed(1):null,gp:ss&&ss.gp||null,ladder:[]};
+          seasonPG:sPG!=null?+sPG.toFixed(1):null,last5:last5!=null?+last5.toFixed(1):null,gp:src?src.gp:null,ladder:[]};
         if(k==='recs'){const c=Math.round(pj);[c-1,c,c+1].filter(x=>x>=1).forEach(t=>rec.ladder.push({line:t-0.5,p:nflPoisAtLeast(t,pj)}));}
         else{const st=k==='pass'?25:15,sd=k==='pass'?Math.max(45,pj*0.25):Math.max(18,pj*0.45);const mid=Math.round(pj/st)*st;
           [mid-st,mid,mid+st].filter(x=>x>0).forEach(v=>{const line=v-0.5;rec.ladder.push({line,p:1-brainNorm((line-pj)/sd)});});rec.sd=sd;}
@@ -3774,12 +3841,15 @@ function cfbModelProps(g,s){
   const LD=cfbLeaders(g)||{};const FC=get(NFL_FORM_KEY,{});const out=[];
   const book=fbWindow('d4.ncaafprops',null);const last=n=>String(n||'').toLowerCase().split(' ').pop();
   [g.away.abbr,g.home.abbr].forEach(ab=>(LD[ab]||[]).forEach(p=>{
-    const logs=((FC['cfb:'+p.id]||{}).v)||[];
+    const fe=FC['cfb:'+p.id]||{};const logs=fe.v||[];const gs=fe.s||null;
     const kinds=p.k==='rec'?[['rec','Rec Yds','receiving yards'],['recs','Receptions','receptions']]:p.k==='pass'?[['pass','Pass Yds','passing yards']]:[['rush','Rush Yds','rushing yards']];
     kinds.forEach(([k,lab,bookStat])=>{
-      const L=logs.filter(x=>x[k]!=null);const gp=L.length;const L5=L.slice(0,5);
+      const L=logs.filter(x=>x[k]!=null);const L5=L.slice(0,5);
       const last5=L5.length?L5.reduce((a,x)=>a+x[k],0)/L5.length:null;
-      const sPG=k===p.k&&p.total!=null&&gp?p.total/gp:(gp?L.reduce((a,x)=>a+x[k],0)/gp:null);
+      /* v3.5.29 · games played come from the whole season: the cache keeps only the last 8 games, so a
+         1,200-yard back in 12 games read as 150 a game instead of 100 */
+      const gp=gs&&gs.gp?gs.gp:L.length;
+      const sPG=k===p.k&&p.total!=null&&gp?p.total/gp:(gs&&gs.gp&&gs[k]!=null?gs[k]/gs.gp:(L.length?L.reduce((a,x)=>a+x[k],0)/L.length:null));
       const base=sPG!=null&&last5!=null?0.6*sPG+0.4*last5:(sPG!=null?sPG:last5);if(base==null)return;
       const pj=base;const rec={pid:p.id,name:p.name,team:ab,pos:p.pos,k,lab,proj:+pj.toFixed(1),seasonPG:sPG!=null?+sPG.toFixed(1):null,last5:last5!=null?+last5.toFixed(1):null,gp:gp||null,ladder:[]};
       if(k==='recs'){const c=Math.round(pj);[c-1,c,c+1].filter(x=>x>=1).forEach(t=>rec.ladder.push({line:t-0.5,p:nflPoisAtLeast(t,pj)}));}
@@ -3795,7 +3865,7 @@ function cfbFormHTML(g,s){
   if(!LD)return'<div class="sub" style="color:var(--mute)">Loading this game\'s season leaders from ESPN…</div>';
   const side=ab=>{const st=LD[ab]||[];if(!st.length)return`<div class="sub">${ab}: no season leaders listed by ESPN yet.</div>`;
     const rows=st.map(p=>{const mine=P.filter(x=>x.pid===p.id&&(x.k===p.k||(p.k==='rec'&&x.k==='recs')));
-      if(!mine.length)return`<div class="mono" style="font-size:10px">${p.name} <span style="color:var(--mute)">${p.pos} · loading game log…</span></div>`;
+      if(!mine.length)return`<div class="mono" style="font-size:10px">${p.name} <span style="color:var(--mute)">${fbFormMiss('cfb:'+p.id,p.pos,'game log')}</span></div>`;
       return mine.map(x=>`<div class="mono" style="font-size:10px;line-height:1.6;margin-bottom:3px">${x.name} <span style="color:var(--mute)">${x.pos}</span> · ${x.lab}
         proj <b style="color:var(--gold)">${x.proj}</b> <span style="color:var(--mute)">(season ${x.seasonPG??'—'}/g${x.gp?' in '+x.gp:''} · last5 ${x.last5??'—'})</span><br>
         ${x.ladder.map(l=>`${l.line}+ <b>${pc(l.p)}</b>`).join(' · ')}${x.book?` · <span style="color:${x.book.ev>=2?'var(--win)':x.book.ev<0?'var(--rust)':'var(--gold)'}">book ${x.book.line} (${x.book.price>0?'+':''}${x.book.price}) → over ${pc(x.book.p)} · ${x.book.ev>=0?'+':''}${x.book.ev.toFixed(1)}% EV</span>`:''}</div>`).join('');}).join('');
@@ -3806,8 +3876,9 @@ async function cfbLoadForm(g){
   const el=()=>document.getElementById('cfbform-'+g.id);
   const LD=await cfbLoadLeaders(g);if(el())el().innerHTML=cfbFormHTML(g,NCAAF_SIMS[g.id]);if(!LD)return;
   const ids=[...new Set(Object.values(LD).flat().map(p=>p.id))];
-  await Promise.all(ids.map(id=>{const C=get(NFL_FORM_KEY,{})['cfb:'+id];if(C&&Date.now()-C.ts<12*3600e3)return null;return _nflPlayerFormFetch(id,'ncaaf').catch(()=>null);}));
-  if(el())el().innerHTML=cfbFormHTML(g,NCAAF_SIMS[g.id]);
+  let t=0;const soon=()=>{clearTimeout(t);t=setTimeout(()=>{if(el())el().innerHTML=cfbFormHTML(g,NCAAF_SIMS[g.id]);},150);};
+  await Promise.all(ids.map(id=>fbPlayerForm(id,'ncaaf').catch(()=>null).then(soon)));
+  clearTimeout(t);if(el())el().innerHTML=cfbFormHTML(g,NCAAF_SIMS[g.id]);
 }
 function ncaafPropsPanel(g){
   return`<div class="sub" style="margin-bottom:8px"><b>Model props</b> — each team's ESPN season leaders, season + last-5 blend. % = chance of going over. Book lines price in when a PROP: line is uploaded.</div>
