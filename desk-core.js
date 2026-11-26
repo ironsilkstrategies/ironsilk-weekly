@@ -1452,7 +1452,10 @@ function pubCharacters0(V,d){const from=dayShift(d,-60);try{const by={};V.forEac
         mine.forEach(m=>{const g=logged.get(m.key);picks.push({kind:'prop',sp:m.sp,pick:(()=>{try{return cpropLine(m);}catch(e){return m.player;}})(),team:m.team,side:m.side,p:m.p,hit:g&&g.hit!=null?g.hit:null,push:!!(g&&g.push),note:m.note});});}
       let best=[],still=[];try{const P=charProfile(v);best=(P.strong||[]).map(x=>({lane:pubLaneName(x.k),w:x.w,l:x.n-x.w,u:+(+x.u).toFixed(1)}));still=(P.weak||[]).slice(0,1).map(x=>({lane:pubLaneName(x.k),w:x.w,l:x.n-x.w}));}catch(e){}
       const top=(o,n)=>Object.values(o).map(x=>({...x,n:(x.for?x.for.w+x.for.l+x.vs.w+x.vs.l:x.over.w+x.over.l+x.under.w+x.under.l)})).sort((a,b)=>b.n-a.n).slice(0,n).map(x=>{delete x.n;return x;});
-      return{v,name:C.label,chip:C.chip,color:C.color,title:B.title||'',bio:B.bio||'',origin:B.origin||'',best,still,
+      /* v3.5.31 · Nov 26, Chris: "give the subscribers a chance to pick their fav characters per sport per option… the scorekeeper on nba ml's
+         and judge for nhl overs and the grinder for underdog ml picks in NCAAB". Every lane it's ranked in (12+ graded): [key, W, L, units, rank, of] */
+      let lanes=[];try{Object.entries(prTable()).forEach(([k,L])=>{if(k.split('|').length!==3)return;const i=L.findIndex(x=>x.v===v);if(i<0)return;const x=L[i];lanes.push([k,x.w,x.n-x.w,+(+x.u).toFixed(1),i+1,L.length]);});lanes.sort((a,b)=>b[3]-a[3]);}catch(e){}
+      return{v,name:C.label,chip:C.chip,color:C.color,title:B.title||'',bio:B.bio||'',origin:B.origin||'',best,still,lanes,
         record:{w,l,pu,u:+u.toFixed(2)},props:pr,par:(()=>{try{return pubParRec(v,from,d,CPA,CPXA);}catch(e){return null;}})(),picks:picks.sort((a,b)=>(a.kind===b.kind?0:a.kind==='game'?-1:1)||(b.p||0)-(a.p||0)).slice(0,16),
         recent:recent.sort((a,b)=>String(b.d).localeCompare(String(a.d))).slice(0,12),teams:pubTeamRows(v,new Set(picks.filter(x=>x.kind==='game'&&x.game).flatMap(x=>String(x.game).split('@').map(t=>x.sp+'|'+t))),10),players:top(players,8)};});}catch(e){console.warn('pub characters',e);return[];}}
 /* v3.5.19 · the teams it backs and fades, now every sport and three ways (Nov 24, Chris: "who they hit over unders with or against… who
@@ -1560,8 +1563,9 @@ function pubBoard(V){try{const d=today();const T=roGet(TC_KEY,{})||{};const k=d+
 function pubBoard0(V,d){const R=slotGames();const last=dayShift(d,6);const VI=new Map(),cast={};const r3=x=>x!=null&&isFinite(+x)?+(+x).toFixed(3):null;
   V.forEach(c=>{if(!c||!shownV(c.voice))return;const day=String(c.date).slice(0,10);if(day<d||day>last)return;const m=mkNorm(c.market);if(m!=='ml'&&m!=='spread'&&m!=='total')return;   /* v3.5.6 · heirs too (they show; they don't vote) */
     const key=c.sp+'|'+c.game+'|'+day;const a=VI.get(key);if(a)a.push(c);else VI.set(key,[c]);});
-  const rankOf=(c,m)=>{try{const P=prFor(c.sp,m,c.side,c.price!=null?+c.price:null,c.line!=null?+c.line:null);if(!P)return null;const i=P.list.findIndex(x=>x.v===c.voice);if(i<0)return{lab:P.lab,of:P.list.length};const x=P.list[i];
-      return{lab:P.lab,rk:i+1,of:P.list.length,w:x.w,l:x.n-x.w,u:+(+x.u).toFixed(1),say:P.king&&P.king.v===c.voice?'top':P.goat&&P.goat.v===c.voice?'worst':''};}catch(e){return null;}};
+  /* v3.5.31 · each call carries its lane key (k: 'nba|ml|fav'), so the app can match a member's ⭐ favorite lanes exactly */
+  const rankOf=(c,m)=>{try{const P=prFor(c.sp,m,c.side,c.price!=null?+c.price:null,c.line!=null?+c.line:null);if(!P)return null;const i=P.list.findIndex(x=>x.v===c.voice);if(i<0)return{k:P.k,lab:P.lab,of:P.list.length};const x=P.list[i];
+      return{k:P.k,lab:P.lab,rk:i+1,of:P.list.length,w:x.w,l:x.n-x.w,u:+(+x.u).toFixed(1),say:P.king&&P.king.v===c.voice?'top':P.goat&&P.goat.v===c.voice?'worst':''};}catch(e){return null;}};
   const use=v=>{if(!cast[v]){const L=CHARS[v]||{};cast[v]={name:charName(v),chip:L.chip||'',color:L.color||''};}return v;};
   /* v3.1.6 · Nov 20: "all the characters have predicted scores for every game… I need them reflected next to their picks." Each
      character's locked final-score call (d4.scorecalls) rides with its calls on the public board: [away, home], a third 1 once it

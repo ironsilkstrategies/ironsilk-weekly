@@ -37,6 +37,11 @@ setTimeout(() => { try {
   const coach = tot.find(c => c.v === 'Coach'), judge = tot.find(c => c.v === 'Judge'), scout = tot.find(c => c.v === 'Scout');
   T('the Coach is #1 in NBA unders: he has the say', coach.r && coach.r.rk === 1 && coach.r.say === 'top' && /NBA unders/.test(coach.r.lab), JSON.stringify(coach.r));
   T('the Scout is ranked in the middle with its record', scout.r && scout.r.rk === 2 && scout.r.say === "" && scout.r.w + scout.r.l === 30, JSON.stringify(scout.r));
+  /* v3.5.31 · Nov 26, Chris: "give the subscribers a chance to pick their fav characters per sport per option…" — each call carries its lane key
+     so the app's ⭐ favorite lanes match exactly; every character publishes its full lane table */
+  T('each call carries its lane key (nba|total|under), so ⭐ favorite lanes match exactly', coach.r.k === 'nba|total|under' && scout.r.k === 'nba|total|under', JSON.stringify([coach.r.k, scout.r.k]));
+  const CH = w.eval(`pubCharacters0(roGet(VOICES_KEY,[])||[],'2026-11-14')`), cl = (CH.find(c => c.v === 'Coach') || {}).lanes || [], sl = (CH.find(c => c.v === 'Scout') || {}).lanes || [];
+  T('every character publishes each lane it is ranked in: [key, W, L, units, rank, of] (the Coach #1 of 3 in NBA unders, 24–6)', JSON.stringify(cl.find(x => x[0] === 'nba|total|under')) === JSON.stringify(['nba|total|under', 24, 6, 15.8, 1, 3]) && (sl.find(x => x[0] === 'nba|total|under') || [])[4] === 2, JSON.stringify([cl, sl]));
   T('the Judge\'s over is a different kind of bet (NBA overs) where it has no record yet', judge.r == null || !judge.r.rk, JSON.stringify(judge.r));
   const judgeUnder = w.eval(`(()=>{const P=prFor('nba','total','under',-110,245.5);return P&&P.goat&&P.goat.v;})()`);
   T('…and in NBA unders, the Judge is the worst: no say', judgeUnder === 'Judge', judgeUnder);

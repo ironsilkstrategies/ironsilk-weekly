@@ -28,7 +28,7 @@ setTimeout(async () => { try {
   E(`cpropToday=()=>${J(calls.slice(0, 2))};localStorage.removeItem(DESK_KEY);`);
   const p2 = P(`JSON.stringify(deskAllocate(null,today()))`);
   T('a character with only gimmes today gets no prop parlay (better none than a −1,800 ticket)', !(p2.px && p2.px.Judge), J(p2.px));
-  T('version 3.5.30', E('DESK_VER') === '3.5.30', E('DESK_VER'));
+  T('version 3.5.30 or later', (v => v[0] > 3 || (v[0] === 3 && (v[1] > 5 || (v[1] === 5 && v[2] >= 30))))(String(E('DESK_VER')).split('.').map(Number)), E('DESK_VER'));
 } catch (e) { T('no exceptions', false, e && e.stack); }
   console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
 }, 2500);
