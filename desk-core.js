@@ -366,7 +366,8 @@ function deskAllocate(V,d){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();const
      the VIP card (whose promise is 70%+). */
   Object.assign(chars,deskSkillTickets(V,d,{free,take,issued,chars}));
   /* 5 · props tickets: a character's best official props plus its official game legs that still have room */
-  const px={};CPROP_VOICES.forEach(v=>{const mine=PC.filter(c=>c.voice===v);if(!mine.length)return;const legs=[],games=new Set();
+  /* v3.5.30 · a prop goes into a parlay only under 85% sure (CPX_PROP_MAXP, shared.js has the record behind it); the singles above keep the best */
+  const px={};CPROP_VOICES.forEach(v=>{const mine=PC.filter(c=>c.voice===v&&c.cal<CPX_PROP_MAXP);if(!mine.length)return;const legs=[],games=new Set();
     for(const c of mine){if(legs.filter(l=>l.kind==='prop').length>=2)break;if(!free(c.key)||games.has(c.sp+'|'+c.game))continue;games.add(c.sp+'|'+c.game);legs.push({...c,v});}
     if(!legs.length)return;
     for(const x of (byV[v]||[]).slice().sort((a,b)=>b.fit-a.fit)){if(legs.length>=DESK_MAXLEG)break;if(!free(x.key)||games.has(x.sp+'|'+x.game))continue;games.add(x.sp+'|'+x.game);legs.push({...x,kind:'game'});}

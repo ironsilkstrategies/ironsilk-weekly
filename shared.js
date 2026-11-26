@@ -3601,7 +3601,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261126a',DESK_VER='3.5.29';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261126b',DESK_VER='3.5.30';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -19277,12 +19277,20 @@ function chemHtml(){const I=chemIdx();const vs=CHAR_ORDER.filter(v=>(I.B[v]||{})
    apart so each character's "with props" record can be compared with its
    "without props" record. */
 const CPX_KEY='d4.charparlaysx',CPX_HOLD=0.045;
+/* v3.5.30 · Nov 26, Chris, on capping heavy prop legs: "Whatever you feel yields the best results for us". The prop parlays took each
+   character's MOST confident props, so every leg was a −850 to −3,233 gimme (1+ 3PM, 3+ AST). The record behind it: 71 settled prop
+   parlays went 55–16 (77.5%, the model said 76.5%) and still lost 4.5 units: a win on the shortest tickets (−667 or shorter) paid 0.11u
+   and a miss cost 1u. Over legs it rated 85%+ hit 2.9 points under its number and cost 7.3% a leg at their price; under 85% they hit
+   1.9 points over and cost 2.4% (all sides: +2.0% a leg). Tickets priced −200 to −400 were the only band in profit (20–5, +1.37u). So a
+   prop goes into a parlay only under 85% sure (about −795 at the desk's price). Every character still has dozens of over calls under 85% a day.
+   The props of the day (singles) are unchanged. */
+const CPX_PROP_MAXP=0.85;
 function cpxPropPrice(p){const dec=1/Math.min(0.97,p*(1+CPX_HOLD));return +decimalToAmerican(dec);}
 function cpxPropGame(sp,team){const o=cpropOpp(sp,team);if(!o)return null;return o.home?o.opp+'@'+team:team+'@'+o.opp;}
 function cpxBuild(voice,V,d,calls){V=V||roGet(VOICES_KEY,[],30e3)||[];d=d||today();
   if(!CPROP_VOICES.includes(voice))return null;
   /* v3.0.28 · never a junk leg: the player has to play the stat, and no estimated price past -1000 (a "99.9%" prop is a gimme, not a leg) */
-  const props=(calls||[]).filter(c=>c.voice===voice&&c.fav!=='fade'&&c.cal>=0.72&&cpxPropPrice(c.cal)>-1000&&!cpropJunk(c)).map(c=>({c,game:cpxPropGame(c.sp,c.team)})).filter(x=>x.game)
+  const props=(calls||[]).filter(c=>c.voice===voice&&c.fav!=='fade'&&c.cal>=0.72&&c.cal<CPX_PROP_MAXP&&!cpropJunk(c)).map(c=>({c,game:cpxPropGame(c.sp,c.team)})).filter(x=>x.game)
     .sort((a,b)=>(b.c.cal+(b.c.fav==='fav'?0.03:0))-(a.c.cal+(a.c.fav==='fav'?0.03:0)));
   if(!props.length)return null;
   const gl=cparCands(voice,V,d);const legs=[],used=new Set();

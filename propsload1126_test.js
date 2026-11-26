@@ -149,7 +149,7 @@ setTimeout(async () => { try {
   const ct = E(`document.getElementById('cfbform-${GC.id}').innerHTML`).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
   T('college: a failed log says "game log didn\'t load", not "loading game log…" forever', /Gunner Stockton QB · game log didn't load/.test(ct) && /Nate Frazier RB · Rush Yds proj/.test(ct), ct);
 
-  T('version 3.5.29', E('DESK_VER') === '3.5.29', E('DESK_VER'));
+  T('version 3.5.29 or later', (v => v[0] > 3 || (v[0] === 3 && (v[1] > 5 || (v[1] === 5 && v[2] >= 29))))(String(E('DESK_VER')).split('.').map(Number)), E('DESK_VER'));
 } catch (e) { T('no exceptions', false, e && e.stack); }
   console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
 }, 2500);
