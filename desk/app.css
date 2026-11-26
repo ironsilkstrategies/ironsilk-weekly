@@ -1216,3 +1216,16 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 /* v75 · a profile's parlays for today sit first in its lane; the roster marks who has one today */
 .pl-none{margin:4px 0 14px;font-size:14px;color:var(--cream-2)}
 .cc-par{display:inline-block;margin-top:12px;padding:4px 10px;border-radius:999px;background:rgba(242,208,103,.14);box-shadow:inset 0 0 0 1px rgba(242,208,103,.35);color:var(--foil);font:700 12.5px/1.2 var(--text)}
+/* v76 · My tickets: one tap from the top bar (Active / Graded) */
+.tixbtn{appearance:none;flex:none;display:inline-flex;align-items:center;gap:6px;position:relative;height:36px;padding:0 12px 0 10px;border-radius:999px;border:1.5px solid rgba(244,236,216,.45);background:rgba(0,0,0,.25);color:var(--cream);font:700 13px/1 var(--text);cursor:pointer;white-space:nowrap}
+.tixbtn svg{width:19px;height:19px;flex:none}.tixbtn[aria-current="page"]{border-color:var(--foil);color:var(--foil)}
+.tx-n{position:absolute;top:-6px;right:-6px;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:var(--foil);color:#1a1405;font:800 11px/19px var(--text);text-align:center;box-shadow:0 0 0 2px #0b140f}
+@media (max-width:430px){.tixbtn .tx-t{display:none}.tixbtn{width:36px;padding:0;justify-content:center}}
+.tixtabs{display:flex;width:max-content;max-width:100%;margin:2px 0 16px}.tixtabs button{font-size:14px;padding:9px 18px}.tixtabs button b{font-weight:800;margin-left:4px;opacity:.75}
+.tix-h small{font:700 14px/1 var(--text);color:var(--cream-3);margin-left:6px;vertical-align:middle}
+.tix-sum{margin:0 0 6px;color:var(--cream-2);font-size:14px}.tix-sum b{color:var(--cream);font-weight:800}
+.tixgo{appearance:none;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;width:100%;margin:14px 0;padding:14px 16px;text-align:left;cursor:pointer;font:inherit;color:var(--ink);border:0}
+.tixgo .tg-i{font-size:26px}.tixgo b{display:block;font:800 19px/1.1 var(--display);text-transform:uppercase;letter-spacing:.02em}.tixgo small{display:block;margin-top:3px;font-size:13px;color:var(--ink-2)}.tixgo .tg-a{font-weight:800;color:var(--ink)}
+.mystats.m3{grid-template-columns:repeat(3,1fr)}
+.ddown input{min-width:0;width:100%;box-sizing:border-box}.ddown label{min-width:0}
+@media (max-width:430px){.ddown form{grid-template-columns:1fr 84px}.ddown form .btn{grid-column:1/-1}}

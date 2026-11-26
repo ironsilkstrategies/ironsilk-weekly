@@ -97,7 +97,7 @@ function readPick(x) {
 const S = { feed: null, feedErr: false, slate: null, slateErr: false, live: {}, liveD: {}, tab: 'today', seen: {}, first: true,
   slateDay: 0, slateSp: 'all', rankSp: '', rankAll: false, openGame: '', guide: null, canPrompt: null,
   bf: Object.assign({ win: 'up', tier: 'all', bt: 'all', ch: 'all', view: 'time', cf: 0, say: 'all', lane: '', fc: 'all' }, store.get('bf') || {}) };
-const TABS = ['today', 'slate', 'props', 'me', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join', 'admin', 'u'];
+const TABS = ['today', 'slate', 'props', 'me', 'tix', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'join', 'admin', 'u'];
 
 /* ── data ────────────────────────────────────────────────────────────────── */
 async function getJSON(url, wait = 9000) {
@@ -182,7 +182,7 @@ document.addEventListener('focusout', () => setTimeout(() => { if (!HELD.size ||
 /* …and an iPhone zooms the whole page in when a box under 16px gets the keyboard (the stake box zoomed the Slate in). On iOS only, the
    page keeps its own scale while typing; pinching to zoom still works there, iOS ignores the cap for fingers. */
 try { if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) { const m = document.querySelector('meta[name="viewport"]'); if (m && !/maximum-scale/.test(m.content)) m.content += ',maximum-scale=1'; } } catch (e) { /* no viewport tag: nothing to hold */ }
-const repaintLive = () => { if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || S.tab === 'cast') render(); else if (S.tab === 'challenges') runsRepaint(); else if (S.tab === 'me') betsRepaint(); };
+const repaintLive = () => { if (S.tab === 'today' || S.tab === 'longshots' || S.tab === 'props' || S.tab === 'slate' || S.tab === 'cast') render(); else if (S.tab === 'challenges') runsRepaint(); else if (S.tab === 'tix') tixRepaint(); };
 let rpT = 0; const liveRepaint = () => { clearTimeout(rpT); rpT = setTimeout(() => { whenFree(repaintLive); runDot(); }, 120); };
 /* v62 · the run cards follow the scores on their own (the rest of the Challenges page — its search box, its filters — stays put) */
 function runsRepaint() { const g = $('#v-challenges .rgrid'); if (!g) return; const f = document.activeElement, sel = f && f.closest && f.closest('.runcard') ? f.dataset.change && f.dataset.rid : null; if (sel) return; g.innerHTML = liveRuns().map(runCard).join(''); }
@@ -410,14 +410,17 @@ function founderSum(t) { const L = t.legs || []; if (L.length < 2) return ''; co
   const hm = hitMiss(L.map(l => (l.st === 'hit' ? 'w' : l.st === 'miss' ? 'l' : l.st === 'push' ? 'p' : 'o')));
   return `<div class="tk-sum">${p0 != null ? `<b>${fmtP(p0)}</b> · 1 in ${p1in(p0)} · ` : ''}${L.length} legs${hm ? ' · ' + hm : ''}${live ? ` · <span class="lv-on">● ${live} live</span>` : ''}${togo ? ` · ${togo} to go` : ''}${nx ? ` · next ${esc(clock(new Date(nx).toISOString()))}` : ''}</div>
     ${started && p0 != null && now != null ? `<div class="tk-live ${lost ? 'dn' : now >= p0 ? 'up' : ''}">📡 ${live ? 'Live' : 'Now'} cash chance ${lost ? '0% · busted' : `${fmtP(now)} · 1 in ${p1in(now)} <small>(was 1 in ${p1in(p0)} pre-game)</small>`}</div>` : ''}${live && S.liveAt ? `<div class="tk-upd">Scores updated ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }))}</div>` : ''}`; }
+/* v76 · the founder's LongShot tickets, one card each (the LongShots tab, Today, and his own profile and My tickets) */
+const founderTix = () => { const F = S.feed && S.feed.beta !== false && S.feed.founder; return F && Array.isArray(F.tix) ? F.tix : []; };
+function founderCard(t0) { const t = effTicket(t0); const n = t.legs.length, done = t.legs.filter(l => l.st === 'hit' || l.st === 'miss' || l.st === 'push').length;
+  const chip = t.res === 'cashed' ? '<span class="fchip win">Cashed</span>' : t.res === 'lost' ? '<span class="fchip loss">Lost</span>' : t.res === 'live' ? `<span class="fchip live">● Live · ${t.hit} of ${n} hit</span>` : '<span class="fchip">Pending</span>';
+  return `<article class="slip founder nostub ${t.res}"><div class="slip-head"><span>${esc(t.name || 'LongShot')} · ${n} legs</span>${chip}</div><div class="slip-main">
+    <div class="f-odds">${t.dec ? `<b>${esc(decAm(t.dec))}</b><span>$10 pays <b>$${(10 * t.dec).toLocaleString('en-US', { maximumFractionDigits: 0 })}</b></span>` : ''}<span class="f-prog">${done} of ${n} settled</span></div>
+    ${founderSum(t)}<ol class="fl-list">${t.legs.map(founderLeg).join('')}</ol>
+    ${t.res === 'open' || t.res === 'live' ? `<div class="row"><button type="button" class="btn foil" data-act="tail" data-id="${esc(t.id)}">📋 Tail this</button></div>` : ''}</div></article>`; }
 function founderHtml(page) {
   const F = S.feed && S.feed.beta !== false && S.feed.founder; if (!F || !Array.isArray(F.tix) || !F.tix.length) return '';
-  const R = F.rec || {}, card = t0 => { const t = effTicket(t0); const n = t.legs.length, done = t.legs.filter(l => l.st === 'hit' || l.st === 'miss' || l.st === 'push').length;
-    const chip = t.res === 'cashed' ? '<span class="fchip win">Cashed</span>' : t.res === 'lost' ? '<span class="fchip loss">Lost</span>' : t.res === 'live' ? `<span class="fchip live">● Live · ${t.hit} of ${n} hit</span>` : '<span class="fchip">Pending</span>';
-    return `<article class="slip founder nostub ${t.res}"><div class="slip-head"><span>${esc(t.name || 'LongShot')} · ${n} legs</span>${chip}</div><div class="slip-main">
-      <div class="f-odds">${t.dec ? `<b>${esc(decAm(t.dec))}</b><span>$10 pays <b>$${(10 * t.dec).toLocaleString('en-US', { maximumFractionDigits: 0 })}</b></span>` : ''}<span class="f-prog">${done} of ${n} settled</span></div>
-      ${founderSum(t)}<ol class="fl-list">${t.legs.map(founderLeg).join('')}</ol>
-      ${t.res === 'open' || t.res === 'live' ? `<div class="row"><button type="button" class="btn foil" data-act="tail" data-id="${esc(t.id)}">📋 Tail this</button></div>` : ''}</div></article>`; };
+  const R = F.rec || {}, card = founderCard;
   if (!page) return `<section class="vsec" id="founder"><div class="vh"><h2 class="h2">Founder LongShot Parlays</h2>${vipBadge()}</div><p class="note">The founder’s live tickets are on the <button type="button" class="link" data-go="longshots">LongShots tab</button>.</p><div class="fgrid">${F.tix.filter(t => t.res === 'live' || t.res === 'open').slice(0, 1).map(card).join('')}</div></section>`;
   return `<section class="vsec" id="founder"><div class="vh">${vipBadge()}${R.cashed + R.lost ? `<span class="f-rec">Last 30 days: <b>${R.cashed} cashed</b>, ${R.lost} lost</span>` : ''}</div>
     <div class="fgrid">${F.tix.map(card).join('')}</div></section>`;
@@ -470,8 +473,8 @@ const acctPass = () => store.get('acct');
 async function acctApi(path, body) { const r = await fetch(CFG.chat + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   let j = {}; try { j = await r.json(); } catch { /* empty */ } if (!r.ok) { const e = new Error(j.error || 'the server didn’t answer'); e.status = r.status; throw e; } return j; }
 async function acctLoad() { const P = acctPass(); if (!P) { AC.me = null; return; } try { AC.me = await acctApi('/acct/me', { token: P.token }); AC.err = ''; AC.at = Date.now(); }
-  catch (e) { if (e.status === 401) { store.set('acct', null); AC.me = null; } else AC.err = 'Your tickets can’t be reached right now.'; } acctBadge(); if (S.tab === 'me') viewMe(); else if (S.tab === 'challenges') viewChallenges(); else if (S.tab === 'leagues') viewLeagues(); else if (S.tab === 'admin') viewAdmin(); }
-function acctBadge() { const b = $('#acctBtn'); if (!b) return; const P = acctPass(); b.classList.toggle('dot', !!(AC.me && AC.me.inbox && AC.me.inbox.unread)); document.body.classList.toggle('is-owner', !!(AC.me && AC.me.owner)); b.textContent = P ? P.name.slice(0, 1).toUpperCase() : ''; b.classList.toggle('in', !!P); b.setAttribute('aria-label', P ? `My tickets (${P.name})` : 'Sign in'); }
+  catch (e) { if (e.status === 401) { store.set('acct', null); AC.me = null; } else AC.err = 'Your tickets can’t be reached right now.'; } acctBadge(); if (S.tab === 'me') viewMe(); else if (S.tab === 'tix') viewTix(); else if (S.tab === 'challenges') viewChallenges(); else if (S.tab === 'leagues') viewLeagues(); else if (S.tab === 'admin') viewAdmin(); }
+function acctBadge() { const b = $('#acctBtn'); if (!b) return; const P = acctPass(); b.classList.toggle('dot', !!(AC.me && AC.me.inbox && AC.me.inbox.unread)); document.body.classList.toggle('is-owner', !!(AC.me && AC.me.owner)); b.textContent = P ? P.name.slice(0, 1).toUpperCase() : ''; b.classList.toggle('in', !!P); b.setAttribute('aria-label', P ? `Your account (${P.name})` : 'Sign in'); tixBadge(); }
 const tid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 function legAuto(l) { if (l.src !== 'pick' || l.res) return l.res; const B = boardOf(); if (!B) return null; const g = (B.games || []).find(x => x.sp === l.sp && x.game === l.game); if (!g) return null;
   for (const a of Object.values(g.calls || {})) for (const c of a) if (c.pick === l.pick && c.hit != null) return c.hit === true ? 'hit' : c.hit === false ? 'miss' : null; return null; }
@@ -493,7 +496,7 @@ function myTicketHtml(t) { const st = tkState(t), dec = tkDec(t), chip = { cashe
     <div class="row"><button type="button" class="btn ghost sm" data-act="tkdel" data-id="${esc(t.id)}">Delete</button></div></div></article>`; }
 function viewMe() {
   const el = $('#v-me'), P = acctPass();
-  if (!P) { el.innerHTML = `<h1 class="title">Your tickets</h1><p class="lede">Sign in to track your own tickets on any device: build them from the Props slip, add the desk's picks, or type your own legs.</p>
+  if (!P) { el.innerHTML = `<h1 class="title">Your account</h1><p class="lede">Sign in to track your own tickets on any device: build them from the Props slip, add the desk's picks, or type your own legs.</p>
     <div class="paper acctbox"><div class="pview">${['login', 'signup'].map(v => `<button type="button" class="${(AC.mode || 'login') === v ? 'on' : ''}" data-act="acmode" data-v="${v}">${v === 'login' ? 'Sign in' : 'Create account'}</button>`).join('')}</div>
       <form data-form="acct" autocomplete="on" novalidate><label>Username<input name="name" maxlength="20" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
       ${AC.mode === 'signup' ? '<small class="fhint">2–20 letters or numbers (spaces, _ . - are fine after the first letter)</small>' : ''}
@@ -504,20 +507,49 @@ function viewMe() {
       ${isStandalone() ? '' : '<p class="note"><b>Tip:</b> <button type="button" class="link" data-act="guide">save TheDesk as an app</button> and you stay signed in for good.</p>'}</div>
     <div class="paper ddpitch"><b>D$1,000 the moment you sign up</b><p>Desk Dollars are play money: bet them on any game on the Slate, flip them, and climb the leaderboard for bragging rights.</p></div>${lbHtml()}${footHtml()}`; if (!LB) lbLoad(); return; }
   const L = (AC.me && AC.me.tickets) || [], R = myRecord(L);
-  el.innerHTML = `<h1 class="title">Your tickets</h1><p class="lede">Signed in as <b>${esc(P.name)}</b>. <button type="button" class="link" data-act="aclogout">Sign out</button></p>
-    ${AC.me && AC.me.owner ? '<div class="row"><button type="button" class="btn foil" data-go="admin">🛠 Admin dashboard</button></div>' : ''}${myInbox()}${AC.me ? walletHtml(AC.me.wallet) : ''}${AC.me && (AC.me.bets || []).length ? `<h2 class="h2">Your D$ bets</h2><div class="rtk-list">${myBetsHtml()}</div>` : AC.me ? '<p class="note">Open any game on the <button type="button" class="link" data-go="slate">Slate</button> and tap a line to bet Desk Dollars.</p>' : ''}
+  const TX = tixItems(), nA = TX.filter(x => x.on).length;
+  el.innerHTML = `<h1 class="title">Your account</h1><p class="lede">Signed in as <b>${esc(P.name)}</b>. <button type="button" class="link" data-act="aclogout">Sign out</button></p>
+    ${AC.me && AC.me.owner ? '<div class="row"><button type="button" class="btn foil" data-go="admin">🛠 Admin dashboard</button></div>' : ''}${myInbox()}${AC.me ? walletHtml(AC.me.wallet) : ''}
+    <button type="button" class="paper tixgo" data-go="tix"><span class="tg-i" aria-hidden="true">🎟</span><span class="tg-t"><b>My tickets</b><small>${AC.me ? `${nA} active · ${TX.length - nA} graded · ${R.c} cashed, ${R.l} lost` : 'Loading…'}</small></span><span class="tg-a">Open →</span></button>
     ${AC.me && AC.me.owner ? `<div class="paper owner ddown"><b>Owner tools</b><form data-form="ddgrant"><label>Give D$ to<input name="who" required maxlength="20" placeholder="username"></label><label>Amount<input name="amt" inputmode="numeric" required placeholder="500"></label><button class="btn sm" type="submit">Add D$</button></form><p class="note">Added D$ counts as bought: it shows in blue and never counts on the leaderboard.</p></div>` : ''}
-    ${AC.me && !AC.me.owner ? pubRecHtml(P) : ''}${lbHtml()}<h2 class="h2">Your real tickets</h2>
-    ${AC.me ? `<div class="mystats"><span><b>${R.c}</b>cashed</span><span><b>${R.l}</b>lost</span><span><b>${R.n ? Math.round(100 * R.h / R.n) + '%' : '—'}</b>legs hit</span><span><b>${L.length}</b>tickets</span></div>` : ''}
-    <details class="paper newtk"${AC.open ? ' open' : ''}><summary>＋ New ticket</summary><form data-form="newtk"><label>Name it (optional)<input name="title" maxlength="40" placeholder="Sunday 3-leg"></label>
+    ${AC.me && !AC.me.owner ? pubRecHtml(P) : ''}${lbHtml()}
+    <p class="chat-err" role="alert">${esc(AC.err)}</p>
+    ${AC.me && AC.me.owner ? '' : `<details class="closeacct"><summary>Delete my account</summary><form data-form="acclose"><p class="note">This deletes your account and every ticket on it, for good.</p><label>Your password<input name="pass" type="password" required autocomplete="current-password"></label><button class="btn ghost sm" type="submit">Delete it</button></form></details>`}${footHtml()}`;
+  if (!LB) lbLoad();
+}
+/* ── v76 · Nov 26, 12:46 PM, Chris: "a tab or easier spot … (maybe at the top by profile and join..) we can have a “my tickets” section.
+   With a tab for graded and a tab for active once you’ve clicked in it… so it leaves quick access for subscribers", and "the founder long
+   shot tickets I want in my TheDesk profile as picks I made". One tap from the top bar: Active (still playing) and Graded (settled) —
+   the tickets you track, your D$ bets and, on the owner's account, the founder's LongShots as his own picks. (One day the founder is a
+   character of his own — "I play God of the characters" — not yet.) ── */
+S.tixTab = store.get('tixtab') === 'graded' ? 'graded' : 'active';
+function tixItems() { const M = AC.me || {}, out = [];
+  (M.tickets || []).forEach(t => { const r = tkState(t).res; out.push({ k: 'mine', t, on: r === 'open' || r === 'live', ts: +t.ts || 0, r }); });
+  (M.bets || []).forEach(b => out.push({ k: 'dd', t: b, on: b.status === 'open', ts: +b.ts || 0, r: b.status === 'won' ? 'cashed' : b.status }));
+  if (M.owner) founderTix().forEach(t => { const r = effTicket(t).res; out.push({ k: 'ls', t, on: r !== 'cashed' && r !== 'lost', ts: Date.parse(t.date || t.day || '') || 0, r }); });
+  return out.sort((a, b) => b.ts - a.ts); }
+function tixBadge() { const b = $('#tixBtn .tx-n'); if (!b) return; const n = acctPass() && AC.me ? tixItems().filter(x => x.on).length : 0; b.hidden = !n; b.textContent = n > 99 ? '99+' : String(n); }
+const TIX_K = { ls: ['Your LongShot picks', 'Your tickets as the founder: posted on the LongShots tab, graded live.'], mine: ['Tickets you track', ''], dd: ['Your D$ bets', 'Desk Dollars are play money, never cashed out.'] };
+const tixCard = x => (x.k === 'ls' ? founderCard(x.t) : x.k === 'dd' ? rtkHtml(x.t, x.t.run ? liveRuns().find(r => r.rid === x.t.run) || null : null, betTag(x.t)) : myTicketHtml(x.t));
+function tixListHtml() { const on = S.tixTab === 'active', L = tixItems().filter(x => x.on === on);
+  if (!L.length) return on ? '<div class="paper blank"><b>Nothing active</b><p>Build a slip on the <button type="button" class="link" data-go="props">Props</button> tab, tap ＋ on any pick or bet D$ on a game on the <button type="button" class="link" data-go="slate">Slate</button>, or type your own legs below.</p></div>'
+    : '<div class="paper blank"><b>Nothing graded yet</b><p>A ticket moves here the moment it settles.</p></div>';
+  const c = L.filter(x => x.r === 'cashed').length, l = L.filter(x => x.r === 'lost').length;
+  return (on ? '' : `<p class="tix-sum"><b>${c}</b> cashed · <b>${l}</b> lost${c + l ? ` · ${Math.round(100 * c / (c + l))}% cashed` : ''}</p>`) + Object.keys(TIX_K).map(k => { const G = L.filter(x => x.k === k); if (!G.length) return ''; const [h, n] = TIX_K[k];
+    return `<h2 class="h2 tix-h">${h} <small>${G.length}</small></h2>${n ? `<p class="note">${n}</p>` : ''}<div class="fgrid">${G.map(tixCard).join('')}</div>`; }).join(''); }
+const newTkHtml = open => `<details class="paper newtk"${open ? ' open' : ''}><summary>＋ New ticket</summary><form data-form="newtk"><label>Name it (optional)<input name="title" maxlength="40" placeholder="Sunday 3-leg"></label>
       <label>Legs, one per line<textarea name="legs" rows="4" required placeholder="Bills -3 -110&#10;Kaprizov 3+ SOG&#10;Over 221.5 -105"></textarea></label>
       <div class="row2"><label>Stake $<input name="stake" inputmode="decimal" placeholder="5"></label><label>Ticket odds<input name="odds" inputmode="numeric" placeholder="+600"></label></div>
-      <button class="btn" type="submit">Track it</button></form><p class="note">Tip: build a slip on the Props tab and tap “Track it” — or tap ＋ on any pick on the Slate.</p></details>
-    <p class="chat-err" role="alert">${esc(AC.err)}</p>
-    ${!AC.me ? '<div class="shimmer"></div>' : L.length ? `<div class="fgrid">${L.map(myTicketHtml).join('')}</div>` : '<div class="paper blank"><b>No tickets yet</b><p>Your first one shows up here.</p></div>'}
-    ${AC.me && AC.me.owner ? '' : `<details class="closeacct"><summary>Delete my account</summary><form data-form="acclose"><p class="note">This deletes your account and every ticket on it, for good.</p><label>Your password<input name="pass" type="password" required autocomplete="current-password"></label><button class="btn ghost sm" type="submit">Delete it</button></form></details>`}${footHtml()}`;
-  AC.open = false; if (!LB) lbLoad();
-}
+      <button class="btn" type="submit">Track it</button></form><p class="note">Tip: build a slip on the Props tab and tap “Track it” — or tap ＋ on any pick on the Slate.</p></details>`;
+function viewTix() {
+  const el = $('#v-tix'), P = acctPass(); tixBadge();
+  if (!P) { el.innerHTML = `<h1 class="title">My tickets</h1><p class="lede">Sign in and every ticket you track lands here: <b>Active</b> while it plays, <b>Graded</b> once it settles.</p><div class="row"><button type="button" class="btn" data-go="me">Sign in or create an account</button></div>${footHtml()}`; return; }
+  const all = tixItems(), nA = all.filter(x => x.on).length, R = myRecord((AC.me && AC.me.tickets) || []);
+  el.innerHTML = `<h1 class="title">My tickets</h1>${AC.me && R.n ? `<div class="mystats m3"><span><b>${R.c}</b>cashed</span><span><b>${R.l}</b>lost</span><span><b>${Math.round(100 * R.h / R.n)}%</b>legs hit</span></div>` : ''}
+    <div class="pview tixtabs" role="tablist" aria-label="My tickets">${[['active', 'Active', nA], ['graded', 'Graded', all.length - nA]].map(([v, l, n]) => `<button type="button" role="tab" aria-selected="${S.tixTab === v}" class="${S.tixTab === v ? 'on' : ''}" data-act="tixtab" data-v="${v}">${l} <b>${n}</b></button>`).join('')}</div>
+    <p class="chat-err" role="alert">${esc(AC.err)}</p><div id="tixList">${AC.me ? tixListHtml() : '<div class="shimmer"></div>'}</div>${S.tixTab === 'active' ? newTkHtml(AC.open) : ''}${footHtml()}`;
+  AC.open = false; }
+function tixRepaint() { const g = $('#tixList'); if (g && AC.me) g.innerHTML = tixListHtml(); tixBadge(); }
 function parseLegs(txt) { return String(txt || '').split(/\n+/).map(x => x.trim()).filter(Boolean).slice(0, 15).map(line => { const m = line.match(/\s([+-−]\d{3,5})\s*$/);
   const price = m ? +m[1].replace('−', '-') : null; return { src: 'own', pick: (m ? line.slice(0, m.index) : line).trim().slice(0, 80), price }; }).filter(l => l.pick); }
 /* ── Props (v3.0.20, Chris, Nov 14: "better than them… unrecognizable… way more modern"). Our own take, our own look:
@@ -1473,7 +1505,7 @@ document.addEventListener('submit', async e => {
   if (f.dataset.form === 'acclose') { const P = acctPass(); if (!P) return; try { await acctApi('/acct/close', { token: P.token, pass: f.pass.value }); store.set('acct', null); AC.me = null; acctBadge(); viewMe(); toast('Your account is deleted'); } catch (err) { toast(err.message); } return; }
   if (f.dataset.form === 'newtk') { const legs = parseLegs(f.legs.value); if (!legs.length) return toast('Add at least one leg');
     const od = +String(f.odds.value).replace(/[^\d+-]/g, ''); const t = { id: tid(), ts: Date.now(), title: f.title.value.trim(), stake: +f.stake.value || null, odds: Math.abs(od) >= 100 ? od : null, legs };
-    if (await tkSave(t, 'Tracking it')) viewMe(); return; }
+    if (await tkSave(t, 'Tracking it')) render(); return; }
   if (f.dataset.form === 'chat-join') { const n = $('#joinErr'); n.textContent = '';
     /* v3.2 · the name's key stays on this phone (kept apart from the chat pass, so leaving the chat never loses the name) */
     const nm = f.name.value.trim(), K = store.get('chatnk', {}) || {};
@@ -1769,8 +1801,7 @@ function rtkHtml(b, r, tag) { const N = ddTicketNow(b), open = b.status === 'ope
   return `<article class="rtk ${open ? (N.q === 0 ? 'lost' : N.live ? 'live' : 'open') : b.status}">${tag ? `<div class="rtk-src">${tag}</div>` : ''}<div class="rtk-h"><span><b>${dd$(b.stake)}</b> · ${b.mode === 'sgp' ? 'SGP · ' : ''}${legsN > 1 ? legsN + ' legs' : 'single'} · ${esc(decAm(b.dec))}</span>${chip}</div>${qline}<ul class="fl-list">${legs}</ul>${after}</article>`; }
 /* v62 · the Me tab's D$ tickets follow live the same way: legs live, finals with margins, the cash chance — and where each one came from */
 const betTag = b => { if (b.run) { const r = ((AC.me && AC.me.runs) || []).find(x => x.rid === b.run); return `🎯 ${esc(CHN(b.cid || (r && r.cid)))}`; } if (b.lg) { const g = ((AC.me && AC.me.leagues) || []).find(x => x.lid === b.lg); return `🏆 ${esc((g && g.name) || 'League')}`; } return '💵 Wallet'; };
-const myBetsHtml = () => (AC.me.bets || []).slice(0, 20).map(b => rtkHtml(b, b.run ? liveRuns().find(x => x.rid === b.run) || null : null, betTag(b))).join('');
-function betsRepaint() { const g = $('#v-me .rtk-list'); if (g && AC.me) g.innerHTML = myBetsHtml(); }
+function betsRepaint() { if (S.tab === 'tix') tixRepaint(); }
 function runCard(r) { const c = chal(r.cid); if (!c) return ''; const live = r.status === 'live' && r.ends > Date.now(), daysLeft = Math.max(1, Math.ceil((r.ends - Date.now()) / 864e5));
   const chip = live ? `<span class="fchip live">● ${cxLeft(r.ends - Date.now())} left</span>` : { won: `<span class="fchip cashed">🏆 +${dd$(r.paid || c.prize)}</span>`, busted: '<span class="fchip lost">Busted</span>', expired: '<span class="fchip">Time ran out</span>', quit: '<span class="fchip">Quit</span>' }[r.status] || '<span class="fchip">Settling</span>';
   const O = live ? orderFor(r.route, r.bal, r.start) : null, odds2 = live ? runSim(c, r.route, r.bal, daysLeft) : null, R = ROUTES[r.route] || ROUTES[c.route], RU = RULES[c.rule];
@@ -2074,13 +2105,15 @@ function profBetHtml(b) { const chip = { won: `✓ Won ${dd$(b.back)}`, lost: '�
   return `<article class="slip mytk nostub ${b.status === 'won' ? 'cashed' : b.status}"><div class="slip-head"><span>${dd$(b.stake)} · ${b.mode === 'sgp' ? 'SGP · ' + b.legs.length + ' legs' : b.legs.length > 1 ? b.legs.length + '-leg' : 'single'}${b.ctx && b.ctx !== 'wallet' ? ' · ' + esc(b.ctx) : ''}</span><span class="fchip ${b.status === 'won' ? 'cashed' : b.status}">${chip}</span></div><div class="slip-main">
     <ul class="fl-list">${b.legs.map(l => `<li class="fl ${l.res || 'open'}"><span class="fl-ic">${l.res === 'hit' ? '✓' : l.res === 'miss' ? '✗' : l.res === 'push' ? '↺' : '○'}</span><div class="fl-b"><b>${esc(l.pick)} ${esc(odds(l.price))}</b><small>${esc([LEAGUE[l.sp], String(l.game || '').replace('@', ' at '), l.t ? 'started ' + ctStamp(l.t) + ' CT' : ''].filter(Boolean).join(' · '))}</small></div></li>`).join('')}</ul>
     <p class="note">🔒 Placed ${esc(ctStamp(b.ts))} CT · ${esc(lockGap(b))}</p></div></article>`; }
+/* v76 · the founder's own record page carries his LongShots: the picks he made, graded live (the TheDesk account is the owner's) */
+const fdProf = D => { const T = String((D && D.name) || '').toLowerCase() === 'thedesk' ? founderTix() : []; return T.length ? `<h2 class="h2">Founder LongShot picks</h2><p class="note">Real tickets the founder placed, posted on the LongShots tab and graded live.</p><div class="fgrid">${T.slice(0, 6).map(founderCard).join('')}</div>` : ''; };
 function viewProfile() { const el = $('#v-u'); if (!el) return; const n = S.profile || '', P = acctPass(), mine = !!(P && P.name.toLowerCase() === n.toLowerCase()), D = PROF.name === n ? PROF.data : null;
   if (!D) { el.innerHTML = `<h1 class="title">${esc(n || 'A member')}</h1>${PROF.err && PROF.name === n ? `<p class="lede">${esc(PROF.err)}</p><div class="row"><button type="button" class="btn ghost sm" data-go="me">See the leaderboard</button></div>` : '<div class="shimmer"></div>'}${footHtml()}`; return; }
   const rec = `${D.w}-${D.l}${D.p ? '-' + D.p : ''}`;
   el.innerHTML = `<h1 class="title">${esc(D.name)}${D.cap ? ' <span class="fchip cashed" style="font-size:.42em;vertical-align:middle" title="Verified by TheDesk">✔ Verified capper</span>' : ''}</h1>
     <p class="lede">${esc(D.rank)} · ${(+D.xp || 0).toLocaleString('en-US')} XP · on TheDesk since ${new Date(D.since).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</p>
-    <div class="mystats"><span><b>${rec}</b>record</span><span><b>${D.roi == null ? '—' : (D.roi > 0 ? '+' : '') + D.roi + '%'}</b>ROI</span><span><b>${dd$(D.earned)}</b>D$ earned</span></div>
-    ${D.private ? `<div class="paper blank"><b>This record is private</b><p>${mine ? 'Switch it on in <button type="button" class="link" data-go="me">Your tickets</button> and anyone with your link can check every bet.' : 'Only the totals show until they make it public.'}</p></div>`
+    <div class="mystats"><span><b>${rec}</b>record</span><span><b>${D.roi == null ? '—' : (D.roi > 0 ? '+' : '') + D.roi + '%'}</b>ROI</span><span><b>${dd$(D.earned)}</b>D$ earned</span></div>${fdProf(D)}
+    ${D.private ? `<div class="paper blank"><b>This record is private</b><p>${mine ? 'Switch it on in <button type="button" class="link" data-go="me">Your account</button> and anyone with your link can check every bet.' : 'Only the totals show until they make it public.'}</p></div>`
       : `<div class="row"><button type="button" class="btn sm" data-act="proflink" data-name="${esc(D.name)}">Copy the link to this record</button></div>
     <p class="note">Every bet here went in before its games started: the server stamps the moment it arrived and takes nothing on a game that has begun. Desk Dollars are play money, never cashed out.</p>
     ${D.open && D.open.length ? `<h2 class="h2">Open now</h2><div class="fgrid">${D.open.map(profBetHtml).join('')}</div>` : D.openHidden ? '<p class="note">Open bets stay hidden until they settle.</p>' : ''}
@@ -2090,7 +2123,7 @@ function pubRecHtml(P) { const M = AC.me || {};
     <label class="chk"><input type="checkbox" data-act="pubtoggle" data-k="pub"${M.pub || M.cap ? ' checked' : ''}${M.cap ? ' disabled' : ''}> Make my record public${M.cap ? ' (✔ verified capper: always public)' : ''}</label>
     <label class="chk"><input type="checkbox" data-act="pubtoggle" data-k="open"${M.pubOpen ? ' checked' : ''}${M.pub || M.cap ? '' : ' disabled'}> Show my open bets too</label>
     ${M.pub || M.cap ? `<div class="row"><button type="button" class="btn sm" data-act="proflink" data-name="${esc(P.name)}">Copy my link</button><button type="button" class="btn ghost sm" data-act="prof" data-name="${esc(P.name)}">See it</button></div>` : ''}</div>`; }
-const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, admin: viewAdmin, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin, u: viewProfile };
+const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, tix: viewTix, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, admin: viewAdmin, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin, u: viewProfile };
 function render() { VIEWS[S.tab](); }
 function go(tab, push) {
   /* v3.3 · #u=<name> opens a member's public record (the Open Scoreboard) */
@@ -2100,13 +2133,13 @@ function go(tab, push) {
   if (!TABS.includes(tab) || (tab === 'u' && !S.profile)) tab = 'today';
   S.tab = tab;
   for (const t of TABS) $('#v-' + t).hidden = t !== tab;
-  for (const b of $$('[data-go]')) { if (b.closest('.tabs,.nav-top')) { if (b.dataset.go === tab || (b.dataset.also || '').split(' ').includes(tab)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); } }
+  for (const b of $$('[data-go]')) { if (b.closest('.tabs,.nav-top') || b.id === 'tixBtn') { if (b.dataset.go === tab || (b.dataset.also || '').split(' ').includes(tab)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); } }
   const hash = '#' + (tab === 'u' ? 'u=' + encodeURIComponent(S.profile) : tab); if (push && location.hash !== hash) history.pushState(null, '', hash);
   render(); window.scrollTo(0, 0);
   try { if (TG && TG.BackButton) { if (tab === 'today') TG.BackButton.hide(); else TG.BackButton.show(); } } catch (e) { }
   if (tab === 'slate') { if (!S.slate) loadSlate(); else slateLive(); }
   if (tab === 'u') profLoad(S.profile);
-  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your tickets — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', challenges: 'Challenges — TheDesk', leagues: 'Leagues — TheDesk', admin: 'Admin — TheDesk', cast: 'The characters — TheDesk', chat: 'Chat — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk', u: `${S.profile || 'A member'}: the record — TheDesk` }[tab];
+  document.title = { today: 'TheDesk — today’s Best 3, locked before the games', slate: 'The sheet — TheDesk', props: 'Props — TheDesk', me: 'Your account — TheDesk', tix: 'My tickets — TheDesk', longshots: 'Founder LongShot Parlays — TheDesk', challenges: 'Challenges — TheDesk', leagues: 'Leagues — TheDesk', admin: 'Admin — TheDesk', cast: 'The characters — TheDesk', chat: 'Chat — TheDesk', receipts: 'Every result — TheDesk', join: 'Join — TheDesk', u: `${S.profile || 'A member'}: the record — TheDesk` }[tab];
 }
 document.addEventListener('click', async e => {
   const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, true); return; }
@@ -2222,9 +2255,10 @@ document.addEventListener('click', async e => {
     try { const fk = fromKey(), run = fk.startsWith('run:') ? fk.slice(4) : undefined, league = fk.startsWith('lg:') ? fk.slice(3) : undefined, src = run ? CHN((liveRuns().find(r => r.rid === run) || {}).cid) : league ? ((liveLgs().find(g => g.lid === league) || {}).name || 'your league') : 'your wallet'; const j = await acctApi('/acct/bet', { token: P.token, stake: st, mode: S.ddMode, run, league, legs: S.dd.map(l => ({ k: l.k, mk: l.mk, side: l.side })) });
       if (AC.me) { AC.me.wallet = j.wallet; AC.me.bets = [j.bet, ...(AC.me.bets || [])]; if (j.run) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); if (j.entry) AC.me.leagues = (AC.me.leagues || []).map(g => (g.lid === j.entry.lid ? { ...g, bal: j.entry.bal, open: j.entry.open } : g)); } CX.at = 0; LGX.at = 0; LGX.one = {}; S.dd = []; store.set('ddslip', S.dd); store.set('ddstake', st); render(); toast(`Placed${j.bet.mode === 'sgp' ? ' (SGP)' : ''} from ${src}: ${dd$(j.bet.stake)} to win ${dd$(j.bet.toWin)}${run ? ' · follow it on the run card' : ''}`); LB = null; liveTick(); } catch (e) { toast(e.message); } }
   else if (act === 'acmode') { AC.mode = a.dataset.v; viewMe(); }
+  else if (act === 'tixtab') { S.tixTab = a.dataset.v === 'graded' ? 'graded' : 'active'; store.set('tixtab', S.tixTab); viewTix(); }
   else if (act === 'aclogout') { const P = acctPass(); store.set('acct', null); AC.me = null; acctBadge(); viewMe(); if (P) acctApi('/acct/logout', { token: P.token }).catch(() => { }); }
-  else if (act === 'tkmark') { const t = ((AC.me && AC.me.tickets) || []).find(x => x.id === a.dataset.id); if (t) { const l = t.legs[+a.dataset.i]; l.res = l.res === a.dataset.v ? null : a.dataset.v; viewMe(); tkSave(t); } }
-  else if (act === 'tkdel') { const P = acctPass(); if (P && AC.me) { AC.me.tickets = AC.me.tickets.filter(x => x.id !== a.dataset.id); viewMe(); acctApi('/acct/del', { token: P.token, id: a.dataset.id }).catch(e => toast(e.message)); } }
+  else if (act === 'tkmark') { const t = ((AC.me && AC.me.tickets) || []).find(x => x.id === a.dataset.id); if (t) { const l = t.legs[+a.dataset.i]; l.res = l.res === a.dataset.v ? null : a.dataset.v; render(); tkSave(t); } }
+  else if (act === 'tkdel') { const P = acctPass(); if (P && AC.me) { AC.me.tickets = AC.me.tickets.filter(x => x.id !== a.dataset.id); render(); acctApi('/acct/del', { token: P.token, id: a.dataset.id }).catch(e => toast(e.message)); } }
   else if (act === 'trackpick') { const d = a.dataset; tkSave({ id: tid(), ts: Date.now(), title: '', legs: [{ src: 'pick', sp: d.sp, game: d.game, pick: d.pick, price: d.price ? +d.price : null, start: d.start || '' }] }, 'Tracking it — see Your tickets'); }
   else if (act === 'pslipcopy') { copyText(slipText(), 'Slip copied — paste it into your book'); }
   else if (act === 'bf') { const k = a.dataset.k, v = a.dataset.v;
@@ -2283,7 +2317,7 @@ setInterval(() => { if (!document.hidden) loadFeed(); }, 120e3);
 (function liveLoop() { const anyLive = Object.values(S.live || {}).some(v => v && v.state === 'in');
   setTimeout(() => { if (!document.hidden) { liveTick(); if (S.tab === 'slate') slateLive();
     /* v62 · a run with a ticket out: the account refreshes every 2 minutes while you watch, so a settled ticket moves the run's bankroll */
-    if ((S.tab === 'challenges' || S.tab === 'me') && AC.me && (AC.me.bets || []).some(b => b.status === 'open') && Date.now() - (AC.at || 0) > 120e3 && !typing()) acctLoad(); } liveLoop(); }, anyLive ? 30e3 : S.liveAt ? 60e3 : 10e3); })();
+    if ((S.tab === 'challenges' || S.tab === 'me' || S.tab === 'tix') && AC.me && (AC.me.bets || []).some(b => b.status === 'open') && Date.now() - (AC.at || 0) > 120e3 && !typing()) acctLoad(); } liveLoop(); }, anyLive ? 30e3 : S.liveAt ? 60e3 : 10e3); })();
 setInterval(() => { if (!document.hidden && S.tab === 'slate') loadSlate(); }, 600e3);
 
 /* ── Pull to refresh (Chris, Nov 15: "the pull down refresh is not available yet on the public app"). A home-screen app on iPhone
