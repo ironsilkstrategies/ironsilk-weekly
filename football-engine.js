@@ -495,7 +495,7 @@ function _parseNFLEvents(j){
       clock:comp.status&&comp.status.displayClock||'',
       period:comp.status&&comp.status.period||0,
       awayScore:(()=>{const sc=(comp.competitors.find(c=>c.homeAway==='away')||{}).score;return sc!=null&&sc!==''?+sc:null})(),
-      h1a:(()=>{const c=comp.competitors.find(x=>x.homeAway==='away')||{};const q=c.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),h1h:(()=>{const c=comp.competitors.find(x=>x.homeAway==='home')||{};const q=c.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
+      h1a:(()=>{const c=comp.competitors.find(x=>x.homeAway==='away')||{};const q=c.linescores||[];return q.length>=2&&fbHalfOver(comp)?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),h1h:(()=>{const c=comp.competitors.find(x=>x.homeAway==='home')||{};const q=c.linescores||[];return q.length>=2&&fbHalfOver(comp)?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
       homeScore:(()=>{const sc=(comp.competitors.find(c=>c.homeAway==='home')||{}).score;return sc!=null&&sc!==''?+sc:null})(),
       away:{abbr:awayAbbr,tid:String(away.team.id||''),name:away.team.displayName||awayAbbr,offRating:24,defRating:24,record:away.records&&away.records[0]&&away.records[0].summary||''},
       home:{abbr:homeAbbr,tid:String(home.team.id||''),name:home.team.displayName||homeAbbr,offRating:24,defRating:24,record:home.records&&home.records[0]&&home.records[0].summary||''},
@@ -2228,6 +2228,9 @@ const NFL_FORM_KEY='d4.nflform';
 const NFL_FORM_INFLIGHT={},NFL_FORM_ERR={};
 const NFL_FORM_TTL=12*3600e3,NFL_FORM_CAP=150;
 function nflFormFresh(e){return!!(e&&e.ts&&e.s&&Date.now()-e.ts<(e.v&&e.v.length?NFL_FORM_TTL:2*3600e3));}
+/* v3.5.32 · a halftime score exists only once the 2nd quarter is over — halftime, the 3rd quarter on, or final.
+   Two linescores alone just means the 2nd quarter has started, and a 1H leg graded then was graded on half a quarter. */
+function fbHalfOver(comp){const st=(comp&&comp.status)||{},ty=st.type||{};return ty.state==='post'||(+st.period||0)>=3||/HALFTIME/i.test(String(ty.name||''))||/^half/i.test(String(ty.shortDetail||''));}
 function fbFormKey(id,league){return league==='ncaaf'?'cfb:'+id:String(id);}
 function fbPlayerForm(id,league){
   const key=fbFormKey(id,league);const hit=get(NFL_FORM_KEY,{})[key];if(nflFormFresh(hit))return Promise.resolve(hit.v);
@@ -3402,8 +3405,8 @@ function _parseNCAAFEvents(j){
       clock:(comp.status&&comp.status.displayClock)||'',
       period:(comp.status&&comp.status.period)||0,
       awayScore:(()=>{const sc=away.score;return sc!=null&&sc!==''?+sc:null})(),
-      h1a:(()=>{const q=away.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
-      h1h:(()=>{const q=home.linescores||[];return q.length>=2?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
+      h1a:(()=>{const q=away.linescores||[];return q.length>=2&&fbHalfOver(comp)?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
+      h1h:(()=>{const q=home.linescores||[];return q.length>=2&&fbHalfOver(comp)?(+(q[0].value??q[0].displayValue)||0)+(+(q[1].value??q[1].displayValue)||0):null})(),
       homeScore:(()=>{const sc=home.score;return sc!=null&&sc!==''?+sc:null})(),
       away:{abbr:awayAbbr,tid:String(away.team.id||''),name:awayName,location:away.team.location||'',shortName:away.team.shortDisplayName||'',ranking:ranking(away.team),
         offRating:26,defRating:26,record:away.records&&away.records[0]&&away.records[0].summary||''},

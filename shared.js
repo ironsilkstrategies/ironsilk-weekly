@@ -1400,6 +1400,7 @@ function parseMyTicketText(text){
     // "buying N" (bought points, e.g. buying 2 on a total) sits between the
     // price and "for GAME" — the number in the line is already the bought
     // line itself, so this is just noise text to drop, not a math adjustment.
+    body=body.replace(/\s+(?:pk|pick|pick'?em|ev(?:en)?)\s+([+-]\d{3,})$/i,' +0 $1');   /* v3.5.32 · "Miami Florida pk -115" — a pick'em spread is +0 (a tie pushes) */
     body=body.replace(/\s+buying\s+[+-]?[\d.]+\s*$/i,'').trim(); // "buying -2" too: the minus sign used to slip past and turn the leg into an ML at -2
     if(!pm){skipped.push(line+'  (period not GAME or 1ST HALF — not supported yet)');return;}
     const h1=period==='1ST HALF',p1=period==='1ST PERIOD';
@@ -1409,11 +1410,11 @@ function parseMyTicketText(text){
     else if((m=body.match(/^(.+?)\s+([+-]\d+(?:\.\d+)?)\s+([+-]\d+)$/))){
       const ab=intakeAbbr(sport,m[1]);
       if(ab){pick=ab+(h1?' 1H ':p1?' P1 ':' ')+(/^[+-]/.test(m[2])?m[2]:'+'+m[2]);price=+m[3];}
-    }else if(!h1&&(m=body.match(/^(.+?)\s+([+-]\d+)$/))){
+    }else if((m=body.match(/^(.+?)\s+([+-]\d{3,})$/))){   /* v3.5.32 · 1st-half moneylines too: "Buffalo Bills -150 for 1ST HALF" → "BUF 1H ML" */
       const ab=intakeAbbr(sport,m[1]);
-      if(ab){pick=ab+(p1?' P1 ML':' ML');price=+m[2];}
+      if(ab){pick=ab+(h1?' 1H ML':p1?' P1 ML':' ML');price=+m[2];}
     }
-    if(!pick){skipped.push(line+(h1?'  (1st-half moneyline not supported yet)':'  (leg text not understood)'));return;}
+    if(!pick){skipped.push(line+'  (leg text not understood)');return;}
     const dm=whenText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     /* v2.87.7 · the book prints each game's start ("11/07/2026 07:30:00 PM (EST)") — keep it, and date the leg by Central
        time: a 12:30 AM Eastern tip is the night before here, which is the day the scoreboard files it under */
@@ -3601,7 +3602,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261126c',DESK_VER='3.5.31';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261126d',DESK_VER='3.5.32';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -9324,21 +9325,31 @@ function gradeLeg(leg,ticketDate){
     }
     return null; // falls through to run line / F5 handling below
   };
-  const sideResult=gradeSideOrTotal();
-  if(sideResult)return{...sideResult,live:!!R.live};
-  /* 1st-half football picks: "1H Over 21.5", "1H Under 21.5", "KC 1H -6.5".
-     Graded on the halftime score captured from ESPN's quarter linescores. */
+  /* 1st-half picks: "1H Over 21.5", "1H Under 21.5", "KC 1H -6.5", "KC 1H +0" (pick'em), "KC 1H ML".
+     Graded on the halftime score — ahead of the side/total check, whose " ML$" rule would read "KC 1H ML" as a
+     full-game moneyline and lose it. v3.5.32 · held until the half is actually over: a live game only counts once
+     it's past halftime (college hoops plays halves, so period 2; football and the NBA play quarters, so period 3). */
   if(/(^|\s)1H\s/.test(pick)){
-    if(R.h1a==null||R.h1h==null)return{hit:null,detail:'1st-half score not available yet',live:!!R.live};
+    const sp1=leg.sport||'',halfP=sp1==='ncaab'?2:3;
+    const h1done=R.h1a!=null&&R.h1h!=null&&(!R.live||(+R.period||0)>=halfP||!!R.half);
+    if(!h1done)return{hit:null,detail:R.live?'1st half in progress':'1st-half score not available yet',live:!!R.live};
     const ha=+R.h1a,hh=+R.h1h,ht=ha+hh;
     let m=pick.match(/^1H (Over|Under) ([\d.]+)/i);
-    if(m){const ln=+m[2];if(ht===ln)return{hit:null,push:true,detail:`1H total ${ht} — push`,live:false};
-      return{hit:/over/i.test(m[1])?ht>ln:ht<ln,detail:`1H ${ha}–${hh} · total ${ht}`,live:false};}
-    m=pick.match(/^([A-Z]{2,4}) 1H ([+\-]?[\d.]+)/);
-    if(m){const [aw,hm]=String(leg.game||'').split('@');const mg=m[1]===hm?hh-ha:ha-hh,ln=+m[2];
-      if(mg+ln===0)return{hit:null,push:true,detail:`1H ${ha}–${hh} — push`,live:false};
-      return{hit:mg+ln>0,detail:`1H ${ha}–${hh}`,live:false};}
+    if(m){const ln=+m[2];if(ht===ln)return{hit:null,push:true,detail:`1H total ${ht} — push`,live:!!R.live};
+      return{hit:/over/i.test(m[1])?ht>ln:ht<ln,detail:`1H ${ha}–${hh} · total ${ht}`,live:!!R.live};}
+    const [aw1,hm1]=String(leg.game||'').split('@');
+    m=pick.match(/^([A-Z0-9&]{2,6}) 1H ML$/i);
+    if(m){const mg=m[1].toUpperCase()===hm1?hh-ha:ha-hh;
+      if(mg===0)return{hit:null,push:true,detail:`1H ${ha}–${hh} — tied at the half, push`,live:!!R.live};
+      return{hit:mg>0,detail:`1H ${ha}–${hh}`,live:!!R.live};}
+    m=pick.match(/^([A-Z0-9&]{2,6}) 1H ([+\-]?[\d.]+)/i);
+    if(m){const mg=m[1].toUpperCase()===hm1?hh-ha:ha-hh,ln=+m[2];
+      if(mg+ln===0)return{hit:null,push:true,detail:`1H ${ha}–${hh} — push`,live:!!R.live};
+      return{hit:mg+ln>0,detail:`1H ${ha}–${hh}`,live:!!R.live};}
+    return{hit:null,detail:null,live:!!R.live};
   }
+  const sideResult=gradeSideOrTotal();
+  if(sideResult)return{...sideResult,live:!!R.live};
   const rlm=pick.match(/^(.+) ([+-]\d+(?:\.\d+)?)$/);
   if(rlm&&!/^F5 /.test(pick)){
     const who=rlm[1],ln=parseFloat(rlm[2]);
@@ -19993,10 +20004,19 @@ function clearStaleFromFinals(){
 /* Every finished game My Games sees becomes a dated shared final — the store
    grading reads on ANY page. Before this, finals only landed when that sport's
    own board was open on game day, so tickets with other sports stayed pending. */
+/* v3.5.32 · the first-half score off ESPN's linescores. College hoops plays two HALVES, so its first half is linescore 0 —
+   adding 0+1 (right for football and NBA quarters) handed every NCAAB 1H leg the whole regulation score. And it waits
+   for the half to be over: a football game in the 2nd quarter has two linescores but no halftime score yet. */
+function mgHalf(sp,state,st,la,lh){const per=+(st&&st.period)||0,ht=/HALFTIME/i.test(String(((st||{}).type||{}).name||''))||/^half/i.test(String(((st||{}).type||{}).shortDetail||''));
+  const halves=sp==='ncaab';if(sp==='nhl'||sp==='mlb')return{h1a:null,h1h:null};
+  const done=state==='post'||ht||per>(halves?1:2);
+  if(!done)return{h1a:null,h1h:null,half:false};
+  const f=L=>halves?(L.length?L[0]:null):(L.length>=2?L[0]+L[1]:null);
+  return{h1a:f(la),h1h:f(lh),half:ht||undefined};}
 function mgWriteFinals(sp,M){const F=get(LS.allfinals,{})||{};let ch=0;
   Object.entries(M).forEach(([k,list])=>(list||[]).forEach(e=>{if(e.state!=='post'||e.a==null||e.h==null||!e.date)return;const key=finalsKey(sp,k);const prev=F[key];
     if(prev&&prev.d&&prev.d>e.date)return;
-    if(prev&&prev.d===e.date&&prev.a===e.a&&prev.h===e.h&&(prev.h1a!=null||e.h1a==null)&&(prev.st||!e.start))return;
+    if(prev&&prev.d===e.date&&prev.a===e.a&&prev.h===e.h&&(e.h1a==null||(prev.h1a===e.h1a&&prev.h1h===e.h1h))&&(prev.st||!e.start))return;
     F[key]={sport:sp,d:e.date,a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,ts:Date.now(),src:'espn',st:e.start||undefined};ch++;}));
   if(ch)set(LS.allfinals,F);return ch;}
 /* v2.87.7 · a fetch that never answers (a phone put to sleep mid-request) held MG_BUSY forever — no more live scores or
@@ -20044,7 +20064,7 @@ async function mgRefresh(force,deep){
           (M[k]=M[k]||[]).push({fetchedAt:Date.now(),an:nm(aw.team),hn:nm(hm.team),espnId:String(ev.id),date:ev.date?new Intl.DateTimeFormat('en-CA',{timeZone:APP_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ev.date)):'',
             start:ev.date,state,detail:(st.type||{}).shortDetail||'',period:st.period||0,clock:st.clock!=null?+st.clock:null,
             a:aw.score!=null&&aw.score!==''?+aw.score:null,h:hm.score!=null&&hm.score!==''?+hm.score:null,
-            h1a:la.length>=2?la[0]+la[1]:null,h1h:lh.length>=2?lh[0]+lh[1]:null,p1a:la.length?la[0]:null,p1h:lh.length?lh[0]:null});});
+            ...mgHalf(sp,state,st,la,lh),p1a:la.length?la[0]:null,p1h:lh.length?lh[0]:null});});
         /* merge: days not refetched (already settled) keep their last known events */
         const old=MG_LIVE[sp]||{};Object.keys(old).forEach(k=>{if(!M[k])M[k]=old[k];else{const have=new Set(M[k].map(e=>e.espnId));old[k].forEach(e=>{if(!have.has(e.espnId))M[k].push(e);});}});
         MG_LIVE[sp]=M;try{mgWriteFinals(sp,M);}catch(e){console.warn('mg finals',e);}}catch(e){}
@@ -20091,7 +20111,7 @@ function staleLive(t){const s=Date.parse(t||'');return isFinite(s)&&Date.now()-s
 function mgResolve(leg,ticketDate){
   const e=mgEventFor(leg.sport||'mlb',leg.game,leg.gameDate||ticketDate,!!leg.gdApprox||!leg.gameDate,leg.start);if(!e||e.a==null||e.state==='pre')return null;
   if(e.state==='in'&&staleLive(e.start||leg.start))return null;
-  return{a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,period:e.period,gid:leg.gid,live:e.state==='in',source:'espn-live',completed:e.state==='post'?true:null};
+  return{a:e.a,h:e.h,h1a:e.h1a,h1h:e.h1h,p1a:e.p1a,p1h:e.p1h,half:e.half||undefined,period:e.period,gid:leg.gid,live:e.state==='in',source:'espn-live',completed:e.state==='post'?true:null};
 }
 function mgTicketOpen(t){try{if(settledAll()[String(t.id)])return false;let dead=false,done=true;
     (t.legs||[]).forEach(l=>{const r=gradeLeg(l,t.date);if(r&&!r.live&&r.hit===false&&!r.push)dead=true;if(!r||r.live||(r.hit==null&&!r.push))done=false;});return!dead&&!done;}catch(e){return true;}}
