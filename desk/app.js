@@ -24,7 +24,11 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const okUrl = u => { try { const x = new URL(String(u)); return x.protocol === 'https:' ? x.href : ''; } catch { return ''; } };
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem('tdp.' + k)); } catch { return null; } },
-  set(k, v) { try { localStorage.setItem('tdp.' + k, JSON.stringify(v)); } catch { /* private mode: fine */ } },
+  /* v82 audit · the saved card is most of what the app keeps (1.5 MB on a full board). When storage fills, a sign-in or a setting must never
+     be the write that's lost: drop the saved card and Slate (they reload in a second) and write again. A card too big to save is dropped
+     rather than left days old for the next first paint. */
+  set(k, v) { try { localStorage.setItem('tdp.' + k, JSON.stringify(v)); } catch {
+    try { if (k === 'feed' || k === 'slate') { localStorage.removeItem('tdp.' + k); return; } localStorage.removeItem('tdp.feed'); localStorage.removeItem('tdp.slate'); localStorage.setItem('tdp.' + k, JSON.stringify(v)); } catch { /* private mode: fine */ } } },
 };
 const fin = x => typeof x === 'number' && Number.isFinite(x);
 const ms = t => (typeof t === 'number' ? t : Date.parse(t || ''));
@@ -113,12 +117,17 @@ async function getJSON(url, wait = 9000) {
   } catch { return null; } finally { clearTimeout(t); }
 }
 const stateOf = x => (!x ? '' : x.hidden ? 'h' : x.push ? 'p' : x.hit === true ? 'w' : x.hit === false ? 'l' : 'o');
-async function loadFeed(force) {
-  const got = (await Promise.all(CFG.feeds.map(u => getJSON(u)))).filter(j => j && typeof j === 'object' && fin(j.generated));
+/* v82 audit · every 2 minutes the app pulled the whole card from both copies (the site and GitHub's raw file): ~340 KB a refresh, ~10 MB an
+   hour on a phone left open on a game. Opening the app, coming back to it and an unlocking slip still read both (the freshest wins); the
+   2-minute refresh takes turns, one copy each time. */
+let feedTurn = 0;
+async function loadFeed(force, one) {
+  const urls = one && CFG.feeds.length > 1 ? [CFG.feeds[feedTurn++ % CFG.feeds.length]] : CFG.feeds;
+  const got = (await Promise.all(urls.map(u => getJSON(u)))).filter(j => j && typeof j === 'object' && fin(j.generated));
   if (!got.length) { S.feedErr = !S.feed; if (S.tab === 'today' || S.tab === 'receipts') whenFree(render); return; }
   const F = got.sort((a, b) => b.generated - a.generated)[0];
   if (S.feed && S.feed.generated >= F.generated) { if (force) whenFree(render); if (!S.liveAt) liveTick(); return; }
-  S.feed = noHeavy(F); S.feedErr = false; store.set('feed', S.feed);
+  S.feed = noHeavy(F); S.feedErr = false; (window.requestIdleCallback || (f => setTimeout(f, 800)))(() => store.set('feed', S.feed));
   whenFree(render); liveTick();
 }
 async function loadSlate() {
@@ -300,7 +309,9 @@ function slipHtml(x0, i, key, opt = {}) {
   if (L && L.state === 'in') { when = `<div class="when live"><span class="dot"></span>Live${L.detail ? ', ' + esc(L.detail) : ''}</div>`; score = `<p class="score">${esc(teamName(x.sp, ga))} ${L.a}, ${esc(teamName(x.sp, gh))} ${L.h}</p>${qBit(x, true) ? `<p class="score-q">${qBit(x, true)}</p>` : ''}`; }
   else if (graded || (L && L.state === 'post')) { when = `<div class="when">Final</div>`; if (L && L.state === 'post') score = `<p class="score">${esc(teamName(x.sp, ga))} ${L.a}, ${esc(teamName(x.sp, gh))} ${L.h}<small class="score-m">${L.a === L.h ? 'Tied' : `${esc(teamName(x.sp, L.a > L.h ? ga : gh))} by ${Math.abs(L.a - L.h)}`} · total ${+L.a + +L.h}</small></p>`; }   /* v62 · the margin and the total, on every final */
   const why = opt.noRead ? '' : readHtml(x.why, x.calls);
-  const fine = x.spread ? 'A spread pick, below the usual 70% bar. It is on the card so every league gets a play.' : x.tuned ? 'History-tuned: under the 70% bar, in because picks like it have made money.' : '';
+  /* v82 · Nov 27 audit: "spread" here is the desk's every-sport slot, not a point spread — it read "A spread pick" on totals and moneylines,
+     and "below the usual 70% bar" on a 72% pick */
+  const fine = x.spread ? `🌐 Every-sport pick: ${LEAGUE[x.sp] ? LEAGUE[x.sp] + '’s' : 'this league’s'} best read today${x.p != null && x.p < 0.7 ? ', under the usual 70% bar,' : ''} on the card so every league gets a play.` : x.tuned ? 'History-tuned: under the 70% bar, in because picks like it have made money.' : '';
   const label = opt.label || R.big, long = label.length > 10 ? ' long' : '';
   return `<article class="slip${why ? '' : ' nostub'}${opt.mini ? ' mini' : ''}${turn}" data-key="${esc(key)}"><div class="ghost"></div>
     <div class="slip-head"><span>${esc(no)}</span><span>${esc(LEAGUE[x.sp] || String(x.sp || '').toUpperCase())}</span></div>
@@ -447,7 +458,10 @@ function ddLegOf(g, mk, side) { const ln = g.ln || {}; if (mk === 'ml') { const 
   if (mk === 'total') return fin(ln.tot) ? { price: fin(side === 'over' ? ln.ov : ln.un) ? (side === 'over' ? ln.ov : ln.un) : DDJ, pick: `${side === 'over' ? 'Over' : 'Under'} ${ln.tot}` } : null; return null; }
 function ddGrid(g) { if (!(g.t > Date.now() + 60e3) || !g.ln) return ''; const on = (mk, sd) => S.dd.some(l => l.k === g.k && l.mk === mk && l.side === sd);
   const btn = (mk, sd) => { const L = ddLegOf(g, mk, sd); return L ? `<button type="button" class="ddb${on(mk, sd) ? ' on' : ''}" data-act="ddpick" data-k="${esc(g.k)}" data-mk="${mk}" data-side="${sd}"><b>${esc(L.pick)}</b><small>${esc(odds(L.price))}</small></button>` : '<span></span>'; };
-  return `<div class="ddgrid"><span class="ddh">Moneyline</span><span class="ddh">Spread</span><span class="ddh">Total</span>${btn('ml', 'away')}${btn('spread', 'away')}${btn('total', 'over')}${btn('ml', 'home')}${btn('spread', 'home')}${btn('total', 'under')}</div>`; }
+  /* v82 audit · a market the book hasn't posted (college games often have a spread and no moneyline) left a header over two blank cells:
+     only the markets with a price get a column */
+  const M = [['ml', 'Moneyline', 'away', 'home'], ['spread', 'Spread', 'away', 'home'], ['total', 'Total', 'over', 'under']].filter(m => ddLegOf(g, m[0], m[2]) || ddLegOf(g, m[0], m[3])); if (!M.length) return '';
+  return `<div class="ddgrid"${M.length < 3 ? ` style="grid-template-columns:repeat(${M.length},minmax(0,1fr))"` : ''}>${M.map(m => `<span class="ddh">${m[1]}</span>`).join('')}${M.map(m => btn(m[0], m[2])).join('')}${M.map(m => btn(m[0], m[3])).join('')}</div>`; }
 /* v71 · Nov 25, 2:02 PM, Chris: "all open games … with the odds already ready to pick before you click the game". Every game that hasn't
    started carries its D$ prices on its row; the open card keeps them with the rules, and the sheet says the rules once up top. */
 const DD_RULE = 'Per game: moneyline or spread, plus the total. An SGP needs both picks in every game. No ticket pays over 10,000x.';
@@ -582,6 +596,9 @@ function parseLegs(txt) { return String(txt || '').split(/\n+/).map(x => x.trim(
 const PL = { all: 'Everything', live: '● Live now', room: 'The room agrees', heat: 'On a heater', bounce: 'Bounce-back', home: 'Home cooking', road: 'Road trip' };
 S.pf = store.get('pf') || { lens: 'all', sp: 'all', stat: 'all', min: 0, sort: 'score', view: 'cards' };
 S.slip = store.get('pslip') || [];
+/* v82 audit · the Props page drew every card the desk published (150 on a busy night) and drew them all again on every live tick:
+   a slow phone stalls. It shows the best 24 through the lens, "Show more" adds 24, and a new lens starts over at the top. */
+const P_STEP = 24; S.pN = P_STEP;
 const pRate = a => (a && a[1] ? a[0] / a[1] : 0);
 const pScore = x => Math.round(100 * (0.35 * pRate(x.l10) + 0.2 * pRate(x.l5) + 0.3 * (x.p || 0) + 0.15 * Math.min((x.votes || 0) / 5, 1)));
 const pLine = x => `${x.side === 'under' ? 'Under ' : ''}${x.side === 'under' ? x.thr : x.thr + '+'} ${x.lab}`;
@@ -653,16 +670,18 @@ function viewProps() {
     <div class="lenses sub">${chip('sp', 'all', 'All sports')}${sps.map(s => chip('sp', s, LEAGUE[s] || s)).join('')}<span class="lsep"></span>${chip('stat', 'all', 'Every stat')}${stats.map(t => chip('stat', t, t)).join('')}</div>
     <div class="ptools"><label class="pmin">Desk Score <b>${f.min || 0}+</b><input type="range" min="0" max="90" step="5" value="${f.min || 0}" data-act="pmin" aria-label="Minimum Desk Score"></label>
       <div class="pview">${['cards', 'sheet'].map(v => `<button type="button" class="${f.view === v ? 'on' : ''}" data-act="pf" data-k="view" data-v="${v}">${v === 'cards' ? 'Cards' : 'Sheet'}</button>`).join('')}</div></div>
-    ${L.length ? (f.view === 'sheet' ? propSheet(L) : `<div class="pgrid">${L.map(propCard).join('')}</div>`) : `<div class="paper blank"><b>Nothing through this lens</b><p>Try another lens, or lower the Desk Score.</p></div>`}`
+    ${L.length ? (f.view === 'sheet' ? propSheet(L.slice(0, S.pN)) : `<div class="pgrid">${L.slice(0, S.pN).map(propCard).join('')}</div>`) + (L.length > S.pN ? `<div class="pmore"><button type="button" class="btn line" data-act="pmore">Show ${Math.min(P_STEP, L.length - S.pN)} more <small>${S.pN} of ${L.length}</small></button></div>` : '') : `<div class="paper blank"><b>Nothing through this lens</b><p>Try another lens, or lower the Desk Score.</p></div>`}`
     : `<div class="paper blank"><b>Props post when the desk publishes today’s card</b><p>Check back closer to game time.</p></div>`}
     ${slipBar()}${footHtml()}`;
 }
 /* the LongShots tab: every founder ticket from the last week, live */
 function viewLongshots() {
   const el = $('#v-longshots'), F = S.feed;
-  const body = F ? founderHtml(true) : '';
+  const body = F ? founderHtml(true) : '', R = (F && F.beta !== false && F.founder && F.founder.rec) || {};
+  /* v82 audit · the empty page said only "No LongShots up right now": yesterday's tickets come down when today's card locks (Chris, Nov 15),
+     so say that, and keep the 30-day record on screen like the full page does */
   el.innerHTML = `<h1 class="title">Founder LongShot Parlays</h1><p class="lede">Real tickets the founder placed: big odds, posted as he plays them, graded live leg by leg. Tap “Tail this” to copy one, then paste it into your book.</p>
-    ${body || (F || S.feedErr ? `<div class="paper blank"><b>No LongShots up right now</b><p>The founder’s next ticket lands here the moment it’s in.</p></div>` : '<div class="shimmer"></div>')}${footHtml()}`;
+    ${body || (F || S.feedErr ? `<div class="paper blank"><b>No LongShot ticket up yet today</b><p>The founder’s next ticket lands here the moment it’s in. Yesterday’s tickets come down when today’s card locks; the record keeps every one.</p>${R.cashed + R.lost ? `<p class="f-rec">Last 30 days: <strong>${R.cashed} cashed</strong>, ${R.lost} lost</p>` : ''}</div>` : '<div class="shimmer"></div>')}${footHtml()}`;
 }
 function tailText(t) { return [`TheDesk · ${t.name || 'Founder LongShot Parlay'} (${t.legs.length} legs${t.dec ? ', ' + decAm(t.dec) : ''})`, ...t.legs.map((l, i) => `${i + 1}. ${legText(l)}${l.price != null ? ' (' + odds(l.price) + ')' : ''}${l.game ? ' · ' + matchup(l) : ''}`), CFG.home || 'https://ironsilkweekly.com/desk/'].join('\n'); }
 async function copyText(txt, ok) { try { await navigator.clipboard.writeText(txt); toast(ok); return; } catch (e) { }
@@ -1449,11 +1468,13 @@ function parHistHtml(H) {
   return `<h3 class="pl-th">Parlay history</h3>${kinds.length > 1 ? `<div class="seg tight ph-k" role="group" aria-label="Kind of ticket">${['all', ...kinds].map(k => `<button type="button" data-act="phk" data-v="${k}" aria-pressed="${kf === k}">${k === 'all' ? 'Every ticket' : PAR_K[k][0] + ' ' + PAR_K[k][1]} <span class="n">${k === 'all' ? H.length : H.filter(t => t.k === k).length}</span></button>`).join('')}</div>` : ''}
     <div class="paper ph-list"><p class="ph-sum">${HK.length} ticket${HK.length === 1 ? '' : 's'} · <b>${sum.w}–${sum.l}</b> · <b class="${uCls(sum.u)}">${signed(Math.round(sum.u * 100) / 100, 2)}u</b> <small>· tap one for its legs</small></p>${HK.map(row).join('')}</div>`;
 }
+/* v82 audit · "The Oracle · The Oracle": a character whose title only repeats its name shows the name once */
+const cTitle = c => (c && c.title && c.title.toLowerCase() !== String(c.name || '').toLowerCase() ? c.title : '');
 function viewCast() {
   const el = $('#v-cast'), F = S.feed || {}, C = F.characters || [], B = F.bloodlines, need = (B && B.need) || { n: 100, days: 10 };
   if (!C.length) { el.innerHTML = `<h1 class="title">The characters</h1><p class="lede">The roster shows up here once the desk publishes it.</p>${footHtml()}`; return; }
   const cells = (B && B.cells) || [], pick = S.castPick && C.some(c => c.v === S.castPick) ? S.castPick : '';
-  const sel = `<div class="castpick"><label for="castSel">Pick a character</label><select id="castSel" data-change="castpick"><option value="">All characters</option>${C.map(c => `<option value="${esc(c.v)}"${c.v === pick ? ' selected' : ''}>${esc(c.name)}${c.title ? ' · ' + esc(c.title) : ''}</option>`).join('')}</select></div>`;
+  const sel = `<div class="castpick"><label for="castSel">Pick a character</label><select id="castSel" data-change="castpick"><option value="">All characters</option>${C.map(c => `<option value="${esc(c.v)}"${c.v === pick ? ' selected' : ''}>${esc(c.name)}${cTitle(c) ? ' · ' + esc(cTitle(c)) : ''}</option>`).join('')}</select></div>`;
   const rec = r => r && r.w + r.l ? `${r.w}–${r.l}${r.pu ? '–' + r.pu : ''}` : '—';
   const todayLive = c => { let w = 0, l = 0, on = 0; for (const p0 of c.picks || []) { const g = withGame(p0), p = g.game ? liveGrade(g) : g, st = stateOf(p), lv = p.game ? liveOf(p) : null;
     if (st === 'w') w++; else if (st === 'l') l++; else if (st === 'o' && lv && lv.state === 'in') on++; } return { w, l, on }; };
@@ -1469,7 +1490,7 @@ function viewCast() {
       ${fresh.length ? `<div class="newheir">${fresh.map(c => `<button type="button" class="nh" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}">${crestSvg(c.kid, 40)}<span><b>👶 New on the desk: ${esc(c.name)}</b><small>Child of ${esc(c.kid.a)} and ${esc(c.kid.b)} · born ${esc(shortDay(String(c.kid.born).slice(0, 10)))}</small></span><i>Meet →</i></button>`).join('')}</div>` : ''}
       <div class="castgrid">${C.map(c => { const g = c.record || {}, pr = c.props || {}, today = (c.picks || []).length, PS = parSum(c.par);
         return `<button type="button" class="castcard mini${c.kid ? ' kid' : ''}" style="--cc:${okColor(c.color)}" data-act="castpick" data-v="${esc(c.v)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${kidTag(c)}${legTag(c)}<span class="cc-rec">${todayTxt(c) || (today ? `${today} pick${today === 1 ? '' : 's'} today` : 'No pick today')}</span></div>
-          <h3>${c.kid ? crestSvg(c.kid, 30, 'cc-crest') : ''}${esc(c.name)}</h3>${c.title ? `<p class="cc-title">${esc(c.title)}</p>` : ''}<div class="cc-stats"><span><b>${rec(g)}</b>games${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span><span><b>${rec(pr)}</b>props</span><span class="ccp"><b>${parRec(PS)}</b>parlays${PS.w + PS.l ? `, <em class="${uCls(PS.u)}">${signed(PS.u, 1)}u</em>` : ''}</span></div>${(n => n ? `<span class="cc-par">🎟 ${n} parlay${n === 1 ? '' : 's'} today</span>` : '')(parToday(F, c.v).length)}${(n => n ? `<span class="cc-par cc-fav">⭐ ${n} lane${n === 1 ? '' : 's'} starred</span>` : '')([...S.favs].filter(id => id.startsWith(c.v + '#')).length)}<span class="cc-more">See profile →</span></button>`; }).join('')}</div>
+          <h3>${c.kid ? crestSvg(c.kid, 30, 'cc-crest') : ''}${esc(c.name)}</h3>${cTitle(c) ? `<p class="cc-title">${esc(cTitle(c))}</p>` : ''}<div class="cc-stats"><span><b>${rec(g)}</b>games${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span><span><b>${rec(pr)}</b>props</span><span class="ccp"><b>${parRec(PS)}</b>parlays${PS.w + PS.l ? `, <em class="${uCls(PS.u)}">${signed(PS.u, 1)}u</em>` : ''}</span></div>${(n => n ? `<span class="cc-par">🎟 ${n} parlay${n === 1 ? '' : 's'} today</span>` : '')(parToday(F, c.v).length)}${(n => n ? `<span class="cc-par cc-fav">⭐ ${n} lane${n === 1 ? '' : 's'} starred</span>` : '')([...S.favs].filter(id => id.startsWith(c.v + '#')).length)}<span class="cc-more">See profile →</span></button>`; }).join('')}</div>
       ${lane.length ? `<section class="crown parboard"><div class="vh"><h2 class="h2">The parlay lane</h2></div><p class="note">Every character builds its own tickets: a game parlay from its 70%+ calls, a strong-suit ticket and a prop parlay. A unit a ticket, last 60 days. Who’s up and who’s down:</p>
         <div class="paper race">${lane.map(({ c, T }, i) => `<button type="button" class="rcr pl-b" data-act="castpick" data-v="${esc(c.v)}"><span class="n">${i + 1}</span><span class="t"><i style="background:${okColor(c.color)}"></i>${esc(c.name)} <em>${parRec(T)}</em><small>${Object.keys(PAR_K).filter(k => c.par[k] && parN(c.par[k])).map(k => `${PAR_K[k][0]} ${parRec(c.par[k])}`).join(' · ')}</small></span><span class="wst ${uCls(T.u)}">${signed(T.u, 1)}u</span></button>`).join('')}</div></section>` : ''}
       ${race.length ? `<section class="crown"><div class="vh"><h2 class="h2">Bloodlines</h2>${vipBadge()}</div><p class="note">Every character has heirs learning in the background. When one proves it’s better, it takes over: a new generation.</p>
@@ -1486,7 +1507,7 @@ function viewCast() {
   const wl = o => (o && o.w + o.l ? `${o.w}–${o.l}` : '—');
   el.innerHTML = `<button type="button" class="link back" data-act="castpick" data-v="">← All characters</button>${sel}
     <article class="profile" style="--cc:${okColor(c.color)}"><div class="cc-h"><span class="cc-chip">${esc(c.chip || '')}</span>${vipBadge()}</div>
-      <h1 class="title">${esc(c.name)}</h1>${c.title ? `<p class="cc-title big">${esc(c.title)}</p>` : ''}${c.kid ? familyHtml(c) : ''}${legacyHtml(c)}<p class="lede">${esc(c.bio || '')}</p>
+      <h1 class="title">${esc(c.name)}</h1>${cTitle(c) ? `<p class="cc-title big">${esc(cTitle(c))}</p>` : ''}${c.kid ? familyHtml(c) : ''}${legacyHtml(c)}<p class="lede">${esc(c.bio || '')}</p>
       ${c.origin ? `<div class="origin"><b>Where the eye comes from</b><p>${esc(c.origin)}</p></div>` : ''}
       <div class="statrow"><div><b>${rec(g)}</b><span>Official game picks${g.w + g.l ? `, ${signed(g.u)}u` : ''}</span></div><div><b>${rec(pr)}</b><span>Props</span></div><div class="sr-par"><b>${parRec(PS)}</b><span>Parlays${PS.w + PS.l ? `, <em class="${uCls(PS.u)}">${signed(PS.u, 1)}u</em>` : ''}</span></div><div><b>${(c.picks || []).length}</b><span>Picks today</span></div></div>
       ${(c.best || []).length ? `<h2 class="h2">Best at</h2><div class="lanes">${c.best.map(x => `<span class="lane good">${esc(x.lane)} <b>${x.w}–${x.l}</b>${x.u ? ` ${x.u > 0 ? '+' : ''}${x.u}u` : ''}</span>`).join('')}${(c.still || []).map(x => `<span class="lane meh">Still learning: ${esc(x.lane)} <b>${x.w}–${x.l}</b></span>`).join('')}</div>` : ''}
@@ -1520,8 +1541,9 @@ async function chatApi(path, body) {
   const r = await fetch(CFG.chat + path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
   let j = {}; try { j = await r.json(); } catch { /* empty */ } if (!r.ok) throw new Error(j.error || 'the chat didn’t answer'); return j;
 }
+/* v82 audit · a message from another day showed only its time ("12:44 AM" above "7:31 PM", ten days apart): older ones carry the date */
 function msgHtml(m, owner) {
-  return `<div class="msg${m.owner ? ' own' : ''}" data-id="${esc(m.id)}"><div class="msg-h"><b>${esc(m.name)}</b>${m.owner ? '<span class="msg-tag">The desk</span>' : ''}<time>${esc(clock(m.ts))}</time>
+  return `<div class="msg${m.owner ? ' own' : ''}" data-id="${esc(m.id)}"><div class="msg-h"><b>${esc(m.name)}</b>${m.owner ? '<span class="msg-tag">The desk</span>' : ''}<time>${esc(!fin(ms(m.ts)) || sameDay(ms(m.ts), Date.now()) ? clock(m.ts) : new Date(ms(m.ts)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + clock(m.ts))}</time>
     ${owner && !m.owner ? `<span class="msg-mod"><button type="button" data-act="chat-del" data-id="${esc(m.id)}">Delete</button><button type="button" data-act="chat-mute" data-name="${esc(m.name)}">Mute 1h</button><button type="button" data-act="chat-ban" data-name="${esc(m.name)}">Ban</button></span>` : owner ? `<span class="msg-mod"><button type="button" data-act="chat-del" data-id="${esc(m.id)}">Delete</button></span>` : ''}</div><p>${esc(m.text)}</p></div>`;
 }
 function paintChat(stick) {
@@ -1614,7 +1636,7 @@ function viewJoin() {
       : `Members had the card at ${esc(clock(H.lock))}. The public saw its first pick at ${esc(clock(H.first))}.`}</span></div>` : '';
   const proof = n ? `<p class="proof">On the record: <b>${R.w}–${R.l}${R.pu ? '–' + R.pu : ''}</b>, <b>${signed(+R.u || 0)} units</b>${R.first ? ' since ' + esc(monthDay(R.first)) : ''}. <button type="button" class="link" data-go="receipts">See every result</button></p>` : '';
   const rows = [['The Best 3', '30 min before each game', 'The minute it locks'], ['The Top 10 plays of the day', 0, 1], ['Every character’s official picks, with each one’s breakdown', 0, 1], ['Every character’s parlay, plus the Banker’s', 0, 1],
-    ['The members’ chatroom', 0, 'Soon'], ['The VIP lounge on Telegram and in the app', 0, 'Yearly plan'], ['Every result, graded in public', 1, 1], ['The slate, Power Rankings, bios and bloodlines', 1, 1], ['The free lounge', 1, 1]];
+    ['The members’ chatroom', 0, 1], ['The VIP lounge on Telegram and in the app', 0, 'Yearly plan'], ['Every result, graded in public', 1, 1], ['The slate, Power Rankings, bios and bloodlines', 1, 1], ['The free lounge', 1, 1]];
   const cell = (v, cls) => `<td${cls ? ` class="${cls}"` : ''}>${v === 1 ? YES : v === 0 ? NO : esc(v)}</td>`;
   const plans = ((F.plans || []).length ? F.plans : CFG.plans).filter(x => x && x.name && isFinite(+x.price));
   const plansHtml = plans.length ? `<h2 class="h2">${beta ? 'Plans after the beta' : 'Plans'}</h2>${beta ? '<p class="note">Nothing to buy yet. These open when the beta ends.</p>' : ''}
@@ -2179,7 +2201,7 @@ function viewLeagues() {
     ${!D ? '<div class="shimmer"></div>' : LS2.length ? sec('Live now', grp(['live', 'settling'])) + sec('Open for sign-ups', grp('open'), 'Join before it starts and you’re in from the first game.') + sec('Final', grp('final').slice(0, 6))
       : `<div class="lgsoon"><span>🏟</span><b>The first league opens soon</b><p>The desk is setting up the first season: its dates, a bankroll for every player and a D$ prize pool. When it opens you’ll see it here, and in the lounge.</p></div>`}
     ${hall.length ? `<h2 class="h2">Hall of champions</h2><div class="paper lead-l">${hall.slice(0, 10).map(g => `<div class="ll"><span class="n">👑</span><span class="w"><b>${esc(g.top[0].name)}</b><small>${esc(g.name)}</small></span><span class="v v-won">${g.top[0].prize ? '+' + dd$(g.top[0].prize) : dd$(g.top[0].bal)}</span></div>`).join('')}</div>` : ''}
-    <p class="note">Desk Dollars are play money. Entry fees and league prizes are D$ in your wallet, never cash. ${D && !D.open ? 'Leagues are run by the desk for now. Member-run leagues come next.' : ''}</p>${footHtml()}`;
+    <p class="note">Desk Dollars are play money. Entry fees and league prizes are D$ in your wallet, never cash. ${D && !D.open ? 'The desk runs its own leagues; a draft league is yours to start and invite anyone to.' : ''}</p>${footHtml()}`;
   lgsLoad(); drLoad(); if (LGX.open && !LGX.one[LGX.open]) lgOneLoad(LGX.open);
   if (DRX.focus) { const c = $(`[data-drc="${DRX.focus}"]`, el); if (c) { DRX.focus = ''; requestAnimationFrame(() => { try { c.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { c.scrollIntoView(); } }); } }
   if (LGX.focus) { const lid = LGX.focus, c = $(`[data-lgc="${lid}"]`, el); if (c) { LGX.focus = ''; LGX.lit = { lid, until: Date.now() + 4000 }; c.classList.add('lit');   /* (lit through the re-renders while its standings load) */
@@ -2428,8 +2450,9 @@ document.addEventListener('click', async e => {
   else if (act === 'slateday') { S.slateDay = +a.dataset.i; S.openGame = ''; render(); slateLive(); }
   else if (act === 'slatesp') { S.slateSp = a.dataset.sp; render(); }
   else if (act === 'tail') { tailCopy(a.dataset.id); }
-  else if (act === 'pf') { S.pf[a.dataset.k] = a.dataset.v; if (a.dataset.k === 'sp') S.pf.stat = 'all'; store.set('pf', S.pf); render(); }
-  else if (act === 'psort') { S.pf.sort = a.dataset.v; store.set('pf', S.pf); render(); }
+  else if (act === 'pf') { S.pf[a.dataset.k] = a.dataset.v; if (a.dataset.k === 'sp') S.pf.stat = 'all'; if (a.dataset.k !== 'view') S.pN = P_STEP; store.set('pf', S.pf); render(); }
+  else if (act === 'psort') { S.pf.sort = a.dataset.v; S.pN = P_STEP; store.set('pf', S.pf); render(); }
+  else if (act === 'pmore') { S.pN += P_STEP; render(); }
   else if (act === 'pslip') { const id = a.dataset.id; S.slip = S.slip.includes(id) ? S.slip.filter(x => x !== id) : [...S.slip, id].slice(-12); store.set('pslip', S.slip); render(); }
   else if (act === 'pslipclear') { S.slip = []; store.set('pslip', S.slip); render(); }
   else if (act === 'psliptrack') { const t = slipTicket(); if (t && await tkSave(t, 'Tracking it — see Your tickets')) { S.slip = []; store.set('pslip', S.slip); render(); } }
@@ -2599,7 +2622,7 @@ document.addEventListener('change', async e => { const df = e.target.closest('[d
   const as = e.target.closest('[data-change="adsort"]'); if (as) { AD.sort = as.value; viewAdmin(); return; }
   const gr = e.target.closest('[data-change="ghrace"]'); if (gr) { gr.blur(); ghPrefSet(gr.dataset.rid, 'v', gr.value); if (ghPref(gr.dataset.rid, 't') === gr.value) ghPrefSet(gr.dataset.rid, 't', ''); runsRepaint(); return; }
   const gt = e.target.closest('[data-change="ghtail"]'); if (gt) { gt.blur(); ghPrefSet(gt.dataset.rid, 't', gt.value); runsRepaint(); return; }
-  const rr = e.target.closest('[data-change="runroute"]'); if (rr) { const P = acctPass(); if (!P) return; try { const j = await acctApi('/acct/chal/route', { token: P.token, rid: rr.dataset.rid, route: rr.value }); if (AC.me) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); viewChallenges(); toast(`Route: ${ROUTES[rr.value].name}`); } catch (er) { toast(er.message); } return; } const pm = e.target.closest('[data-act="pmin"]'); if (pm) { S.pf.min = +pm.value; store.set('pf', S.pf); render(); return; } const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const fcf = e.target.closest('[data-change="bfcf"]'); if (fcf) { S.bf.cf = fcf.value === TOP_CF ? TOP_CF : +fcf.value || 0; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
+  const rr = e.target.closest('[data-change="runroute"]'); if (rr) { const P = acctPass(); if (!P) return; try { const j = await acctApi('/acct/chal/route', { token: P.token, rid: rr.dataset.rid, route: rr.value }); if (AC.me) AC.me.runs = (AC.me.runs || []).map(r => (r.rid === j.run.rid ? j.run : r)); viewChallenges(); toast(`Route: ${ROUTES[rr.value].name}`); } catch (er) { toast(er.message); } return; } const pm = e.target.closest('[data-act="pmin"]'); if (pm) { S.pf.min = +pm.value; S.pN = P_STEP; store.set('pf', S.pf); render(); return; } const f = e.target.closest('[data-change="bfch"]'); if (f) { S.bf.ch = f.value; store.set('bf', S.bf); S.openGame = ''; render(); return; } const fcf = e.target.closest('[data-change="bfcf"]'); if (fcf) { S.bf.cf = fcf.value === TOP_CF ? TOP_CF : +fcf.value || 0; store.set('bf', S.bf); S.openGame = ''; render(); return; } const t = e.target.closest('[data-change="castpick"]'); if (t) { S.castPick = t.value; store.set('castpick', S.castPick); viewCast(); } });
 /* "Restart the app": drop this app's saved copy (its offline files and its service worker) and load the newest version. Nothing you saved is touched. */
 async function restartApp() {
   toast('Restarting with the newest version…');
@@ -2616,7 +2639,7 @@ setInterval(() => {
   for (const el of $$('[data-until]')) { const l = +el.dataset.until - Date.now(); el.textContent = left(l); if (l <= 0) due = true; }
   if (due && Date.now() - fast > 30e3) { fast = Date.now(); loadFeed(); }
 }, 1000);
-setInterval(() => { if (!document.hidden) loadFeed(); }, 120e3);
+setInterval(() => { if (!document.hidden) loadFeed(false, true); }, 120e3);
 /* live scores: every 30 s while a game on the page is live, every 60 s otherwise */
 (function liveLoop() { const anyLive = Object.values(S.live || {}).some(v => v && v.state === 'in');
   setTimeout(() => { if (!document.hidden) { liveTick(); if (S.tab === 'slate') slateLive();

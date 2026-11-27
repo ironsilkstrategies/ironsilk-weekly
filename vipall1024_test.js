@@ -14,7 +14,7 @@ setTimeout(()=>{try{
   const S=w.eval(`legStrength(${JSON.stringify(leg)})`);T('a leg names the proven characters on it and fading it',S.on.join()==='Judge'&&S.fade.join()==='Coach',JSON.stringify(S));
   const C={d:D,best:[],top10:[],chars:[{v:'Judge',legs:[leg,{...leg,game:'A@B',pick:'A ML'}],dec:3,p:0.5},{v:'Sim',skill:true,legs:[leg],dec:2.5,p:0.4}],px:[{v:'Judge',px:true,legs:[{sp:'nhl',player:'Kyle Connor',team:'WPG',game:'WPG@DAL',k:'s',thr:3,price:-150}],dec:2,p:0.5}],props:[]};
   const t=w.eval(`subTelegramText(${JSON.stringify(C)},()=>'').join('\\n')`);
-  T("every character's parlay is on the card, the strong-suit and prop ones too",/EVERY CHARACTER'S PARLAY/.test(t)&&/🎭 The Judge/.test(t)&&/STRONG-SUIT PARLAYS/.test(t)&&/💪 The Simulator/.test(t)&&/🎯 The Judge/.test(t)&&/Kyle Connor 3\+ SOG \(WPG/.test(t),t.slice(0,300));
+  T("every character's parlay is on the card, the strong-suit and prop ones too",/EVERY CHARACTER'S PARLAY/.test(t)&&/🎭 The Judge/.test(t)&&/STRONG-SUIT PARLAYS/.test(t)&&/💪 The Simulator/.test(t)&&/🎯 The Judge/.test(t)&&/Kyle Connor \(WPG\) 3\+ SOG/.test(t),t.slice(0,300));
   T('each leg carries its 💪 / 🚫 line',/💪 Judge · 🚫 Coach/.test(t));
   const P=w.eval(`tgwPayload({d:'${D}',chat:1,ids:[1],ts:1,card:${JSON.stringify(C)}})`);
   T('the worker tracks and recaps the prop parlays too',P.recapPlan.chars.some(x=>/props/.test(x.name))&&P.legs.some(l=>l.player==='Kyle Connor'));

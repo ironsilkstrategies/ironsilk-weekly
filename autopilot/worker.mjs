@@ -917,7 +917,7 @@ export async function publishPublic(state, deps) { const now = deps?.now || Date
   if (prev === sig || (typeof prev === 'string' && prev.length > 64 && sigOf(prev) === sig)) { state.pubSig[d] = sig; return 0; }
   /* v3.5.9 · a day before today this worker holds no fingerprint for: the site may already show a newer page; never put an older one over it */
   if (!prev && d < new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })) return 0;
-  const r = await sitePut(p.site, JSON.stringify(V, null, 1), deps);
+  const r = await sitePut(p.site, JSON.stringify(V), deps);   /* v3.5.35 · compact, like the phone's publish */
   if (r.ok) { state.pubSig[d] = sig; state.pubSig = trimPubSig(state.pubSig); return 1; } log('public page', r.reason || r.status); return 0; }
 /* ── v2.33 · the relay ─────────────────────────────────────────────────────────
    GitHub only fires the 10-minute schedule every few hours, so per-game results

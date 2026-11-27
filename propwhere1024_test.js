@@ -7,10 +7,10 @@ const w=new JSDOM(html,{runScripts:'dangerously',url:'https://ironsilkweekly.com
   x.fetch=()=>Promise.resolve({ok:false,status:404,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});x.scrollTo=()=>{};x.alert=()=>{};x.confirm=()=>true;x.localStorage.setItem('d4.setupDone','1');}}).window;
 setTimeout(()=>{try{
   const c={v:'Judge',sp:'nhl',player:'Kyle Connor',team:'WPG',game:'WPG@DAL',k:'s',thr:3,cal:0.74,start:'2026-10-25T00:00:00Z'};
-  const s=w.eval(`propWhere(${JSON.stringify(c)})`);T('a prop names its team, game and start',s===' (WPG · WPG@DAL · 7:00 PM CT)',s);
+  const s=w.eval(`propWhere(${JSON.stringify(c)})`);T('a prop names its game and start (v3.5.33: his team sits beside his name instead)',s===' (WPG@DAL · 7:00 PM CT)',s);
   const P=w.eval(`tgwPayload({d:'2026-10-24',chat:1,ids:[1],ts:1,card:{d:'2026-10-24',best:[],top10:[],chars:[],props:[${JSON.stringify(c)}]}}).legs`);
-  T("the worker's result post for it carries the same label",P.length===1&&/Kyle Connor 3\+ .* \(WPG · WPG@DAL/.test(P[0].label),P[0]&&P[0].label);
+  T("the worker's result post for it carries the same label",P.length===1&&/Kyle Connor \(WPG\) 3\+ .* \(WPG@DAL/.test(P[0].label),P[0]&&P[0].label);
   const txt=w.eval(`subTelegramText({d:'2026-10-24',best:[],top10:[],chars:[],props:[${JSON.stringify(c)}]},()=>'').join('\\n')`);
-  T('the VIP card shows it',/Kyle Connor 3\+[^\n]*\(WPG · WPG@DAL/.test(txt),(txt.match(/Kyle Connor[^\n]*/)||[''])[0]);
+  T('the VIP card shows it',/Kyle Connor \(WPG\) 3\+[^\n]*\(WPG@DAL/.test(txt),(txt.match(/Kyle Connor[^\n]*/)||[''])[0]);
 }catch(e){T('no crash',false,e.stack.slice(0,400));}
 const p=out.filter(x=>x.startsWith('PASS')).length;console.log(out.join('\n'));console.log(`${p} pass / ${out.length-p} fail`);process.exit(0);},3000);

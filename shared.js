@@ -3602,7 +3602,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261126f',DESK_VER='3.5.34';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261127a',DESK_VER='3.5.35';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -4325,7 +4325,7 @@ async function pickCommit(S,reveal){let salt=S.salt;if(!salt){salt=[...crypto.ge
 async function publishPicks(manual){const S=best5State();if(!S.locked){if(manual)alert('The Best card publishes once it locks — run the master evaluation or tap Lock now.');return{ok:false,reason:'not locked'};}
   if(!get(LS.ghtoken,'')&&!get(SYNC.token,'')){if(manual)alert('Add a GitHub token in Settings → Public picks page first.');return{ok:false,reason:'not configured'};}
   try{if(scoreCallsReconcile()){PUB_BOARD_MEMO=null;}}catch(e){}   /* v3.5.14 · no published score contradicts its character's pick */
-  const F=publicFeed();try{if(F.today)F.today.commit=await pickCommit(S,F.today.allStarted);}catch(e){}const txt=JSON.stringify(F,null,1);
+  const F=publicFeed();try{if(F.today)F.today.commit=await pickCommit(S,F.today.allStarted);}catch(e){}const txt=JSON.stringify(F);   /* v3.5.35 · compact: the page reads it 40% smaller (2.6 MB → 1.5 MB on a full board), and so does every phone's saved copy */
   const a=await ghPut('public/picks.json',txt,'Publish picks — '+S.d);const b=a.ok?await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d):a;
   if(a.ok&&pubRepo()!==LEGACY_PUB_REPO){try{const m=await ghPut('public/picks.json',txt,'Publish picks — '+S.d,LEGACY_PUB_REPO);if(m.ok)await ghPut('public/picks-'+S.d+'.json',txt,'Archive picks — '+S.d,LEGACY_PUB_REPO);}catch(e){}}
   set('d4.pubstate',{d:S.d,ts:Date.now(),ok:a.ok&&b.ok,reason:a.reason||b.reason||'',sig:pubSig(F),csig:pubSig(F)});

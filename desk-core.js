@@ -1742,8 +1742,8 @@ async function bcSend(text,kind,to){const B=bcCfg();const sent=[],fail=[];const 
   return{sent,fail};}
 /* publish the public page now (the card doesn't need to be locked — updates and cashes go out any time) */
 async function deskPublishPage(msg){if(!(get(LS.ghtoken,'')||get(SYNC.token,'')))return{ok:false,reason:'no GitHub token'};const S=best5State();
-  if(S.locked)return publishPicks(false);const F=publicFeed();const a=await ghPut('public/picks.json',JSON.stringify(F,null,1),(msg||'Update')+' — '+today());
-  if(a.ok&&pubRepo()!==LEGACY_PUB_REPO){try{await ghPut('public/picks.json',JSON.stringify(F,null,1),(msg||'Update')+' — '+today(),LEGACY_PUB_REPO);}catch(e){}}
+  if(S.locked)return publishPicks(false);const F=publicFeed();const a=await ghPut('public/picks.json',JSON.stringify(F),(msg||'Update')+' — '+today());
+  if(a.ok&&pubRepo()!==LEGACY_PUB_REPO){try{await ghPut('public/picks.json',JSON.stringify(F),(msg||'Update')+' — '+today(),LEGACY_PUB_REPO);}catch(e){}}
   if(a.ok){const P=get('d4.pubstate',{})||{};set('d4.pubstate',{...P,csig:pubSig(F),cts:Date.now()});}return a;}
 /* the VIP card, posted without any pop-ups (the master evaluation does this by itself) */
 async function deskTgPostCard(force){const tok=String(get('d4.tgbot','')||'').trim(),chat=tgChatNorm(get('d4.tgchat',''));

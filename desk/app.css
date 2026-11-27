@@ -67,6 +67,14 @@ a.chip{text-decoration:none}
 .btn.ink{color:var(--slip);background:var(--ink)}
 .btn.paper{color:var(--ink);background:transparent;box-shadow:inset 0 0 0 1.5px var(--ink)}
 .btn.block{display:flex;width:100%}
+/* v82 audit · a button with no look of its own (the account page's "Sign in", "Track it", the D$ slip's "Place it", the small and ghost ones)
+   fell back to the browser's flat grey and read as switched off. Foil on the felt, ink on paper; small and ghost get real sizes and an
+   underline. One-class weight (it has to beat the bare button reset), placed ahead of every context rule so those still win. */
+.btn:where(:not(.foil,.line,.ghost,.paper,.ink)){color:var(--ink);background:linear-gradient(180deg,var(--foil-hi),var(--foil) 46%,var(--brass));box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 2px 0 #73540f,0 6px 14px rgba(0,0,0,.3)}
+.paper .btn:where(:not(.foil,.line,.ghost,.paper,.ink)){color:var(--slip);background:var(--ink);box-shadow:0 2px 0 rgba(0,0,0,.28)}
+.btn.sm{min-height:40px;padding:0 14px;font-size:14.5px}
+.btn.ghost{color:inherit;background:transparent;box-shadow:none;text-decoration:underline;text-underline-offset:3px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
 .row{display:flex;flex-wrap:wrap;gap:10px}
 
 /* ── the slips ─────────────────────────────────────────────────────────── */
@@ -1456,3 +1464,45 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .drcodef .btn{min-height:0;padding:10px 16px;font-size:14px;line-height:1}.drcodef input{height:40px;box-sizing:border-box}
 .drcodef input::placeholder{text-transform:none;color:var(--cream-3)}
 .drnew .btn.ghost{background:transparent;color:var(--ink);box-shadow:none;text-decoration:underline;text-underline-offset:3px}
+
+/* ── v82 · Nov 27 audit ── */
+/* the desktop bar fits a laptop: 1280px ran 156px off the right edge (the account button cut, the install button off screen) */
+.nav-top{gap:0;min-width:0;overflow-x:auto;scrollbar-width:none}.nav-top::-webkit-scrollbar{display:none}
+.nav-top button{padding:10px 10px;font-size:14.5px;white-space:nowrap}
+@media (min-width:920px) and (max-width:1439px){#installChip .ic-t{display:none}#installChip{padding:8px 10px}}
+@media (min-width:920px) and (max-width:1199px){.nav-top button{padding:9px 7px;font-size:13.5px}.tixbtn .tx-t{display:none}.tixbtn{width:36px;padding:0;justify-content:center}.top{gap:8px}.brand b{font-size:24px}}
+.top{min-width:0}
+/* the Gamecast button on a Slate card: the card's own button rule squeezed it into its 76px first column ("Gameca / st · live") and
+   ran it past the card's edge, in pale pink on pink; it's a plain full-width button now, dark on the cream card, red while live */
+.game>.g-gc{display:flex;grid-template-columns:none;width:calc(100% - 24px);margin:2px 12px 12px;padding:10px 12px;text-align:center;border:0;background:#1b2a21;color:var(--foil)}
+.game>.g-gc.live{background:#B3261E;color:#fff}
+/* a prop card is cream: its stamps in ink that reads on it (pale green / peach before) */
+.pcard .pstamp.w{color:#16734A}.pcard .pstamp.l{color:#B3261E}.pcard .pstamp.p{color:#5b6a60}.pcard .pstamp.live{color:#B3261E;background:#fff4f2}
+/* "Best value" was cream on gold (the plan's own span rule won) */
+.plan>.pl-tag{color:var(--ink);font-size:12px;line-height:1.1}
+.rc-odds small{color:#e9c25a}
+.blank .f-rec{margin-top:12px;font-size:14px;color:var(--ink-2)}.blank .f-rec strong{color:var(--ink)}
+.pmore{display:flex;justify-content:center;margin:18px 0 6px}.pmore .btn small{opacity:.75;font-weight:600;margin-left:6px}
+/* v82 audit · the new-ticket form ran 108px off a phone (inputs keep their default width inside a 1fr grid): the page scrolled sideways */
+.newtk form,.acctbox form{grid-template-columns:minmax(0,1fr)}.newtk .row2,.lgnew .row2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.newtk label,.lgnew label,.acctbox label{min-width:0}
+.acctbox input:not([type=checkbox]):not([type=radio]):not([type=range]),.newtk input,.newtk textarea,.lgnew input:not([type=checkbox]):not([type=radio]):not([type=range]),.lgnew select{width:100%;min-width:0;box-sizing:border-box}
+/* v82 audit · a tappable name on the leaderboard (and any link on paper) was gold on cream: unreadable */
+.paper .link,.psheet .link,.slip-main .link,.memo .link{color:#1b2a21;text-decoration-color:rgba(27,42,33,.45)}
+/* v82 audit · on the Gamecast the desk's pick rows sat on the dark felt at 66% white with the page's cream text: "UVA ML −280" all but
+   vanished. Solid paper and ink there, like the rows on the Slate's cards. */
+.gc-on .bp{color:#1b2a21}.gc-on .bp.t-unan,.gc-on .bp.t-supreme,.gc-on .bp.t-strong,.gc-on .bp.t-value,.gc-on .bp.t-source,.gc-on .bp.t-none{background:#f4ecd8}
+.gc-on .bp.bp-l{opacity:.85}
+/* v82 audit · "Your public record" had no styles at all: text flush to the card's edges and both checkboxes run together on one line */
+.pubrec{display:grid;gap:8px;padding:16px 18px;margin:14px 0}
+.pubrec>b{font:800 22px/1 var(--display);text-transform:uppercase;letter-spacing:.01em}
+.pubrec .note{margin:0}
+.chk{display:flex;align-items:center;gap:10px;min-height:34px;font:600 15px/1.3 var(--text);color:inherit;cursor:pointer}
+.chk input{width:20px;height:20px;margin:0;flex:none;accent-color:#1b2a21}
+.chk:has(input:disabled){opacity:.55;cursor:not-allowed}
+.pubrec .row{margin-top:4px}
+/* v82 audit · at 320px (a small phone, or a bigger one with large text) the top bar ran 15px wide and every page scrolled sideways.
+   The badge already carries the name, so the wordmark steps aside there. */
+@media (max-width:359px){.brand b{display:none}.top{gap:6px;padding-left:12px;padding-right:12px}}
+/* v82 audit · at 320px "LongShots" ran into "Compete" in the bottom bar: it may break after Long there */
+@media (max-width:359px){.tabs button{line-height:1.05;text-align:center}}
