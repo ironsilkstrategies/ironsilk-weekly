@@ -1,0 +1,12 @@
+NFL
+
+Atlanta Falcons @ New Orleans Saints
+PRED: Atlanta Falcons 23.90 / New Orleans Saints 23.05
+TREND: Falcons are 6-1 ATS in their last 7 games as a road underdog.
+TREND: Over is 5-1 in Falcons last 6 games as an underdog.
+TREND: Under is 6-1-1 in Falcons last 8 games after allowing more than 250 yards passing in their previous game.
+TREND: Under is 5-1 in Falcons last 6 games as a road favorite.
+TREND: Saints are 7-0 ATS in their last 7 games as an underdog.
+TREND: Under is 5-0 in Saints last 5 games following a ATS loss.
+TREND: Saints are 4-0 ATS in their last 4 vs. NFC.
+TREND: Saints are 4-0 ATS vs. a team with a losing record.

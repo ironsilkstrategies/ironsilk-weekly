@@ -1,0 +1,45 @@
+NHL
+
+Philadelphia Flyers @ Tampa Bay Lightning
+PRED: Philadelphia Flyers 2.47 / Tampa Bay Lightning 3.41
+TREND: Under is 6-0 in Flyers last 6 road games.
+TREND: Under is 6-0 in Flyers last 6 games as a road underdog.
+TREND: Under is 5-0 in Flyers last 5 games playing on 1 days rest.
+TREND: Flyers are 4-0 in their last 4 vs. a team with a losing record.
+TREND: Under is 4-0 in Lightning last 4 home games.
+TREND: Over is 3-0-1 in Lightning last 4 games as an underdog.
+TREND: Under is 4-0 in Lightning last 4 games as a home favorite.
+TREND: Under is 7-1 in Lightning last 8 overall.
+
+Winnipeg Jets @ Pittsburgh Penguins
+PRED: Winnipeg Jets 2.86 / Pittsburgh Penguins 3.90
+TREND: Under is 7-1 in Jets last 8 games as a road favorite.
+TREND: Over is 11-1-1 in Jets last 13 vs. Metropolitan.
+TREND: Over is 6-1 in Jets last 7 games playing on 0 days rest.
+TREND: Over is 5-1 in Jets last 6 overall.
+TREND: Over is 7-0 in Penguins last 7 vs. Central.
+TREND: Over is 4-0 in Penguins last 4 vs. Western Conference.
+TREND: Penguins are 4-1 in their last 5 overall.
+TREND: Over is 5-1 in Penguins last 6 after scoring 5 goals or more in their previous game.
+
+Ottawa Senators @ Boston Bruins
+PRED: Ottawa Senators 2.98 / Boston Bruins 3.03
+TREND: Under is 5-0-1 in Senators last 6 overall.
+TREND: Under is 5-0-1 in Senators last 6 vs. Eastern Conference.
+TREND: Senators are 5-0 in their last 5 vs. Atlantic.
+TREND: Under is 4-0 in Senators last 4 games as a favorite.
+TREND: Bruins are 5-0 in their last 5 games following a loss of 3 or more goals.
+TREND: Under is 3-0-1 in Bruins last 4 games playing on 1 days rest.
+TREND: Under is 4-0 in Bruins last 4 when their opponent allows 2 goals or less in their previous game.
+TREND: Under is 5-1 in Bruins last 6 home games.
+
+San Jose Sharks @ Dallas Stars
+PRED: San Jose Sharks 2.79 / Dallas Stars 3.79
+TREND: Over is 4-0 in Sharks last 4 overall.
+TREND: Over is 4-1 in Sharks last 5 vs. a team with a losing record.
+TREND: Over is 6-2-1 in Sharks last 9 games playing on 1 days rest.
+TREND: Under is 3-1-1 in Sharks last 5 games as a road underdog.
+TREND: Over is 4-0-1 in Stars last 5 games as a favorite.
+TREND: Over is 4-0-1 in Stars last 5 games playing on 1 days rest.
+TREND: Over is 3-0-1 in Stars last 4 when their opponent scores 5 goals or more in their previous game.
+TREND: Over is 6-1-1 in Stars last 8 overall.

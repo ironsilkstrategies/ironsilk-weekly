@@ -1,0 +1,319 @@
+NCAAF
+SOURCE: Covers
+
+Ball State @ Kent State
+ML: Ball State +135 / Kent State -155
+SPREAD: Ball State +3 (-108) / Kent State -3 (-112)
+OU: o50.5 (-110) / u50.5 (-110)
+PRED: Ball State 24.34 / Kent State 27.79
+
+Colorado @ Baylor
+ML: Colorado +300 / Baylor -380
+SPREAD: Colorado +9.5 (-105) / Baylor -9.5 (-105)
+OU: o54.5 (-110) / u54.5 (-110)
+PRED: Colorado 21.35 / Baylor 32.16
+
+San Diego State @ Toledo
+ML: San Diego State +125 / Toledo -140
+SPREAD: San Diego State +3.5 (-125) / Toledo -3.5 (+105)
+OU: o49.5 (-112) / u51.5 (-115)
+PRED: San Diego State 24.17 / Toledo 28.21
+
+Colorado State @ UTSA
+ML: Colorado State +500 / UTSA -600
+SPREAD: Colorado State +14.5 (-110) / UTSA -14.5 (-105)
+OU: o57.5 (-105) / u57.5 (-107)
+PRED: Colorado State 21.95 / UTSA 35.59
+
+Virginia Tech @ Boston College
+ML: Virginia Tech -625 / Boston College +520
+SPREAD: Virginia Tech -14.5 (+100) / Boston College +14.5 (-110)
+OU: o45.5 (-110) / u46.5 (-110)
+PRED: Virginia Tech 31.64 / Boston College 18.24
+
+Wake Forest @ Louisville
+ML: Wake Forest +390 / Louisville -500
+SPREAD: Wake Forest +13.5 (-115) / Louisville -13.5 (-105)
+OU: o57.5 (-105) / u57.5 (-110)
+PRED: Wake Forest 22.92 / Louisville 36.40
+
+Texas @ Tennessee
+ML: Texas -196 / Tennessee +170
+SPREAD: Texas -4.5 (-110) / Tennessee +4.5 (-105)
+OU: o54.5 (-110) / u55.5 (-127)
+PRED: Texas 29.95 / Tennessee 26.54
+
+UNLV @ Akron
+ML: UNLV -520 / Akron +420
+SPREAD: UNLV -13.5 (-108) / Akron +13.5 (-105)
+OU: o52.5 (-110) / u53.5 (-105)
+PRED: UNLV 31.20 / Akron 19.72
+
+Illinois @ Ohio State
+ML: Illinois +1900 / Ohio State -3030
+SPREAD: Illinois +26.5 (-105) / Ohio State -26.5 (-105)
+OU: o53.5 (-110) / u54.5 (-108)
+PRED: Illinois 13.94 / Ohio State 40.50
+
+Sam Houston @ Texas Tech
+ML: Sam Houston +4500 / Texas Tech -25000
+SPREAD: Sam Houston +34.5 (-105) / Texas Tech -34.5 (-108)
+OU: o55.5 (-110) / u56.5 (-110)
+PRED: Sam Houston 10.45 / Texas Tech 44.56
+
+South Alabama @ Kentucky
+ML: South Alabama +950 / Kentucky -1200
+SPREAD: South Alabama +20.5 (-120) / Kentucky -20.5 (+100)
+OU: o53.5 (-115) / u54.5 (-110)
+PRED: South Alabama 18.01 / Kentucky 37.35
+
+UCLA @ Maryland
+ML: UCLA -120 / Maryland +105
+SPREAD: UCLA -1.5 (-110) / Maryland +1.5 (-105)
+OU: o55.5 (-111) / u57.0 (-113)
+PRED: UCLA 28.46 / Maryland 28.84
+
+Northern Illinois @ Georgia State
+ML: Northern Illinois +340 / Georgia State -360
+SPREAD: Northern Illinois +10.5 (-110) / Georgia State -10.5 (-110)
+OU: o56.5 (-108) / u56.5 (-105)
+PRED: Northern Illinois 21.47 / Georgia State 33.77
+
+Notre Dame @ Purdue
+ML: Notre Dame -3030 / Purdue +2000
+SPREAD: Notre Dame -27.5 (-108) / Purdue +27.5 (+100)
+OU: o56.5 (-119) / u57.5 (-109)
+PRED: Notre Dame 43.06 / Purdue 16.20
+
+Hawaii @ Wyoming
+ML: Hawaii -120 / Wyoming +115
+SPREAD: Hawaii -1.5 (-105) / Wyoming +1.5 (-105)
+OU: o43.5 (-110) / u43.5 (-105)
+PRED: Hawaii 21.92 / Wyoming 19.87
+
+New Mexico @ New Mexico State
+ML: New Mexico -450 / New Mexico State +400
+SPREAD: New Mexico -10.5 (-115) / New Mexico State +10.5 (-105)
+OU: o47.5 (-112) / u48.5 (-112)
+PRED: New Mexico 29.70 / New Mexico State 18.69
+
+Oklahoma @ Georgia
+ML: Oklahoma +450 / Georgia -549
+SPREAD: Oklahoma +13.5 (-105) / Georgia -13.5 (-105)
+OU: o43.5 (-115) / u44.5 (-115)
+PRED: Oklahoma 15.65 / Georgia 30.57
+
+TCU @ UCF
+ML: TCU -145 / UCF +136
+SPREAD: TCU -2.5 (-125) / UCF +2.5 (+105)
+OU: o48.0 (-110) / u48.5 (-110)
+PRED: TCU 25.60 / UCF 23.43
+
+Ole Miss @ Florida
+ML: Ole Miss +150 / Florida -170
+SPREAD: Ole Miss +3.5 (-110) / Florida -3.5 (-105)
+OU: o58.5 (-108) / u59.5 (-115)
+PRED: Ole Miss 28.34 / Florida 32.79
+
+UConn @ Miami (OH)
+ML: UConn +145 / Miami (OH) -145
+SPREAD: UConn +3.5 (-115) / Miami (OH) -3.5 (+110)
+OU: o51.5 (-112) / u52.5 (-115)
+PRED: UConn 25.77 / Miami (OH) 28.35
+
+Utah @ Iowa State
+ML: Utah -325 / Iowa State +270
+SPREAD: Utah -7.5 (-108) / Iowa State +7.5 (-105)
+OU: o47.5 (-110) / u48.0 (-112)
+PRED: Utah 28.68 / Iowa State 20.85
+
+Boise State @ Western Michigan
+ML: Boise State -280 / Western Michigan +250
+SPREAD: Boise State -7.5 (+100) / Western Michigan +7.5 (-115)
+OU: o49.5 (-110) / u50.5 (-108)
+PRED: Boise State 27.70 / Western Michigan 21.90
+
+Iowa @ Michigan
+ML: Iowa +200 / Michigan -210
+SPREAD: Iowa +5.5 (-109) / Michigan -5.5 (-107)
+OU: o38.5 (-105) / u39.0 (-110)
+PRED: Iowa 17.50 / Michigan 21.95
+
+Houston @ Georgia Southern
+ML: Houston -800 / Georgia Southern +650
+SPREAD: Houston -17.5 (-105) / Georgia Southern +17.5 (-110)
+OU: o56.0 (-110) / u56.5 (-110)
+PRED: Houston 35.98 / Georgia Southern 19.30
+
+Vanderbilt @ Auburn
+ML: Vanderbilt +320 / Auburn -350
+SPREAD: Vanderbilt +10.5 (-115) / Auburn -10.5 (+100)
+OU: o55.5 (-105) / u55.5 (-105)
+PRED: Vanderbilt 23.51 / Auburn 32.47
+
+Nebraska @ Michigan State
+ML: Nebraska -225 / Michigan State +200
+SPREAD: Nebraska -5.5 (-110) / Michigan State +5.5 (-105)
+OU: o48.5 (-110) / u49.5 (-112)
+PRED: Nebraska 27.91 / Michigan State 21.63
+
+South Florida @ Bowling Green
+ML: South Florida -1000 / Bowling Green +800
+SPREAD: South Florida -17.5 (-115) / Bowling Green +17.5 (-105)
+OU: o48.5 (-110) / u49.5 (-117)
+PRED: South Florida 34.15 / Bowling Green 15.27
+
+Wisconsin @ Penn State
+ML: Wisconsin +335 / Penn State -380
+SPREAD: Wisconsin +10.5 (-115) / Penn State -10.5 (+100)
+OU: o43.5 (-115) / u44.5 (-115)
+PRED: Wisconsin 16.90 / Penn State 28.52
+
+Delaware @ Virginia
+ML: Delaware +950 / Virginia -1200
+SPREAD: Delaware +20.5 (-110) / Virginia -20.5 (-105)
+OU: o52.5 (-105) / u52.5 (-110)
+PRED: Delaware 16.59 / Virginia 36.46
+
+James Madison @ Old Dominion
+ML: James Madison -215 / Old Dominion +200
+SPREAD: James Madison -5.5 (-110) / Old Dominion +5.5 (-105)
+OU: o43.5 (-105) / u44.5 (-114)
+PRED: James Madison 26.76 / Old Dominion 19.93
+
+Central Michigan @ Miami (FL)
+SPREAD: Central Michigan +42.5 (-135) / Miami (FL) -42.5 (+105)
+OU: o53.5 (-105) / u54.5 (-112)
+PRED: Central Michigan 4.79 / Miami (FL) 47.82
+
+Louisiana @ Charlotte
+ML: Louisiana -400 / Charlotte +340
+SPREAD: Louisiana -9.5 (-115) / Charlotte +9.5 (+100)
+OU: o48.5 (-115) / u49.5 (-112)
+PRED: Louisiana 30.31 / Charlotte 20.80
+
+Southern Miss @ Tulane
+ML: Southern Miss +800 / Tulane -1000
+SPREAD: Southern Miss +18.5 (-108) / Tulane -18.5 (+100)
+OU: o52.5 (-108) / u52.5 (-110)
+PRED: Southern Miss 16.87 / Tulane 34.14
+
+Oklahoma State @ West Virginia
+ML: Oklahoma State +105 / West Virginia -121
+SPREAD: Oklahoma State +2.5 (-115) / West Virginia -2.5 (-105)
+OU: o60.5 (-113) / u61.5 (-110)
+PRED: Oklahoma State 27.78 / West Virginia 31.15
+
+Kennesaw State @ Arkansas State
+ML: Kennesaw State +200 / Arkansas State -230
+SPREAD: Kennesaw State +6.5 (-108) / Arkansas State -6.5 (-105)
+OU: o52.5 (-110) / u53.5 (-115)
+PRED: Kennesaw State 22.29 / Arkansas State 29.24
+
+Kansas State @ Cincinnati
+ML: Kansas State -225 / Cincinnati +195
+SPREAD: Kansas State -5.5 (-115) / Cincinnati +5.5 (-105)
+OU: o55.0 (-110) / u55.5 (-109)
+PRED: Kansas State 31.31 / Cincinnati 25.65
+
+South Carolina @ Alabama
+ML: South Carolina +400 / Alabama -500
+SPREAD: South Carolina +13.5 (-115) / Alabama -13.5 (-105)
+OU: o53.5 (-114) / u54.5 (-110)
+PRED: South Carolina 22.02 / Alabama 34.19
+
+Middle Tennessee @ JSU
+ML: Middle Tennessee +250 / JSU -280
+SPREAD: Middle Tennessee +7.5 (-115) / JSU -7.5 (+100)
+OU: o51.5 (-105) / u51.5 (-110)
+PRED: Middle Tennessee 21.91 / JSU 29.46
+
+Texas A&M @ LSU
+ML: Texas A&M +275 / LSU -320
+SPREAD: Texas A&M +8.5 (-110) / LSU -8.5 (-105)
+OU: o51.5 (-115) / u52.5 (-112)
+PRED: Texas A&M 22.56 / LSU 30.13
+
+Oregon @ USC
+ML: Oregon -170 / USC +150
+SPREAD: Oregon -3.5 (+100) / USC +3.5 (-114)
+OU: o61.5 (-110) / u61.5 (-105)
+PRED: Oregon 33.28 / USC 30.97
+
+Troy @ Utah State
+ML: Troy +130 / Utah State -140
+SPREAD: Troy +3.5 (-121) / Utah State -3.5 (-103)
+OU: o46.5 (-124) / u47.5 (-112)
+PRED: Troy 21.19 / Utah State 23.83
+
+App State @ NC State
+ML: App State +450 / NC State -549
+SPREAD: App State +14.5 (-120) / NC State -14.5 (+100)
+OU: o55.5 (-108) / u55.5 (-110)
+PRED: App State 21.06 / NC State 35.02
+
+Minnesota @ Washington
+ML: Minnesota +350 / Washington -385
+SPREAD: Minnesota +10.5 (-110) / Washington -10.5 (+100)
+OU: o45.5 (-110) / u46.5 (-110)
+PRED: Minnesota 18.20 / Washington 28.44
+
+Air Force @ Nevada
+ML: Air Force -225 / Nevada +195
+SPREAD: Air Force -5.5 (-110) / Nevada +5.5 (-105)
+OU: o50.5 (-108) / u51.5 (-120)
+PRED: Air Force 27.52 / Nevada 22.30
+
+Georgia Tech @ Stanford
+ML: Georgia Tech -150 / Stanford +145
+SPREAD: Georgia Tech -2.5 (-125) / Stanford +2.5 (+105)
+OU: o47.5 (-113) / u48.5 (-105)
+PRED: Georgia Tech 26.35 / Stanford 22.47
+
+Oregon State @ UTEP
+ML: Oregon State -425 / UTEP +360
+SPREAD: Oregon State -10.5 (-115) / UTEP +10.5 (-105)
+OU: o55.5 (-110) / u56.5 (-114)
+PRED: Oregon State 32.62 / UTEP 23.26
+
+Rice @ Fresno State
+ML: Rice +450 / Fresno State -526
+SPREAD: Rice +13.5 (-110) / Fresno State -13.5 (-104)
+OU: o43.5 (-105) / u44.5 (-115)
+PRED: Rice 14.47 / Fresno State 29.06
+
+UMass @ Sacramento State
+ML: UMass -190 / Sacramento State +170
+SPREAD: UMass -4.5 (-105) / Sacramento State +4.5 (-105)
+OU: o48.5 (-105) / u48.5 (-108)
+PRED: UMass 26.20 / Sacramento State 22.74
+
+Missouri State @ SMU
+ML: Missouri State +3500 / SMU -9000
+SPREAD: Missouri State +33.5 (-106) / SMU -33.5 (-107)
+OU: o59.5 (-110) / u60.5 (-110)
+PRED: Missouri State 12.96 / SMU 47.49
+
+Florida Atlantic @ Louisiana-Monroe
+ML: Florida Atlantic -450 / Louisiana-Monroe +375
+SPREAD: Florida Atlantic -10.5 (-109) / Louisiana-Monroe +10.5 (-110)
+OU: o57.5 (-115) / u58.5 (-110)
+PRED: Florida Atlantic 34.62 / Louisiana-Monroe 24.18
+
+Tulsa @ Arkansas
+ML: Tulsa +235 / Arkansas -265
+SPREAD: Tulsa +7.5 (-115) / Arkansas -7.5 (+105)
+OU: o50.5 (-110) / u51.0 (-115)
+PRED: Tulsa 22.50 / Arkansas 28.40
+
+Arizona @ Washington State
+ML: Arizona -410 / Washington State +350
+SPREAD: Arizona -10.5 (-108) / Washington State +10.5 (-105)
+OU: o47.5 (-114) / u48.5 (-113)
+PRED: Arizona 28.32 / Washington State 18.62
+
+Missouri @ Mississippi State
+ML: Missouri +190 / Mississippi State -195
+SPREAD: Missouri +6.5 (-115) / Mississippi State -6.5 (-105)
+OU: o58.5 (-110) / u59.5 (-115)
+PRED: Missouri 26.78 / Mississippi State 32.86
