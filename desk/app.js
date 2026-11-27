@@ -1955,7 +1955,7 @@ function runCard(r) { const c = chal(r.cid); if (!c) return ''; const live = r.s
     ${OPEN.length || done.length ? `<div class="rc-tix"><h4>${OPEN.length ? `${anyLive ? '<i class="rc-dot"></i>' : ''}On the board · ${OPEN.length} open` : 'Latest tickets'}${S.liveAt && anyLive ? `<small>scores ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}</small>` : ''}</h4>${[...OPEN, ...done].map(b => rtkHtml(b, r)).join('')}</div>` : live ? `<p class="rc-empty">No tickets from this run yet. ⚡ Quick Pick builds today’s order from the desk’s picks, or build your own on the Slate. Every ticket from the run shows up here, live.</p>` : ''}</article>`; }
 /* ── ⚡ Quick Pick: today's order, filled from the desk. Three ways to pick: what the characters agree on, who's hot right now, or the
    best of the board in one sport. Every leg fits the run's rule and sport, one per game, priced off the Slate like any D$ ticket. ── */
-const QP = { rid: '', wal: false, lg: '', dr: '', src: 'agree', sp: '', who: '', off: 0, busy: false, own: [], ownRid: '', ownAll: false, k: 0, mk: ['ml', 'spread', 'total'], aim: 0, hold: [], base: [], more: false, tune: false };
+const QP = { rid: '', wal: false, lg: '', dr: '', src: 'agree', sp: '', who: '', off: 0, busy: false, own: [], ownRid: '', ownAll: false, k: 0, aim: 0, held: [], base: [], f: null, more: false, tune: false, filt: false };
 /* v83 · Chris, Nov 27: "I want it to have an option for up to 10 legs" (it stopped at 8) */
 const QP_KMAX = 10;
 /* ── v81 · Nov 26, 7:30 PM, Chris: "maybe even a quick pick ticket builder… with all the options in the machine plus whatever you think is
@@ -1976,14 +1976,14 @@ function qpCtx() { const M = AC.me || {};
   return null; }
 const qpOpen = () => !!(QP.rid || QP.wal || QP.lg || QP.dr);
 const qpDoor = (sub) => `<button type="button" class="qpdoor" data-act="qpopen" data-ctx="wal"><i aria-hidden="true">⚡</i><span><b>Quick Pick</b><small>${sub || 'Let the desk build you a D$ ticket in one tap: safest, what the room agrees on, or a bigger payout.'}</small></span><span class="qd-go">Build it →</span></button>`;
-function qpReset(o) { const same = (o.rid || '') === QP.rid && !!o.wal === QP.wal && (o.lg || '') === QP.lg && (o.dr || '') === QP.dr; QP.rid = o.rid || ''; QP.wal = !!o.wal; QP.lg = o.lg || ''; QP.dr = o.dr || ''; QP.off = 0; QP.busy = false; if (!same) { QP.hold = []; QP.k = 0; QP.aim = 0; QP.base = []; } }
+function qpReset(o) { const same = (o.rid || '') === QP.rid && !!o.wal === QP.wal && (o.lg || '') === QP.lg && (o.dr || '') === QP.dr; QP.rid = o.rid || ''; QP.wal = !!o.wal; QP.lg = o.lg || ''; QP.dr = o.dr || ''; QP.off = 0; QP.busy = false; if (!same) { QP.held = []; QP.k = 0; QP.aim = 0; QP.base = []; } }
 const qpLegId = l => l.k + '|' + l.mk + '|' + l.side;
 /* ── v64 · Nov 23, 11:26 PM, Chris: "even though you can quick pick you need to be able to manually pick your own ticket". ✍️ Pick my own:
    every line on the Slate that fits the run (its rule and sport, games that haven't started), the desk's own picks marked, tap to
    build the ticket, placed from the run like any other. ── */
 const QPO_MK = [['ml', 'away'], ['ml', 'home'], ['spread', 'away'], ['spread', 'home'], ['total', 'over'], ['total', 'under']];
-function qpOwnGames(c) { const now = Date.now(), out = [], seen = new Set(); for (const d of (S.slate && S.slate.days) || []) for (const g of d.games || []) { if (g.lite || !g.ln || seen.has(g.k) || !(g.t > now + 5 * 60e3) || g.t > now + 40 * 36e5) continue; if (c.sport !== 'any' && g.sp !== c.sport) continue; if (c.sports && !c.sports.includes(g.sp)) continue;
-    const lines = QPO_MK.map(([mk, side]) => { const L = ddLegOf(g, mk, side); if (!L) return null; const l = { k: g.k, mk, side, sp: g.sp, t: g.t, game: `${g.a.ab}@${g.h.ab}`, ...L }; return qpRuleOk(c, l) ? l : null; }).filter(Boolean);
+function qpOwnGames(c, raw) { const now = Date.now(), out = [], seen = new Set(), F = QP.f; for (const d of (S.slate && S.slate.days) || []) for (const g of d.games || []) { if (g.lite || !g.ln || seen.has(g.k) || !(g.t > now + 5 * 60e3) || g.t > now + 56 * 36e5) continue; if (c.sport !== 'any' && g.sp !== c.sport) continue; if (c.sports && !c.sports.includes(g.sp)) continue;
+    const lines = QPO_MK.map(([mk, side]) => { const L = ddLegOf(g, mk, side); if (!L) return null; const l = { k: g.k, mk, side, sp: g.sp, t: g.t, game: `${g.a.ab}@${g.h.ab}`, ...L }; return qpRuleOk(c, l) && (raw || qpPass(l, F)) ? l : null; }).filter(Boolean);
     if (lines.length) { seen.add(g.k); out.push({ g, lines }); } }
   return out.sort((x, y) => x.g.t - y.g.t || ORDER.indexOf(x.g.sp) - ORDER.indexOf(y.g.sp)); }
 /* the ticket as built, priced fresh off the Slate (a line that moved shows its new price; a game that started drops off) */
@@ -2003,31 +2003,87 @@ function qpLegOf(g, m, pick) { const mk = m === 'ml' || m === 'spread' || m === 
   if (mk === 'total') side = /^over/i.test(pick) ? 'over' : /^under/i.test(pick) ? 'under' : null; else { const t = ab(g.sp, String(pick).split(/\s+/)[0]); side = t === ab(g.sp, g.a.ab) ? 'away' : t === ab(g.sp, g.h.ab) ? 'home' : null; }
   if (!side) return null; const L = ddLegOf(g, mk, side); return L ? { k: g.k, mk, side, sp: g.sp, t: g.t, game: `${g.a.ab}@${g.h.ab}`, ...L } : null; }
 const qpRuleOk = (c, l) => { if (c.sport !== 'any' && l.sp !== c.sport) return false; switch (c.rule) { case 'chalk': return l.price <= -130; case 'dogs': return l.price > 0; case 'overs': return l.mk === 'total' && l.side === 'over'; case 'unders': return l.mk === 'total' && l.side === 'under'; case 'ml': return l.mk === 'ml'; case 'spreads': return l.mk === 'spread'; case 'totals': return l.mk === 'total'; default: return true; } };
-/* every pick the source likes, as Slate legs that fit the ticket, best first, one per game */
-function qpCands(c, src, sp, who, opt = {}) { const B = boardOf(), now = Date.now(); if (!B || !S.slate) return [];
-  const MK = opt.mk || ['ml', 'spread', 'total'], only = opt.only || null, fit = l => qpRuleOk(c, l) && MK.includes(l.mk) && (!c.sports || c.sports.includes(l.sp)) && (!sp || src === 'hot' || src === 'char' || src === 'fav' ? true : l.sp === sp) && (!only || only(l));
-  const out = new Map(); const add = (g, x) => { const o = out.get(g.k); if (!o || x.score > o.score) out.set(g.k, x); };
-  const callWhy = cl => [`${castOf(cl.v).name}${cl.o ? ' · official' : ''}`, cl.p != null ? pct(cl.p) + '% sure' : ''].filter(Boolean).join(' · ');
-  for (const b of B.games || []) { const g = qpSlateGame(b); if (!g || !(g.t > now + 5 * 60e3) || g.t > now + 40 * 36e5) continue;
-    if (src === 'hot' || src === 'char' || src === 'fav') { if (sp && src !== 'hot' && g.sp !== sp && opt.spFilter) continue;
-      for (const m of ['ml', 'spread', 'total']) for (const cl of (b.calls || {})[m] || []) { if (src === 'fav' ? !favOk(b.sp, cl) : cl.v !== who) continue; const l = qpLegOf(g, m, cl.pick); if (!l || !fit(l)) continue;
-        add(g, { ...l, score: (cl.o ? 1 : 0) + (cl.p || 0), why: callWhy(cl) + (src === 'fav' ? ' · ⭐ your favorite' : ''), b, v: cl.v }); } continue; }
-    if (src === 'value') { for (const m of ['ml', 'spread', 'total']) { const C = (b.calls || {})[m] || [], by = {}; C.forEach(x => { (by[x.s] = by[x.s] || []).push(x); });
-        for (const [sd, A] of Object.entries(by)) { const off = A.some(x => x.o); if (A.length < 2 && !off) continue; const L0 = ddLegOf(g, m, sd); if (!L0 || !(L0.price >= 100)) continue; const l = { k: g.k, mk: m, side: sd, sp: g.sp, t: g.t, game: `${g.a.ab}@${g.h.ab}`, ...L0 }; if (!fit(l)) continue;
-          const p = A.reduce((a, x) => a + (+x.p || 0.5), 0) / A.length, ev = p * (L0.price / 100 + 1) - 1 + 0.03 * A.length; if (ev < -0.12) continue;
-          add(g, { ...l, score: ev, why: `${A.length} character${A.length === 1 ? '' : 's'} on it${off ? ' · official' : ''} · pays ${odds(L0.price)}`, b }); } } }
-    if (src === 'fade') { for (const m of ['ml', 'spread', 'total']) { const C = (b.calls || {})[m] || []; if (C.length < 3) continue; const by = {}; C.forEach(x => { by[x.s] = (by[x.s] || 0) + 1; });
-        const top = Object.entries(by).sort((x, y) => y[1] - x[1])[0]; if (!top || top[1] / C.length < 0.6) continue; const opp = { away: 'home', home: 'away', over: 'under', under: 'over' }[top[0]]; if (!opp) continue;
-        const L0 = ddLegOf(g, m, opp); if (!L0) continue; const l = { k: g.k, mk: m, side: opp, sp: g.sp, t: g.t, game: `${g.a.ab}@${g.h.ab}`, ...L0 }; if (!fit(l)) continue;
-        add(g, { ...l, score: top[1] / C.length, why: `${top[1]} of ${C.length} characters are on the other side`, b }); } continue; }
-    for (const pk of b.picks || []) { const l = qpLegOf(g, pk.m, pk.pick); if (!l || !fit(l)) continue; const C = (b.calls || {})[pk.m] || [], side = C.filter(x => x.s === pk.sd).length, all = C.length || 1, ip = impP(l.price) || 0.5, p = pk.p != null ? pk.p : ip;
-      let score;
-      if (src === 'agree') score = (pk.unan ? 2 : 0) + 2 * side / all + (side >= 3 ? 0.4 : 0) + (pk.p || 0);
-      else if (src === 'safe') { if (!(l.price <= -105 && l.price >= -600)) continue; score = 0.55 * ip + 0.45 * p + (pk.unan ? 0.05 : 0); }
-      else if (src === 'value') { if (!(l.price >= 100)) continue; const dec = l.price / 100 + 1; score = p * dec - 1 + (side >= 2 ? 0.05 : 0); if (score < -0.12) continue; }
+/* ── v84 · Nov 27, 4:23 PM, Chris: "On the quick pick I should be able to lock picks and still pick other filters and those locked should
+   stay … also give me a list of filters just like the slate so I can come up with different quick pick variables … make it extremely
+   versatile". A locked leg is kept as the leg itself now (QP.held), not as "whichever candidate matches it", so another way to build it,
+   any filter or a new leg count leaves it on the ticket; only the free seats refill. 🎛 Filters, the Slate's and more: the day, leagues,
+   start time, pick strength, bet types, side, odds, how sure, how many characters on it, one character, 👑 #1s, 💰 winning & up, ⭐ my
+   favs, the Forecast, mixing the leagues, skipping games you're already on, and what the free seats go by. Each chip counts the games it
+   leaves, and a build you like saves as a chip of its own. ── */
+const QPF0 = { day: 'both', lg: [], win: 'any', tier: 'all', mk: ['ml', 'spread', 'total'], side: [], odds: [], cf: 0, n: 0, ch: 'all', top: false, up: false, fav: false, fc: 'all', mix: false, skip: false, sort: 'best' };
+const qpF0 = () => JSON.parse(JSON.stringify(QPF0)); QP.f = qpF0();
+const QPF_DAY = [['both', 'Today + tomorrow'], ['today', 'Today'], ['tomorrow', 'Tomorrow']];
+const QPF_WIN = [['any', 'Any time'], ['early', 'Before 1 PM'], ['afternoon', '1–5 PM'], ['evening', '5–8 PM'], ['late', '8 PM +']];
+const QPF_SIDE = [['fav', 'Favorites'], ['dog', 'Underdogs'], ['home', 'Home'], ['away', 'Away'], ['over', 'Overs'], ['under', 'Unders']];
+const QPF_ODDS = [['heavy', '−300 or shorter'], ['fav', '−299 to −131'], ['even', '−130 to +130'], ['dog', '+131 to +300'], ['long', '+301 and up']];
+const QPF_N = [[0, 'Any'], [2, '2+'], [3, '3+'], [4, '4+'], [5, '5+'], ['all', 'Every one']];
+const QPF_SORT = [['best', 'Best for this build'], ['sure', 'Most sure'], ['room', 'Most characters'], ['pay', 'Biggest payout'], ['safe', 'Safest price'], ['soon', 'Soonest start']];
+const QPF_MK = [['ml', 'Moneyline'], ['spread', 'Spread'], ['total', 'Total']];
+const QPF_TOG = [['top', '👑 #1s only'], ['up', '💰 Winning & up'], ['fav', '⭐ My favs'], ['mix', '🌐 Mix the leagues'], ['skip', '🎟 Skip games I’m on']];
+const QPF_MULTI = ['lg', 'side', 'odds', 'mk'], QPF_LINE = ['day', 'lg', 'win', 'mk', 'side', 'odds'];
+const qpOdds = p => p <= -300 ? 'heavy' : p <= -131 ? 'fav' : p <= 130 ? 'even' : p <= 300 ? 'dog' : 'long';
+const qpSideCls = x => x.mk === 'total' ? x.side : x.mk === 'spread' && fin(x.line) && x.line !== 0 ? (x.line < 0 ? 'fav' : 'dog') : (x.price < 0 ? 'fav' : 'dog');
+/* every leg this ticket could take off the board: each side of each market on every game still to start, today and tomorrow, with what the
+   filters read — the desk's colored pick on that side, who's on it and how sure, who's against it, the Forecast */
+let QP_POOL = null;
+function qpPool(c) { const B = boardOf(), now = Date.now(), key = [B && B.d, S.feed && S.feed.generated, S.slate && S.slate.ts, c.key, c.rule, c.sport, (c.sports || []).join(','), Math.floor(now / 60e3)].join('|');
+  if (QP_POOL && QP_POOL.key === key) return QP_POOL.v;
+  const out = [], opp = { away: 'home', home: 'away', over: 'under', under: 'over' };
+  if (B && S.slate) for (const b of B.games || []) { const g = qpSlateGame(b); if (!g || !(g.t > now + 5 * 60e3) || g.t > now + 56 * 36e5) continue; if (c.sports && !c.sports.includes(g.sp)) continue;
+    for (const m of ['ml', 'spread', 'total']) { const C = (b.calls || {})[m] || [], by = {}, P = {};
+      for (const cl of C) { const l = qpLegOf(g, m, cl.pick); if (l) (by[l.side] = by[l.side] || []).push(cl); }
+      for (const pk of b.picks || []) { if (pk.m !== m) continue; const l = qpLegOf(g, m, pk.pick); if (l && !P[l.side]) P[l.side] = pk; }
+      const sides = new Set([...Object.keys(by), ...Object.keys(P)]); if (C.length >= 3) Object.keys(by).forEach(sd => sides.add(opp[sd]));
+      for (const sd of sides) { const L0 = ddLegOf(g, m, sd); if (!L0) continue; const l = { k: g.k, mk: m, side: sd, sp: g.sp, t: g.t, game: `${g.a.ab}@${g.h.ab}`, ...L0 }; if (!qpRuleOk(c, l)) continue;
+        const calls = by[sd] || [], ps = calls.map(x => +x.p).filter(fin), pk = P[sd] || null;
+        out.push({ ...l, b, pk, calls, against: by[opp[sd]] || [], all: C.length, on: calls.length, p: pk && fin(pk.p) ? +pk.p : ps.length ? Math.max(...ps) : null, fc: fcAt(g.sp, m, sd, l.pick, l.price) }); } } }
+  QP_POOL = { key, v: out }; return out; }
+/* each way to build it: which legs it takes, how it ranks them, what each leg says */
+function qpElig(pool, src, who, sp) { const out = [], callWhy = cl => [`${castOf(cl.v).name}${cl.o ? ' · official' : ''}`, cl.p != null ? pct(cl.p) + '% sure' : ''].filter(Boolean).join(' · ');
+  for (const x of pool) { const pk = x.pk, ip = impP(x.price) || 0.5; let score = null, why = '', pp = x.p, v;
+    if (src === 'hot' || src === 'char') { const cl = x.calls.find(c => c.v === who); if (!cl) continue; score = (cl.o ? 1 : 0) + (+cl.p || 0); why = callWhy(cl); pp = fin(+cl.p) ? +cl.p : null; v = cl.v; }
+    else if (src === 'fav') { const F = x.calls.filter(c => favOk(x.sp, c)).sort((a, b) => (b.o ? 1 : 0) + (+b.p || 0) - (a.o ? 1 : 0) - (+a.p || 0)); if (!F.length) continue; const cl = F[0]; score = (cl.o ? 1 : 0) + (+cl.p || 0); why = callWhy(cl) + ' · ⭐ your favorite'; pp = fin(+cl.p) ? +cl.p : null; v = cl.v; }
+    else if (src === 'fade') { const n = x.against.length; if (!(x.all >= 3 && n / x.all >= 0.6)) continue; score = n / x.all; why = `${n} of ${x.all} characters are on the other side`; }
+    else if (src === 'value') { if (!(x.price >= 100)) continue; const off = x.calls.some(c => c.o); if (!pk && x.on < 2 && !off) continue;
+      const p = pk && pk.p != null ? +pk.p : x.calls.length ? x.calls.reduce((a, c) => a + (+c.p || 0.5), 0) / x.calls.length : ip; score = p * (x.price / 100 + 1) - 1 + 0.03 * x.on + (pk ? 0.05 : 0); if (score < -0.12) continue;
+      why = pk ? [pk.unan ? '★ Unanimous' : TIER[pk.tier] ? TIER[pk.tier][0] : '', x.all ? `${x.on} of ${x.all} characters` : '', `pays ${odds(x.price)}`].filter(Boolean).join(' · ') : `${x.on} character${x.on === 1 ? '' : 's'} on it${off ? ' · official' : ''} · pays ${odds(x.price)}`; }
+    else { if (!pk) continue; if (src === 'sport' && sp && x.sp !== sp) continue; const p = pk.p != null ? +pk.p : ip;
+      if (src === 'agree') score = (pk.unan ? 2 : 0) + 2 * x.on / (x.all || 1) + (x.on >= 3 ? 0.4 : 0) + (pk.p || 0);
+      else if (src === 'safe') { if (!(x.price <= -105 && x.price >= -600)) continue; score = 0.55 * ip + 0.45 * p + (pk.unan ? 0.05 : 0); }
       else score = (QP_TIER[pk.tier] || 0) + (pk.unan ? 1.5 : 0) + (pk.p || 0);
-      add(g, { ...l, score, why: [pk.unan ? '★ Unanimous' : TIER[pk.tier] ? TIER[pk.tier][0] : '', C.length ? `${side} of ${C.length} characters` : '', src === 'safe' ? pct(ip) + '% by the price' : src === 'value' ? `pays ${odds(l.price)}` : pk.p != null ? pct(pk.p) + '%' : ''].filter(Boolean).join(' · '), b }); } }
-  return [...out.values()].sort((x, y) => y.score - x.score || x.t - y.t); }
+      why = [pk.unan ? '★ Unanimous' : TIER[pk.tier] ? TIER[pk.tier][0] : '', x.all ? `${x.on} of ${x.all} characters` : '', src === 'safe' ? pct(ip) + '% by the price' : pk.p != null ? pct(pk.p) + '%' : ''].filter(Boolean).join(' · '); }
+    out.push({ ...x, score, why, pp, v }); }
+  return out; }
+/* the games already on your open D$ tickets (🎟 Skip games I'm on) */
+const qpMine = () => { const M = new Set(); for (const b of (AC.me && AC.me.bets) || []) if (b && b.status === 'open') for (const l of b.legs || []) if (l && l.k) M.add(l.k); return M; };
+/* does a leg pass the filters (skip = one filter left out, for its own chips' counts) */
+function qpPass(x, F, mine) { const d = deskDay(x.t), t0 = deskDay();
+  if (F.day === 'today' && d !== t0) return false; if (F.day === 'tomorrow' && d <= t0) return false;
+  if (F.lg.length && !F.lg.includes(x.sp)) return false; if (F.win !== 'any' && winOf(x.t) !== F.win) return false; if (!F.mk.includes(x.mk)) return false;
+  if (F.side.length && !F.side.some(sd => sd === 'home' || sd === 'away' || sd === 'over' || sd === 'under' ? x.side === sd : qpSideCls(x) === sd)) return false;
+  if (F.odds.length && !F.odds.includes(qpOdds(x.price))) return false;
+  if (!x.calls) return true;   /* a line off the Slate (✍️ Pick my own): the line filters only */
+  const pk = x.pk; if (F.tier !== 'all') { if (!pk) return false; if (F.tier === 'top' ? !(pk.unan || pk.tier === 'supreme' || pk.tier === 'strong') : F.tier === 'play' ? !pk.off : F.tier === 'unan' ? !pk.unan : pk.tier !== F.tier) return false; }
+  const pp = x.pp !== undefined ? x.pp : x.p; if (+F.cf && !(fin(pp) && pp >= F.cf / 100 - 1e-9)) return false;
+  if (F.n === 'all' ? !(x.on >= 2 && x.on === x.all) : +F.n && x.on < +F.n) return false;
+  if (F.ch !== 'all' && !x.calls.some(c => c.v === F.ch)) return false;
+  if (F.top && !x.calls.some(c => c.r && c.r.say === 'top')) return false; if (F.up && !x.calls.some(c => upRec(c.r))) return false; if (F.fav && !x.calls.some(c => favOk(x.sp, c))) return false;
+  if (F.fc !== 'all' && !fcPass(x.fc, F.fc)) return false; if (F.skip && (mine || qpMine()).has(x.k)) return false;
+  return true; }
+/* what the free seats go by: one leg a game (the best of each by that order), and 🌐 mixed across the leagues if asked */
+function qpRank(L, F) { const cmp = { best: (a, b) => b.score - a.score, sure: (a, b) => (fin(b.pp) ? b.pp : -1) - (fin(a.pp) ? a.pp : -1) || b.score - a.score, room: (a, b) => b.on - a.on || b.score - a.score, pay: (a, b) => b.price - a.price || b.score - a.score, safe: (a, b) => a.price - b.price || b.score - a.score, soon: (a, b) => a.t - b.t || b.score - a.score }[F.sort] || ((a, b) => b.score - a.score);
+  const seen = new Set(), out = []; for (const x of L.slice().sort((a, b) => cmp(a, b) || a.t - b.t)) { if (seen.has(x.k)) continue; seen.add(x.k); out.push(x); }
+  if (!F.mix) return out; const by = new Map(); for (const x of out) { if (!by.has(x.sp)) by.set(x.sp, []); by.get(x.sp).push(x); } const Q = [...by.values()], mix = [];
+  for (let i = 0; mix.length < out.length; i++) for (const q of Q) if (q[i]) mix.push(q[i]);
+  return mix; }
+/* the filters that are on, in words (the closed panel says them) */
+function qpFWords(F) { const w = [], lab = (L, v) => (L.find(x => String(x[0]) === String(v)) || [])[1] || v;
+  if (F.day !== 'both') w.push(lab(QPF_DAY, F.day)); if (F.lg.length) w.push(F.lg.map(x => LEAGUE[x] || x).join(', ')); if (F.win !== 'any') w.push(lab(QPF_WIN, F.win));
+  if (F.tier !== 'all') w.push(lab(TIERS, F.tier)); if (F.mk.length < 3) w.push(F.mk.map(m => lab(QPF_MK, m)).join(' + ')); if (F.side.length) w.push(F.side.map(x => lab(QPF_SIDE, x)).join(' or '));
+  if (F.odds.length) w.push(F.odds.map(x => lab(QPF_ODDS, x)).join(' or ')); if (+F.cf) w.push(F.cf + '%+ sure'); if (F.n) w.push(F.n === 'all' ? 'every character on it' : F.n + '+ characters on it');
+  if (F.ch !== 'all') w.push('with ' + castOf(F.ch).name); QPF_TOG.forEach(([k, l]) => { if (F[k]) w.push(l); }); if (F.fc !== 'all') w.push(lab(FCF, F.fc)); if (F.sort !== 'best') w.push('by ' + lab(QPF_SORT, F.sort).toLowerCase());
+  return w; }
+const qpFOn = F => qpFWords(F).length;
 /* the ticket: held legs stay put, the best of the rest fill it (🔀 shuffle draws new ones for every seat that isn't locked), or — aiming
    for a payout — legs go on best-first until the ticket pays about what was asked.
    v83 · Chris, Nov 27: "The shuffle option disappears when I'm locking picks". Shuffle only ever turned the last seat, and its button
@@ -2042,29 +2098,37 @@ function qpFree(rest, need, off) { if (!off || rest.length <= need) return rest.
   const prev = new Set(qpFree(rest, need, off - 1)); let got = draw(off, 0);
   for (let salt = 1; salt < 8 && got.every(l => prev.has(l)); salt++) got = draw(off, salt);
   return got; }
-function qpTicket(c, k, C, off, aim) { if (!C.length) return []; const kMin = c.kMin || 1, kMax = c.kMax || QP_KMAX;
-  const H = C.filter(l => QP.hold.includes(qpLegId(l))).slice(0, kMax), used = new Set(H.map(l => l.k)); let rest = C.filter(l => !used.has(l.k)), legs = H.slice();
+function qpTicket(c, k, C, off, aim, H) { const kMin = c.kMin || 1, kMax = c.kMax || QP_KMAX; H = (H || []).slice(0, kMax); if (!C.length && !H.length) return [];
+  const used = new Set(H.map(l => l.k)); let rest = C.filter(l => !used.has(l.k)), legs = H.slice();
   if (QP.base.length) { const at = new Map(QP.base.map((id, i) => [id, i])), o = new Map(rest.map((l, i) => [l, i])), rk = l => at.has(qpLegId(l)) ? at.get(qpLegId(l)) : 1e4 + o.get(l); rest = rest.slice().sort((a, b) => rk(a) - rk(b)); }
   if (aim > 1) { const n = rest.length, R = n ? [...rest.slice(off % n), ...rest.slice(0, off % n)] : []; for (const l of R) { if (legs.length >= kMax) break; if (legs.length >= kMin && ddTicketDec(legs, 'parlay') >= aim) break; legs.push(l); } }
   else { const need = Math.max(0, k - legs.length); if (need && rest.length) legs = [...legs, ...qpFree(rest, need, off)]; }
-  if (c.rule === 'world' && legs.length >= 2 && new Set(legs.map(l => l.sp)).size < 2) { const other = C.find(l => l.sp !== legs[0].sp && !legs.includes(l)); if (other) legs = [...legs.slice(0, Math.max(1, legs.length - 1)), other]; }
-  /* a wallet, league or draft ticket takes what the board has (one game fits: a single); a challenge run's order is the order */
-  return legs.length >= (c.kind && c.kind !== 'run' ? kMin : Math.max(kMin, aim > 1 ? kMin : k)) ? legs : []; }
-/* every character with a call on the board that could go on this ticket (for 👤 Tail a character), most confident first */
-function qpCharsOn(c) { const C = (S.feed && S.feed.characters) || []; return C.map(x => ({ v: x.v, name: x.name, color: x.color, n: qpCands(c, 'char', '', x.v, { mk: QP.mk }).length, rec: x.record || {} })).filter(x => x.n).sort((a, b) => (b.rec.u || 0) - (a.rec.u || 0)); }
-function qpState() { const X = qpCtx(); if (!X) return null; const c = X, k = Math.max(X.kMin, Math.min(X.kMax, QP.k || X.k0));
-  const hot = hotChars().filter(h => qpCands(c, 'hot', '', h.v, { mk: QP.mk }).length), chars = QP.src === 'char' ? qpCharsOn(c) : [];
+  if (c.rule === 'world' && legs.length >= 2 && new Set(legs.map(l => l.sp)).size < 2) { const i0 = legs.map((l, i) => H.includes(l) ? -1 : i).filter(i => i >= 0).pop(), other = rest.find(l => l.sp !== legs[0].sp && !legs.includes(l)); if (i0 != null && other) legs = legs.map((l, i) => i === i0 ? other : l); }
+  /* a wallet, league or draft ticket takes what the board has (one game fits: a single); a challenge run's order is the order — unless
+     legs are locked: they always stay on screen, and a ticket that's short says so */
+  return H.length || legs.length >= (c.kind && c.kind !== 'run' ? kMin : Math.max(kMin, aim > 1 ? kMin : k)) ? legs : []; }
+/* the locked legs, priced fresh off the Slate (one whose game has started comes off, and the sheet says so) */
+function qpHeld(kMax) { const legs = [], gone = []; for (const o of QP.held) { const g = slateGameOf(o.k), L = g && g.t > Date.now() + 60e3 ? ddLegOf(g, o.mk, o.side) : null;
+    if (!L) { gone.push(o); continue; } legs.push({ k: g.k, mk: o.mk, side: o.side, sp: g.sp, t: g.t, game: `${g.a.ab}@${g.h.ab}`, ...L, why: o.why || '', v: o.v }); }
+  return { legs: legs.slice(0, kMax), gone }; }
+/* every character with a call on the board that could go on this ticket (for 👤 Tail a character), best record first */
+function qpCharsOn(pool) { const C = (S.feed && S.feed.characters) || [], n = new Map(); for (const x of pool) for (const cl of x.calls) n.set(cl.v, (n.get(cl.v) || new Set()).add(x.k));
+  return C.map(x => ({ v: x.v, name: x.name, color: x.color, n: (n.get(x.v) || new Set()).size, rec: x.record || {} })).filter(x => x.n).sort((a, b) => (b.rec.u || 0) - (a.rec.u || 0)); }
+function qpState() { const X = qpCtx(); if (!X) return null; const c = X, F = QP.f, H = X.kind === 'dr' ? { legs: [], gone: [] } : qpHeld(X.kMax);
+  const k = Math.max(X.kMin, Math.min(X.kMax, Math.max(QP.k || X.k0, H.legs.length))), pool = X.kind === 'dr' ? [] : qpPool(c);
+  const hot = hotChars().filter(h => pool.some(x => x.calls.some(cl => cl.v === h.v))), chars = QP.src === 'char' ? qpCharsOn(pool) : [];
   const who = QP.src === 'char' ? chars.find(h => h.v === QP.who) || chars[0] : hot.find(h => h.v === QP.who) || hot[0];
-  const sps = [...new Set(((boardOf() || {}).games || []).map(b => { const g = qpSlateGame(b); return g && g.t > Date.now() + 5 * 60e3 ? b.sp : null; }).filter(Boolean))].filter(x => (c.sport === 'any' || x === c.sport) && (!c.sports || c.sports.includes(x)));
-  const sp = c.sport !== 'any' ? c.sport : QP.src === 'sport' ? (sps.includes(QP.sp) ? QP.sp : sps[0] || '') : sps.includes(QP.sp) ? QP.sp : '';
-  const base = { X, r: X.r, c, O: X.order, k, hot, chars, who, sps, sp, aim: QP.aim > 0 ? 1 + QP.aim / 100 : 0 };
+  const sps = [...new Set(pool.filter(x => x.pk).map(x => x.sp))].filter(x => (c.sport === 'any' || x === c.sport) && (!F.lg.length || F.lg.includes(x))).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+  const sp = c.sport !== 'any' ? c.sport : sps.includes(QP.sp) ? QP.sp : sps[0] || '';
+  const base = { X, r: X.r, c, O: X.order, k, hot, chars, who, sps, sp, aim: QP.aim > 0 ? 1 + QP.aim / 100 : 0, F, gone: H.gone, held: H.legs };
   if (X.kind === 'dr') { if (QP.ownRid !== X.key) { QP.own = []; QP.ownRid = X.key; } const legs = QP.own.map(o => { const g = slateGameOf(o.k); if (!g || !(g.t > Date.now() + 60e3)) return null; const L = ddLegOf(g, o.mk, o.side); return L ? { k: g.k, mk: o.mk, side: o.side, sp: g.sp, t: g.t, game: `${g.a.ab}@${g.h.ab}`, ...L, v: o.v, why: drName(X.R, o.v) + '’s pick' } : null; }).filter(Boolean);
-    return { ...base, C: [], legs, own: true, dr: true, bad: drBad(X, legs) }; }
-  if (QP.src === 'own') { if (QP.ownRid !== X.key) { QP.own = []; QP.ownRid = X.key; } const legs = qpOwnLegs(); return { ...base, C: [], legs, own: true, bad: qpOwnBad(c, legs) }; }
-  const C = qpCands(c, QP.src, sp, who ? who.v : '', { mk: QP.mk, spFilter: true }), legs = qpTicket(c, k, C, QP.off, base.aim);
-  return { ...base, C, legs, own: false, bad: '' }; }
+    return { ...base, C: [], E: [], legs, own: true, dr: true, bad: drBad(X, legs) }; }
+  if (QP.src === 'own') { if (QP.ownRid !== X.key) { QP.own = []; QP.ownRid = X.key; } const legs = qpOwnLegs(); return { ...base, C: [], E: [], legs, own: true, bad: qpOwnBad(c, legs) }; }
+  const mine = F.skip ? qpMine() : null, E = qpElig(pool, QP.src, who ? who.v : '', QP.src === 'sport' ? sp : ''), C = qpRank(E.filter(x => qpPass(x, F, mine)), F), legs = qpTicket(c, k, C, QP.off, base.aim, H.legs);
+  const RU = RULES[c.rule], bad = H.legs.length && X.kind === 'run' && legs.length && RU && !RU.ok(legs) ? `${RU.lab}: ${RU.desc}.` : H.legs.length && legs.length < X.kMin ? `This ticket needs at least ${X.kMin} legs.` : '';
+  return { ...base, C, E, legs, own: false, bad, mine }; }
 function qpOwnHtml(c, legs) { const G = qpOwnGames(c), B = boardOf(), BM = new Map(); for (const b of (B && B.games) || []) { const g = qpSlateGame(b); if (g) BM.set(g.k, b); }
-  if (!S.slate) return '<div class="qp-empty">Loading the lines…</div>'; if (!G.length) return `<div class="qp-empty">No line on the Slate fits this run right now (${esc(RULES[c.rule].lab)}: ${esc(RULES[c.rule].desc)}${c.sport !== 'any' ? ', ' + esc(SPORTS[c.sport]) + ' only' : ''}, games that haven’t started).</div>`;
+  if (!S.slate) return '<div class="qp-empty">Loading the lines…</div>'; if (!G.length) { const w = qpFWords(QP.f); return `<div class="qp-empty">No line on the Slate fits right now (${c.kind === 'run' ? esc(RULES[c.rule].lab) + ': ' + esc(RULES[c.rule].desc) + (c.sport !== 'any' ? ', ' + esc(SPORTS[c.sport]) + ' only' : '') + ', ' : ''}games that haven’t started${w.length ? ', ' + esc(w.join(', ')) : ''}).${w.length ? ' <button type="button" class="btn ghost sm" data-act="qpfclear">Clear the filters</button>' : ''}</div>`; }
   const on = l => legs.some(x => x.k === l.k && x.mk === l.mk && x.side === l.side), shown = QP.ownAll ? G : G.slice(0, 14);
   const desk = (g, l) => { const b = BM.get(g.k); if (!b) return ''; const pk = (b.picks || []).find(p => { if (p.m !== l.mk) return false; const q = qpLegOf(g, p.m, p.pick); return q && q.side === l.side; }); const n = ((b.calls || {})[l.mk] || []).filter(x => { const q = qpLegOf(g, l.mk, x.pick); return q && q.side === l.side; }).length;
     return `${pk ? `<i class="qpo-dk t-${pk.unan ? 'unan' : TIER[pk.tier] ? pk.tier : 'none'}" title="The desk’s pick${TIER[pk.tier] ? ': ' + TIER[pk.tier][0] : ''}"></i>` : ''}${n ? `<small class="qpo-n">${n} on it</small>` : ''}`; };
@@ -2076,7 +2140,7 @@ const QP_SRC = { safe: ['🛡️', 'Safest', 'The likeliest winners'], agree: ['
   hot: ['🔥', 'Who’s hot', 'The character on the best run'], char: ['👤', 'Tail a character', 'Any character’s own calls'], fav: ['⭐', 'My favorites', 'Your saved characters'], sport: ['🏟', 'Best in a sport', 'The desk’s top picks in one sport'],
   fade: ['🔄', 'Go against the room', 'The side most characters fade'], own: ['✍️', 'Pick my own', 'Any line that fits'] };
 const QP_MAIN = ['safe', 'agree', 'value'], QP_AIMS = [0, 100, 250, 500, 1000];
-function qpSheet() { const Q = qpState(); if (!Q) return ''; const { X, c, k, hot, chars, who, sps, sp, C, legs } = Q, RU = RULES[c.rule];
+function qpSheet() { const Q = qpState(); if (!Q) return ''; const { X, c, k, hot, chars, who, sps, sp, C, legs, F } = Q, RU = RULES[c.rule], heldId = new Set(QP.held.map(qpLegId)), isHeld = l => heldId.has(qpLegId(l));
   const dec = legs.length ? ddTicketDec(legs, 'parlay') : 0, st = Math.min(X.bal, X.stake), rule = X.kind === 'run' ? `${esc(RU.icon)} ${esc(RU.desc)}${c.sport !== 'any' ? ' · ' + esc(SPORTS[c.sport]) + ' only' : ''}` : X.sports ? esc(X.sports.map(x => LEAGUE[x] || x).join(' / ')) + ' only' : 'any game on the Slate';
   const favN = S.favs.size, why = { own: `Every line on the Slate that fits: ${RU.desc}${c.sport !== 'any' ? ', ' + SPORTS[c.sport] + ' only' : ''}, games that haven’t started. Tap to add, tap again to take it off: one side a game, the moneyline or the spread plus the total.`,
     safe: 'Favorites the price and the desk both like most. They win more often and pay less: steady, not flashy.', agree: 'The picks most of the room is on: unanimous calls first, then the widest agreement.',
@@ -2086,14 +2150,13 @@ function qpSheet() { const Q = qpState(); if (!Q) return ''; const { X, c, k, ho
   const big = v => { const [ic, t, sub] = QP_SRC[v]; return `<button type="button" role="tab" aria-selected="${QP.src === v}" class="qp-s${QP.src === v ? ' on' : ''}" data-act="qpsrc" data-v="${v}"><i>${ic}</i><b>${t}</b><small>${sub}</small></button>`; };
   const chip = v => { const [ic, t] = QP_SRC[v]; return `<button type="button" class="qp-m${QP.src === v ? ' on' : ''}" data-act="qpsrc" data-v="${v}" aria-pressed="${QP.src === v}">${ic} ${t}</button>`; };
   const moreOn = QP.more || !QP_MAIN.includes(QP.src);
-  const empty = !S.slate ? 'Loading the lines…' : !boardOf() ? 'The board isn’t out yet. Quick Pick works off the characters’ calls once the desk publishes them.' : `${(QP.src === 'hot' || QP.src === 'char') && !who ? 'Nobody with a pick on the board fits right now.' : QP.src === 'fav' && !favN ? 'No favorites saved yet.' : `Only ${C.length} game${C.length === 1 ? '' : 's'} on the board fit${C.length === 1 ? 's' : ''} right now`} (${rule}${QP.mk.length < 3 ? ', ' + QP.mk.map(m => ({ ml: 'moneylines', spread: 'spreads', total: 'totals' })[m]).join(' + ') : ''}${sp ? ', ' + esc(LEAGUE[sp] || sp) : ''}). Try another way to build it, open Fine-tune, or pick your own.`;
-  const kLocked = X.kMin === X.kMax, tuneN = (QP.k && QP.k !== X.k0 ? 1 : 0) + (QP.mk.length < 3 ? 1 : 0) + (QP.aim ? 1 : 0) + (sp && QP.src !== 'sport' && c.sport === 'any' ? 1 : 0);
+  const empty = !S.slate ? 'Loading the lines…' : !boardOf() ? 'The board isn’t out yet. Quick Pick works off the characters’ calls once the desk publishes them.' : `${(QP.src === 'hot' || QP.src === 'char') && !who ? 'Nobody with a pick on the board fits right now.' : QP.src === 'fav' && !favN ? 'No favorites saved yet.' : `Only ${C.length} game${C.length === 1 ? '' : 's'} on the board fit${C.length === 1 ? 's' : ''} right now`} (${rule}${QP.src === 'sport' && sp ? ', ' + esc(LEAGUE[sp] || sp) : ''}${qpFOn(F) ? ', ' + esc(qpFWords(F).join(', ')) : ''}). Try another way to build it, ${qpFOn(F) ? 'loosen 🎛 Filters' : 'open 🎛 Filters'}, or pick your own.${qpFOn(F) ? ' <button type="button" class="btn ghost sm" data-act="qpfclear">Clear the filters</button>' : ''}`;
+  const kLocked = X.kMin === X.kMax, tuneN = (QP.k && QP.k !== X.k0 ? 1 : 0) + (QP.aim ? 1 : 0);
   const tune = QP.src === 'own' || X.kind === 'dr' ? '' : `<details class="qp-tune"${QP.tune ? ' open' : ''} data-toggle="qptune"><summary>⚙️ Fine-tune${tuneN ? ` <small>${tuneN} changed</small>` : ''}</summary>
       ${kLocked ? `<p class="qp-tl">Legs <b>${k === 1 ? 'a single' : k + ' legs'}</b> <small>(${esc(RU.lab)} sets it)</small></p>` : `<div class="qp-tl"><span>Legs</span><div class="qp-step"><button type="button" data-act="qpk" data-d="-1" aria-label="One leg fewer"${k <= X.kMin || QP.aim ? ' disabled' : ''}>−</button><b>${QP.aim ? 'auto' : k}</b><button type="button" data-act="qpk" data-d="1" aria-label="One leg more"${k >= X.kMax || QP.aim ? ' disabled' : ''}>+</button></div>${X.kind === 'run' && !QP.aim ? `<small>today’s order says ${X.k0}</small>` : ''}</div>`}
-      ${c.rule === 'any' || c.rule === 'two' || c.rule === 'three' || c.rule === 'singles' || c.rule === 'world' || c.rule === 'chalk' || c.rule === 'dogs' ? `<div class="qp-tl"><span>Bet types</span><div class="qp-mks">${[['ml', 'Moneyline'], ['spread', 'Spread'], ['total', 'Total']].map(([m, t]) => `<button type="button" class="${QP.mk.includes(m) ? 'on' : ''}" data-act="qpmk" data-v="${m}" aria-pressed="${QP.mk.includes(m)}">${t}</button>`).join('')}</div></div>` : ''}
       ${!kLocked ? `<div class="qp-tl"><span>Aim for</span><div class="qp-mks">${QP_AIMS.map(a => `<button type="button" class="${QP.aim === a ? 'on' : ''}" data-act="qpaim" data-v="${a}" aria-pressed="${QP.aim === a}">${a ? '≈ +' + a : 'Any payout'}</button>`).join('')}</div></div>` : ''}
-      ${c.sport === 'any' && sps.length > 1 && QP.src !== 'sport' ? `<div class="qp-tl"><span>Sport</span><div class="qp-mks"><button type="button" class="${!sp ? 'on' : ''}" data-act="qpsp" data-v="">All</button>${sps.map(x => `<button type="button" class="${x === sp ? 'on' : ''}" data-act="qpsp" data-v="${x}">${esc(LEAGUE[x] || x)}</button>`).join('')}</div></div>` : ''}
-      <p class="qp-tn">🔒 Tap the lock on a leg to keep it, then 🔀 Shuffle swaps only the others.</p></details>`;
+      <p class="qp-tn">🔒 Tap the lock on a leg to keep it: it stays through any way to build it, any filter and any leg count, and 🔀 Shuffle swaps only the others.</p></details>`;
+  const filt = X.kind === 'dr' ? '' : qpFiltHtml(Q);
   const pickers = QP.src === 'hot' && hot.length > 1 ? `<div class="qp-chips">${hot.slice(0, 5).map(h => `<button type="button" class="${who && h.v === who.v ? 'on' : ''}" data-act="qpwho" data-v="${esc(h.v)}" style="--c:${okColor(h.color)}">${esc(h.name)} <small>${h.w}–${h.l}, ${h.u >= 0 ? '+' : '−'}${Math.abs(h.u).toFixed(1)}u</small></button>`).join('')}</div>`
     : QP.src === 'char' && chars.length ? `<div class="qp-chips">${chars.map(h => `<button type="button" class="${who && h.v === who.v ? 'on' : ''}" data-act="qpwho" data-v="${esc(h.v)}" style="--c:${okColor(h.color)}">${esc(String(h.name).replace(/^The /, ''))} <small>${h.n} pick${h.n === 1 ? '' : 's'}</small></button>`).join('')}</div>`
     : QP.src === 'sport' && c.sport === 'any' && sps.length ? `<div class="qp-chips">${sps.map(x => `<button type="button" class="${x === sp ? 'on' : ''}" data-act="qpsp" data-v="${x}">${esc(LEAGUE[x] || x)}</button>`).join('')}</div>` : '';
@@ -2106,15 +2169,43 @@ function qpSheet() { const Q = qpState(); if (!Q) return ''; const { X, c, k, ho
     <div class="qp-src" role="tablist" aria-label="How to build it">${QP_MAIN.map(big).join('')}</div>
     <div class="qp-more"><button type="button" class="qp-mt" data-act="qpmore" aria-expanded="${moreOn}">${moreOn ? 'Fewer ways ▴' : 'More ways ▾'}</button>${moreOn ? `<div class="qp-ms">${['hot', 'char', 'fav', 'sport', 'fade', 'own'].map(chip).join('')}</div>` : ''}</div>
     ${pickers}<p class="qp-why">${esc(why)}</p>`}
+    ${filt}${Q.gone.length ? `<p class="qp-bad soft">🔒 ${Q.gone.length === 1 ? 'A locked leg is' : Q.gone.length + ' locked legs are'} off the ticket: ${Q.gone.length === 1 ? 'its game has' : 'their games have'} started.</p>` : ''}
     ${legs.length ? `<div class="qp-tk"><div class="qp-tkh"><span>${legs.length === 1 ? 'Single' : legs.length + '-leg parlay'}</span><b>${esc(decAm(dec))}</b></div>
-      <ol class="qp-legs">${legs.map((l, i) => { const held = QP.hold.includes(qpLegId(l)); return `<li class="${held ? 'held' : ''}"><span class="qp-n">${i + 1}</span><span class="qp-b"><b>${esc(readPick({ sp: l.sp, game: l.game, pick: l.pick }).big || l.pick)} <small>${esc(odds(l.price))}</small></b><small>${esc([LEAGUE[l.sp], matchup({ sp: l.sp, game: l.game }), whenLabel(new Date(l.t).toISOString())].filter(Boolean).join(' · '))}</small>${l.why ? `<em>${esc(l.why)}</em>` : ''}</span>${Q.own ? `<button type="button" class="qp-x" data-act="qpownx" data-i="${i}" aria-label="Take ${esc(l.pick)} off">✕</button>` : `<button type="button" class="qp-h${held ? ' on' : ''}" data-act="qphold" data-id="${esc(qpLegId(l))}" aria-pressed="${held}" aria-label="${held ? 'Unlock' : 'Keep'} ${esc(l.pick)}">${held ? '🔒' : '🔓'}</button>`}</li>`; }).join('')}</ol>
-      ${Q.own && Q.bad ? `<p class="qp-bad">${esc(Q.bad)}</p>` : ''}
+      <ol class="qp-legs">${legs.map((l, i) => { const held = !Q.own && isHeld(l); return `<li class="${held ? 'held' : ''}"><span class="qp-n">${i + 1}</span><span class="qp-b"><b>${esc(readPick({ sp: l.sp, game: l.game, pick: l.pick }).big || l.pick)} <small>${esc(odds(l.price))}</small></b><small>${esc([LEAGUE[l.sp], matchup({ sp: l.sp, game: l.game }), whenLabel(new Date(l.t).toISOString())].filter(Boolean).join(' · '))}</small>${l.why ? `<em>${esc(l.why)}</em>` : ''}</span>${Q.own ? `<button type="button" class="qp-x" data-act="qpownx" data-i="${i}" aria-label="Take ${esc(l.pick)} off">✕</button>` : `<button type="button" class="qp-h${held ? ' on' : ''}" data-act="qphold" data-id="${esc(qpLegId(l))}" aria-pressed="${held}" aria-label="${held ? 'Unlock' : 'Keep'} ${esc(l.pick)}">${held ? '🔒' : '🔓'}</button>`}</li>`; }).join('')}</ol>
+      ${Q.bad ? `<p class="qp-bad">${esc(Q.bad)}</p>` : ''}${!Q.own && Q.held.length && legs.length < k && !QP.aim ? `<p class="qp-bad soft">${legs.length - Q.held.length ? `Only ${legs.length - Q.held.length} more game${legs.length - Q.held.length === 1 ? '' : 's'} fit` : 'Nothing else fits'} beside your 🔒 locked leg${Q.held.length === 1 ? '' : 's'}: loosen 🎛 Filters or try another way to build it.</p>` : ''}
       <div class="qp-sum"><label>Stake <input id="qpStake" inputmode="decimal" value="${st}" aria-label="Stake in Desk Dollars"></label><span>Pays <b id="qpPays">${dd$(st * dec)}</b></span><span>${X.kind === 'run' ? 'Run after a cash' : 'Balance after a cash'} <b id="qpAfter">${dd$(X.bal - st + st * dec)}</b></span></div></div>
-      <div class="qp-go"><button type="button" class="btn foil" data-act="qpplace"${QP.busy || Q.bad ? ' disabled' : ''}>${QP.busy ? 'Placing…' : `Place it from ${esc(X.from)}`}</button>${Q.own ? '' : (() => { const held = legs.filter(l => QP.hold.includes(qpLegId(l))).length, free = legs.length - held, more = C.length - held, can = QP.aim ? more > 1 : free > 0 && more > free;
+      <div class="qp-go"><button type="button" class="btn foil" data-act="qpplace"${QP.busy || Q.bad ? ' disabled' : ''}>${QP.busy ? 'Placing…' : `Place it from ${esc(X.from)}`}</button>${Q.own ? '' : (() => { const hg = new Set(Q.held.map(l => l.k)), held = legs.filter(isHeld).length, free = legs.length - held, more = C.filter(l => !hg.has(l.k)).length, can = QP.aim ? more > 1 : free > 0 && more > free;
         return `<button type="button" class="btn line sm" data-act="qpshuf"${can ? '' : ` disabled title="${free ? 'Every pick that fits is already on it' : 'Every leg is locked: unlock one to shuffle'}"`}>🔀 Shuffle</button>`; })()}${Q.own ? '<button type="button" class="btn ghost sm" data-act="qpownclear">Clear</button>' : ''}${X.kind !== 'dr' ? '<button type="button" class="btn ghost sm" data-act="qpslip">Edit on the Slate</button>' : ''}</div>`
       : Q.own ? `<div class="qp-empty sm">${esc(Q.bad)}</div>` : `<div class="qp-empty">${empty}</div>`}
     ${tune}${Q.dr ? drQpBody(X, legs) : Q.own ? qpOwnHtml(c, legs) : ''}
     <p class="note">Desk Dollars, play money. Lines are the Slate’s; the server prices the ticket again the moment you place it.${X.kind === 'run' ? ' The ticket comes off this run’s bankroll and shows on the run card, live.' : X.kind === 'wal' ? ' It shows in My tickets, live.' : ''}</p></section>`; }
+/* 🎛 Filters: the Slate's, and then some. Every chip counts the games it would leave; ✍️ Pick my own takes the line filters (day, league,
+   time, bet type, side, odds). A build you like (the way, the filters, the legs, the aim) saves as a chip under "My builds". */
+const QP_BUILDS_MAX = 8, qpBuilds = () => { const B = store.get('qpbuilds'); return Array.isArray(B) ? B.filter(b => b && b.n).slice(0, QP_BUILDS_MAX) : []; };
+function qpFiltHtml(Q) { const F = Q.F, own = !!Q.own, E = own ? qpOwnGames(Q.c, true).flatMap(G => G.lines) : Q.E, mine = Q.mine || (F.skip ? qpMine() : null);
+  const n = F2 => { const G = new Set(); for (const x of E) if (qpPass(x, F2, mine)) G.add(x.k); return G.size; };
+  const on = (k, v) => QPF_MULTI.includes(k) ? F[k].includes(v) : typeof F[k] === 'boolean' ? F[k] : String(F[k]) === String(v);
+  const chip = (k, v, lab, cnt = true) => { const a = on(k, v), F2 = QPF_MULTI.includes(k) ? { ...F, [k]: a ? F[k] : k === 'mk' ? [...F.mk, v] : [v] } : typeof F[k] === 'boolean' ? { ...F, [k]: true } : { ...F, [k]: v };
+    return `<button type="button" class="${a ? 'on' : ''}" data-act="qpf" data-k="${k}" data-v="${esc(String(v))}" aria-pressed="${a}">${lab}${cnt ? ` <small>${n(F2)}</small>` : ''}</button>`; };
+  const row = (lab, html, hint) => `<div class="qp-tl qp-fr"><span>${lab}</span><div class="qp-mks">${html}</div>${hint ? `<small class="qp-fh">${hint}</small>` : ''}</div>`;
+  const lgs = [...new Set(E.map(x => x.sp))].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)), cast = Object.entries((boardOf() || {}).cast || {}).sort((a, b) => String(a[1].name).localeCompare(b[1].name));
+  const words = qpFWords(F), B = qpBuilds(), nOn = words.length;
+  const rows = [row('Day', QPF_DAY.map(([v, l]) => chip('day', v, l)).join('')),
+    lgs.length > 1 ? row('Leagues', lgs.map(x => chip('lg', x, esc(LEAGUE[x] || x))).join(''), 'Tap more than one to mix them') : '',
+    row('Start time', QPF_WIN.map(([v, l]) => chip('win', v, l)).join('')),
+    row('Bet types', QPF_MK.map(([v, l]) => chip('mk', v, l)).join('')),
+    row('Side', QPF_SIDE.map(([v, l]) => chip('side', v, l)).join(''), 'Any you tap counts'),
+    row('Odds', QPF_ODDS.map(([v, l]) => chip('odds', v, l)).join(''), 'Any you tap counts'),
+    ...(own ? [] : [row('Strength', TIERS.map(([v, l]) => chip('tier', v, esc(l))).join(''), 'The desk’s colored pick on that side'),
+      row('How sure', CONF.map(([v, l]) => chip('cf', v, v ? l : 'Any')).join('')),
+      row('Characters on it', QPF_N.map(([v, l]) => chip('n', v, l)).join('')),
+      cast.length ? `<div class="qp-tl qp-fr"><span>With</span><label class="qp-fsel${F.ch !== 'all' ? ' on' : ''}"><span class="sr">Only picks this character is on</span><select data-change="qpfch"><option value="all">Any character</option>${cast.map(([v, c0]) => `<option value="${esc(v)}"${F.ch === v ? ' selected' : ''}>${esc(c0.name)} · ${n({ ...F, ch: v })}</option>`).join('')}</select></label></div>` : '',
+      row('Only', QPF_TOG.map(([k, l]) => chip(k, k, l)).join('') + ((boardOf() || {}).fc ? FCF.map(([v, l]) => chip('fc', v, l)).join('') : '')),
+      row('Fill by', QPF_SORT.map(([v, l]) => chip('sort', v, l, false)).join(''), 'What the free seats go by: one leg a game')])].join('');
+  return `<details class="qp-filt"${QP.filt ? ' open' : ''} data-toggle="qpfilt"><summary>🎛 Filters${nOn ? ` <small>${nOn} on</small>` : ''}${nOn ? `<em class="qp-fw">${esc(words.join(' · '))}</em>` : ''}</summary>
+    ${B.length ? `<div class="qp-tl qp-fr"><span>My builds</span><div class="qp-mks qp-bld">${B.map((b, i) => `<span class="qp-bc"><button type="button" data-act="qpbuild" data-i="${i}">⚡ ${esc(b.n)}</button><button type="button" class="qp-bx" data-act="qpbuilddel" data-i="${i}" aria-label="Delete the build ${esc(b.n)}">✕</button></span>`).join('')}</div></div>` : ''}
+    ${rows}
+    <div class="qp-tl qp-fend"><span>${n(F)} game${n(F) === 1 ? '' : 's'} fit</span>${nOn ? '<button type="button" class="btn ghost sm" data-act="qpfclear">Clear the filters</button>' : ''}${own ? '' : `<span class="qp-save"><input id="qpBuildName" maxlength="28" placeholder="Name this build" aria-label="Name this build"><button type="button" class="btn line sm" data-act="qpbuildsave">💾 Save</button></span>`}</div></details>`; }
 /* Quick Pick opens from any tab (a run, the Slate, a league, a draft room): its own layer on the page */
 function qpPaint() { let n = $('#qpLayer'); if (!n) { n = document.createElement('div'); n.id = 'qpLayer'; document.body.appendChild(n); } const y = (n.querySelector('.csheet') || {}).scrollTop || 0; n.innerHTML = qpOpen() ? qpSheet() : ''; const c2 = n.querySelector('.csheet'); if (c2) c2.scrollTop = y;
   const cx = $('#cxSheet'); document.body.classList.toggle('sheet-on', qpOpen() || !!(cx && cx.innerHTML.trim())); }
@@ -2506,10 +2597,23 @@ document.addEventListener('click', async e => {
     const r = QP.rid && liveRuns().find(x => x.rid === QP.rid), c = r && chal(r.cid); if (c && c.sport !== 'any') QP.sp = c.sport; qpPaint(); if (!S.slate) { loadSlate().then(qpPaint, qpPaint); } }
   else if (act === 'qptail') { qpReset({ rid: a.dataset.rid }); QP.src = 'char'; QP.who = a.dataset.v; QP.more = true; SX.i = -1; qpPaint(); if (!S.slate) loadSlate().then(qpPaint, qpPaint); }
   else if (act === 'qpclose') { qpReset({}); qpPaint(); }
-  else if (act === 'qpsrc') { QP.src = a.dataset.v; QP.off = 0; QP.hold = []; QP.base = []; if (QP.src === 'char' || QP.src === 'hot') QP.who = QP.src === 'char' ? QP.who : ''; qpPaint(); }
+  else if (act === 'qpsrc') { const to = a.dataset.v, from = QP.src, X = qpCtx();
+    /* v84 · your locked legs ride along: into ✍️ Pick my own as your picks, and back out of it locked */
+    if (to === 'own' && from !== 'own' && X) { QP.own = QP.held.map(o => ({ k: o.k, mk: o.mk, side: o.side })); QP.ownRid = X.key; QP.held = []; }
+    else if (from === 'own' && to !== 'own') { const games = new Set(); QP.held = []; for (const o of QP.own) if (!games.has(o.k)) { QP.held.push({ k: o.k, mk: o.mk, side: o.side, why: 'Your pick' }); games.add(o.k); } QP.own = []; }
+    QP.src = to; QP.off = 0; QP.base = []; if (QP.src === 'char' || QP.src === 'hot') QP.who = QP.src === 'char' ? QP.who : ''; qpPaint(); }
   else if (act === 'qpmore') { QP.more = !(QP.more || !QP_MAIN.includes(QP.src)); if (!QP.more && !QP_MAIN.includes(QP.src)) QP.src = 'agree'; qpPaint(); }
   else if (act === 'qpk') { const Q = qpState(); if (!Q) return; QP.base = Q.legs.map(qpLegId); QP.k = Math.max(Q.X.kMin, Math.min(Q.X.kMax, Q.k + (+a.dataset.d || 0))); QP.off = 0; QP.tune = true; qpPaint(); }
-  else if (act === 'qpmk') { const m = a.dataset.v, on = QP.mk.includes(m); if (on && QP.mk.length === 1) { toast('Keep at least one bet type'); return; } QP.mk = on ? QP.mk.filter(x => x !== m) : [...QP.mk, m]; QP.off = 0; QP.base = []; QP.tune = true; qpPaint(); }
+  else if (act === 'qpf') { const k = a.dataset.k, v0 = a.dataset.v, F = QP.f; if (!F || !(k in QPF0)) return; const v = k === 'cf' ? +v0 : k === 'n' ? (v0 === 'all' ? 'all' : +v0) : v0;
+    if (QPF_MULTI.includes(k)) { const on = F[k].includes(v); if (k === 'mk' && on && F.mk.length === 1) { toast('Keep at least one bet type'); return; } F[k] = on ? F[k].filter(x => x !== v) : [...F[k], v]; }
+    else if (typeof QPF0[k] === 'boolean') F[k] = !F[k];
+    else F[k] = k === 'fc' && F.fc === v ? 'all' : v;
+    QP.off = 0; QP.base = []; QP.filt = true; qpPaint(); }
+  else if (act === 'qpfclear') { QP.f = qpF0(); QP.off = 0; QP.base = []; qpPaint(); }
+  else if (act === 'qpbuild') { const b = qpBuilds()[+a.dataset.i]; if (!b) return; QP.src = QP_SRC[b.src] ? b.src : 'agree'; QP.who = b.who || ''; QP.sp = b.sp || ''; QP.f = { ...qpF0(), ...(b.f || {}) }; QP.k = +b.k || 0; QP.aim = +b.aim || 0; QP.off = 0; QP.base = []; if (!QP_MAIN.includes(QP.src)) QP.more = true; qpPaint(); toast(`⚡ ${b.n}: your locked legs stay`); }
+  else if (act === 'qpbuilddel') { const B = qpBuilds(), i0 = +a.dataset.i; if (!B[i0]) return; const nm = B[i0].n; B.splice(i0, 1); store.set('qpbuilds', B); qpPaint(); toast(`Deleted ${nm}`); }
+  else if (act === 'qpbuildsave') { const Q = qpState(); if (!Q) return; const inp = $('#qpBuildName'), w = qpFWords(QP.f), nm = String((inp && inp.value) || '').trim().slice(0, 28) || (QP_SRC[QP.src] ? QP_SRC[QP.src][1] : 'My build') + (w.length ? ' · ' + w.slice(0, 2).join(' · ') : '');
+    const B = qpBuilds().filter(b => b.n.toLowerCase() !== nm.toLowerCase()); B.unshift({ n: nm, src: QP.src, who: QP.who, sp: QP.sp, f: JSON.parse(JSON.stringify(QP.f)), k: QP.k, aim: QP.aim }); store.set('qpbuilds', B.slice(0, QP_BUILDS_MAX)); QP.filt = true; qpPaint(); toast(`Saved: ⚡ ${nm}`); }
   else if (act === 'qpaim') { QP.aim = +a.dataset.v || 0; QP.off = 0; QP.base = []; QP.tune = true; qpPaint(); }
   else if (act === 'drqpick') { const Q = qpState(); if (!Q || !Q.dr) return; const o = { k: a.dataset.k, mk: a.dataset.mk, side: a.dataset.side, v: a.dataset.v }, same = x => x.k === o.k && x.mk === o.mk && x.side === o.side, i0 = QP.own.findIndex(x => same(x) && x.v === o.v);
     if (i0 >= 0) QP.own.splice(i0, 1); else { if (QP.own.some(same)) { toast('That pick is already on your ticket'); return; } if (QP.own.filter(x => x.v === o.v).length >= 2) { toast('Up to 2 picks from each character'); return; } if (Q.X.two && QP.own.length >= 2) { toast('This room plays exactly 2 picks: take one off first'); return; }
@@ -2530,9 +2634,11 @@ document.addEventListener('click', async e => {
   else if (act === 'drauto') { const P = acctPass(); if (!P) return; try { const j = await acctApi('/acct/dr/auto', { token: P.token, id: a.dataset.id, on: !!a.checked }); if (AC.me) AC.me.drafts = drMine().map(x => (x.did === j.room.did ? j.room : x)); viewLeagues(); } catch (err) { toast(err.message); } }
   else if (act === 'drshare') { const R = drMine().find(x => x.did === a.dataset.id); if (!R) return; const url = CFG.home + '#dr=' + encodeURIComponent(R.did), text = [`Draft against me on TheDesk: ${R.name}.`, `${R.fmt === 'auto' ? 'Team draft' : 'Head-to-head'} · ${R.size === 2 ? 'one on one' : R.size + ' players'} · ${R.days} days${R.fee ? ` · ${dd$(R.fee)} entry, winner takes the pot` : ' · free'}.`, R.code ? `Join code: ${R.code}` : '', 'Desk Dollars are play money, never cash. 21+.'].filter(Boolean).join('\n');
     try { if (navigator.share) { await navigator.share({ title: R.name + ' · TheDesk', text, url }); return; } } catch (err) { if (err && err.name === 'AbortError') return; } try { await navigator.clipboard.writeText(text + '\n' + url); toast('Invite copied: paste it anywhere'); } catch (err) { toast('Couldn’t copy the invite'); } }
-  else if (act === 'qphold') { const id = a.dataset.id, Q = qpState(); QP.base = Q ? Q.legs.map(qpLegId) : []; QP.off = 0; QP.hold = QP.hold.includes(id) ? QP.hold.filter(x => x !== id) : [...QP.hold, id]; qpPaint(); }
+  else if (act === 'qphold') { const id = a.dataset.id, Q = qpState(); if (!Q) return; QP.base = Q.legs.map(qpLegId); QP.off = 0;
+    if (QP.held.some(o => qpLegId(o) === id)) QP.held = QP.held.filter(o => qpLegId(o) !== id); else { const l = Q.legs.find(x => qpLegId(x) === id); if (l) QP.held.push({ k: l.k, mk: l.mk, side: l.side, why: l.why || '', v: l.v }); }
+    qpPaint(); }
   else if (act === 'qpwho') { QP.who = a.dataset.v; QP.off = 0; QP.base = []; qpPaint(); }
-  else if (act === 'qpsp') { QP.sp = a.dataset.v; QP.off = 0; QP.hold = []; QP.base = []; qpPaint(); }
+  else if (act === 'qpsp') { QP.sp = a.dataset.v; QP.off = 0; QP.base = []; qpPaint(); }
   else if (act === 'qpshuf') { QP.off++; qpPaint(); }
   else if (act === 'qpownpick') { const g = slateGameOf(a.dataset.k), Q = qpState(); if (!g || !Q) return; const mk = a.dataset.mk, sd = a.dataset.side, hockey = g.sp === 'nhl', i0 = QP.own.findIndex(l => l.k === g.k && l.mk === mk && l.side === sd);
     if (i0 >= 0) QP.own.splice(i0, 1); else { const clash = l => l.k === g.k && (l.mk === mk || (mk !== 'total' && l.mk !== 'total') || (hockey && (mk === 'spread' || l.mk === 'spread')));
@@ -2636,8 +2742,9 @@ document.addEventListener('input', e => { if (e.target.id !== 'qpStake') return;
   const a = $('#qpPays'), b = $('#qpAfter'); if (a) a.textContent = dd$(v * dec); if (b) b.textContent = dd$(Q.X.bal - v + v * dec); });
 let adT = 0; document.addEventListener('input', e => { const q = e.target.closest('[data-input="adq"]'); if (!q) return; clearTimeout(adT); adT = setTimeout(() => { AD.q = q.value; viewAdmin(); const n = document.querySelector('[data-input="adq"]'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 200); });
 let cxT = 0; document.addEventListener('input', e => { const q = e.target.closest('[data-input="cxq"]'); if (!q) return; clearTimeout(cxT); cxT = setTimeout(() => { CX.f.q = q.value; CX.show = 24; store.set('cxf', CX.f); const pos = q.selectionStart; viewChallenges(); const n = document.querySelector('[data-input="cxq"]'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (er) { } } }, 220); });
-document.addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.toggle === 'ghfield') ghPrefSet(d.dataset.rid, 'f', d.open ? '1' : ''); if (d.classList && d.classList.contains('myinbox')) AC.inboxOpen = d.open; if (d.classList && d.classList.contains('myinbox') && d.open && AC.me && AC.me.inbox && AC.me.inbox.unread) { const P = acctPass(); AC.me.inbox.unread = 0; acctBadge(); if (P) acctApi('/acct/inbox/read', { token: P.token }).catch(() => { }); } }, true);
+document.addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.toggle === 'ghfield') ghPrefSet(d.dataset.rid, 'f', d.open ? '1' : ''); if (d.dataset && d.dataset.toggle === 'qptune') QP.tune = d.open; if (d.dataset && d.dataset.toggle === 'qpfilt') QP.filt = d.open; if (d.classList && d.classList.contains('myinbox')) AC.inboxOpen = d.open; if (d.classList && d.classList.contains('myinbox') && d.open && AC.me && AC.me.inbox && AC.me.inbox.unread) { const P = acctPass(); AC.me.inbox.unread = 0; acctBadge(); if (P) acctApi('/acct/inbox/read', { token: P.token }).catch(() => { }); } }, true);
 document.addEventListener('change', async e => { const df = e.target.closest('[data-change="ddfrom"]'); if (df) { S.ddFrom = df.value; store.set('ddfrom', S.ddFrom); render(); return; }
+  const qf = e.target.closest('[data-change="qpfch"]'); if (qf) { QP.f.ch = qf.value || 'all'; QP.off = 0; QP.base = []; QP.filt = true; qpPaint(); return; }
   const cf = e.target.closest('[data-change="cxf"]'); if (cf) { CX.f[cf.dataset.k] = cf.value; CX.show = 24; store.set('cxf', CX.f); viewChallenges(); return; }
   const as = e.target.closest('[data-change="adsort"]'); if (as) { AD.sort = as.value; viewAdmin(); return; }
   const gr = e.target.closest('[data-change="ghrace"]'); if (gr) { gr.blur(); ghPrefSet(gr.dataset.rid, 'v', gr.value); if (ghPref(gr.dataset.rid, 't') === gr.value) ghPrefSet(gr.dataset.rid, 't', ''); runsRepaint(); return; }

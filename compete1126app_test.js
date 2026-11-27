@@ -140,10 +140,12 @@ const DRAFTS = [
     await p.click('.qps .qp-tune > summary'); await p.waitForTimeout(200);
     await p.click('.qps [data-act="qpk"][data-d="1"]'); await p.waitForTimeout(300); L = await legsOf();
     T('⚙️ Fine-tune · Legs +1: a 3-leg ticket', L.length === 3, JSON.stringify(L));
-    await p.click('.qps [data-act="qpmk"][data-v="spread"]'); await p.waitForTimeout(200); await p.click('.qps [data-act="qpmk"][data-v="total"]'); await p.waitForTimeout(300); L = await legsOf();
+    /* v84: bet types moved into 🎛 Filters (with the Slate's other filters) */
+    await p.click('.qps .qp-filt > summary'); await p.waitForTimeout(200);
+    await p.click('.qps [data-act="qpf"][data-k="mk"][data-v="spread"]'); await p.waitForTimeout(200); await p.click('.qps [data-act="qpf"][data-k="mk"][data-v="total"]'); await p.waitForTimeout(300); L = await legsOf();
     const qtxt = await p.evaluate(() => document.querySelector('.qps').innerText);
     T('…Bet types: moneylines only (fewer games fit, and it says so plainly)', L.every(x => / ML$/.test(x.t.replace(/ [+−-]\d+$/, ''))) || /fit right now/.test(qtxt), JSON.stringify(L) + qtxt.slice(0, 200));
-    await p.click('.qps [data-act="qpmk"][data-v="spread"]'); await p.click('.qps [data-act="qpmk"][data-v="total"]'); await p.waitForTimeout(200);
+    await p.click('.qps [data-act="qpf"][data-k="mk"][data-v="spread"]'); await p.click('.qps [data-act="qpf"][data-k="mk"][data-v="total"]'); await p.waitForTimeout(200);
     await p.click('.qps [data-act="qpaim"][data-v="500"]'); await p.waitForTimeout(300);
     const dec = await p.evaluate(() => { const t = document.querySelector('.qps .qp-tkh b').innerText.replace('−', '-'); return +t; });
     T('…Aim for ≈ +500: legs go on until the ticket pays about that (or the board runs out)', dec >= 300 || (await legsOf()).length >= 4, String(dec));
