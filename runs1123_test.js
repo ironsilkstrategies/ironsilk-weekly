@@ -102,7 +102,7 @@ const RUN = { rid: 'r1', cid: CJ, name: 'Tester', ts: AT - 3 * 36e5, ends: AT + 
     await p.click('.runcard [data-act="qpopen"]'); await p.waitForTimeout(900);
     const sheet = async () => p.evaluate(() => { const s = document.querySelector('.qps'); return s ? s.innerText.replace(/\s+/g, ' ') : ''; });
     let q = await sheet();
-    T('⚡ Quick Pick opens on today\'s order (D$2.50 on a 2-leg ticket) and three ways to fill it', /QUICK PICK/i.test(q) && /Today’s order: D\$2\.50 on a 2-leg ticket/.test(q) && /The room agrees/.test(q) && /Who’s hot/.test(q) && /Best in a sport/.test(q), q.slice(0, 400));
+    T('⚡ Quick Pick opens on today\'s order (D$2.50 on a 2-leg ticket) and three big ways to fill it (v81: Safest · The room agrees · Bigger payout, the rest under More ways)', /QUICK PICK/i.test(q) && /Today’s order: D\$2\.50 on a 2-leg ticket/.test(q) && /Safest/.test(q) && /The room agrees/.test(q) && /Bigger payout/.test(q) && /More ways/.test(q) && !/Who’s hot/.test(q), q.slice(0, 400));
     const legsOf = async () => p.evaluate(() => [...document.querySelectorAll('.qp-legs li')].map(li => li.querySelector('.qp-b b').innerText.replace(/\s+/g, ' ')));
     let L = await legsOf();
     T('The room agrees: the unanimous under first, then the widest agreement — games that haven\'t started, one per game', L.length === 2 && /^Under 158\.5/.test(L[0]) && /^SJSU \+1\.5/.test(L[1]) && !L.some(x => /LAL/.test(x)), JSON.stringify(L));
@@ -110,6 +110,8 @@ const RUN = { rid: 'r1', cid: CJ, name: 'Tester', ts: AT - 3 * 36e5, ends: AT + 
     T('…each leg says why (★ Unanimous · 6 of 6 characters) and the ticket shows price, stake, pays, and where the run lands', /★ Unanimous · 6 of 6 characters/.test(q) && /Pays D\$[\d.]+/.test(q) && /Run after a cash D\$[\d.]+/.test(q) && (await p.inputValue('#qpStake')) === '2.5', q.slice(q.indexOf('2-LEG'), q.indexOf('2-LEG') + 400));
     await p.click('[data-act="qpshuf"]'); await p.waitForTimeout(300); const L2 = await legsOf();
     T('🔀 Shuffle keeps the best leg and swaps the other for the next one in line', L2.length === 2 && L2[0] === L[0] && L2[1] !== L[1], JSON.stringify(L2));
+    await p.click('[data-act="qpmore"]'); await p.waitForTimeout(200); q = await sheet();
+    T('More ways: who\'s hot, tail a character, my favorites, best in a sport, go against the room, pick my own', ['Who’s hot', 'Tail a character', 'My favorites', 'Best in a sport', 'Go against the room', 'Pick my own'].every(x => q.includes(x)), q.slice(0, 600));
     await p.click('[data-act="qpsrc"][data-v="hot"]'); await p.waitForTimeout(300); q = await sheet(); L = await legsOf();
     T('🔥 Who\'s hot: the character on the best run right now, its record, and its own calls (official first)', /The Scout is 8–2 over the last 7 days/.test(q) && L.length === 2 && /^SJSU ML/.test(L[0]) && /The Scout · official/.test(q), q.slice(q.indexOf('Scout') - 20, q.indexOf('Scout') + 300) + ' ' + JSON.stringify(L));
     await p.click('[data-act="qpsrc"][data-v="sport"]'); await p.waitForTimeout(300); q = await sheet(); L = await legsOf();

@@ -53,7 +53,7 @@ const MEMBER = { tickets: [{ id: 't1', ts: AT - 36e5, title: 'Sunday 2-leg', leg
     T('Active tab first: the tickets you track and your D$ bets still playing', JSON.stringify(a.tabs) === JSON.stringify(['Active 2*', 'Graded 2']) && a.h.join('|').toLowerCase() === 'tickets you track 1|your d$ bets 1' && /Sunday 2-leg/i.test(a.t) && /Bills ML|BUF ML/.test(a.t) && !/Old heater/i.test(a.t) && a.cur === 'page', JSON.stringify(a));
     await p.click('.tixtabs [data-v="graded"]'); await p.waitForTimeout(200);
     a = await p.evaluate(() => ({ t: document.querySelector('#tixList').innerText, sum: (document.querySelector('.tix-sum') || {}).innerText || '', form: !!document.querySelector('#v-tix .newtk') }));
-    T('Graded tab: what settled, with the tally (1 cashed · 1 lost)', /Old heater/i.test(a.t) && /Thunder −5\.5|OKC -5\.5/.test(a.t) && !/Sunday 2-leg/i.test(a.t) && /1 cashed · 1 lost · 50% cashed/.test(a.sum) && !a.form, JSON.stringify(a));
+    T('Graded tab: what settled, with the tally (1 cashed · 1 lost)', /Old heater/i.test(a.t) && /Thunder −5\.5|OKC -5\.5/.test(a.t) && !/Sunday 2-leg/i.test(a.t) && /50% of your graded tickets cashed/.test(a.sum) && !a.form, JSON.stringify(a));
     await p.goto('https://desk.test/desk/#tix'); await p.waitForTimeout(1500);
     T('…the tab you left it on is the one it opens on', (await p.evaluate(() => document.querySelector('.tixtabs .on').dataset.v)) === 'graded');
     await p.click('.tixtabs [data-v="active"]'); await p.waitForTimeout(200);
@@ -71,7 +71,7 @@ const MEMBER = { tickets: [{ id: 't1', ts: AT - 36e5, title: 'Sunday 2-leg', leg
     a = await p.evaluate(() => ({ h: [...document.querySelectorAll('#tixList .tix-h')].map(h => h.innerText.replace(/\s+/g, ' ')), t: document.querySelector('#tixList').innerText, n: document.querySelector('#tixBtn .tx-n').textContent }));
     T('the owner\'s My tickets: the founder\'s live LongShot under "Your LongShot picks" (Active), counted on the button', a.h.join('|').toLowerCase() === 'your longshot picks 1' && /Turkey Day Stack/i.test(a.t) && !/Monday Heater/i.test(a.t) && a.n === '1', JSON.stringify(a));
     await p.click('.tixtabs [data-v="graded"]'); await p.waitForTimeout(200);
-    T('…and the cashed one under Graded', /Monday Heater/i.test(await txt(p, '#tixList')) && /1 cashed · 0 lost/.test(await txt(p, '#tixList')), await txt(p, '#tixList'));
+    T('…and the cashed one under Graded, counted in the tiles with everything else (v81)', /Monday Heater/i.test(await txt(p, '#tixList')) && /cashed/i.test(await txt(p, '.mystats')), await txt(p, '#tixList'));
     await p.goto('https://desk.test/desk/#u=TheDesk'); await p.waitForTimeout(1500);
     a = await p.evaluate(() => ({ t: document.querySelector('#v-u').innerText }));
     T('the founder\'s public record page shows his LongShot picks (even with his D$ record private)', /FOUNDER LONGSHOT PICKS/i.test(a.t) && /Turkey Day Stack/i.test(a.t) && /Monday Heater/i.test(a.t), a.t.slice(0, 600));

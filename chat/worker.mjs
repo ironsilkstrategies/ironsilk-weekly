@@ -14,7 +14,8 @@
 const MAX_TEXT = 500, KEEP = 400, PAGE = 80, PASS_DAYS = 30;
 const BAD = ['fuck', 'shit', 'bitch', 'cunt', 'nigger', 'nigga', 'faggot', 'fag', 'retard', 'whore', 'slut', 'dick', 'pussy', 'asshole', 'bastard', 'motherfucker'];
 import { get as chal, inLib, checkpoints, ROUTES, ruleCheck, tierOf, rankOf } from './chal-lib.mjs';
-import { fbHook, Inbox } from './fb-inbox.mjs';   /* v3.3.2 · the Facebook inbox: comment FREE 3 → a private reply; the Page's inbox → an automated first reply */
+import { fbHook, Inbox } from './fb-inbox.mjs';
+import { DR_FMT, DR_SINGLE, DR_PARLAY, DR_PICK_MS, DR_OPEN_MS, DR_DAYS, DR_FEES, DR_XP_WIN, DR_XP_PLAY, drSnake, drPool, drAutoPick, drBoardGame, drCallers, drAssign, drAutoLegs, drDay, drStatus, drRank } from './draft-lib.mjs';   /* v3.3.2 · the Facebook inbox: comment FREE 3 → a private reply; the Page's inbox → an automated first reply */
 export { Inbox };
 const RESERVED = /^(thedesk|the desk|admin|owner|moderator|mod|system|the (simulator|judge|coach|scorekeeper|oracle|historian|crowd|commissioner|underdog spotter|scout|banker|brain))$/i;
 export const clean = t => BAD.reduce((s, w) => s.replace(new RegExp(`\\b${w}(s|es|ed|ing|er|ers)?\\b`, 'gi'), m => m[0] + '*'.repeat(m.length - 1)), t);
@@ -118,6 +119,7 @@ export class Room {
    grades them itself from ESPN finals every 10 minutes; a game it can't find in 3 days is voided and the stake comes back.
    Bought D$ (the store, built but OFF until a lawyer signs off — or the owner's grant) is kept apart: it shows in its own color,
    and the leaderboard ranks EARNED D$ (balance minus everything bought), so nobody buys their way up the board. */
+const FEED_URL = 'https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly-site/main/public/picks.json';
 const DD_START = 1000, DD_LEGS = 100, DD_CAP = 10000, DD_SGP = 0.8, DD_JUICE = -110, SLATE_URL = 'https://raw.githubusercontent.com/ironsilkstrategies/ironsilk-weekly/feeds/slate.json';
 const ESPN_PATH = { nfl: 'football/nfl', ncaaf: 'football/college-football', nba: 'basketball/nba', ncaab: 'basketball/mens-college-basketball', nhl: 'hockey/nhl', mlb: 'baseball/mlb' };
 const ESPN_GROUP = { ncaaf: '&groups=80', ncaab: '&groups=50' };
@@ -213,6 +215,8 @@ export class Accounts {
       if (req.method === 'GET' && p === '/acct/lgs') return this.lgsList(H);
       if (req.method === 'GET' && p === '/acct/lgs/one') return this.lgsOne(String(url.searchParams.get('id') || ''), H);
       if (req.method === 'GET' && p === '/acct/u') return this.profile(String(url.searchParams.get('name') || ''), H);
+      if (req.method === 'GET' && p === '/acct/dr') return this.drList(H);
+      if (req.method === 'GET' && p === '/acct/dr/one') return this.drOne(String(url.searchParams.get('id') || ''), H);
       if (req.method !== 'POST') return json({ error: 'not found' }, 404, H);
       const ip = req.headers.get('cf-connecting-ip') || 'unknown'; let b; try { b = await req.json(); } catch (e) { return json({ error: 'body' }, 400, H); }
       if (p === '/acct/board') return this.board(H);
@@ -233,11 +237,17 @@ export class Accounts {
       if (p === '/acct/lgs/create') return this.lgsCreate(s, b, H);
       if (p === '/acct/lgs/join') return this.lgsJoin(s, b, H);
       if (p === '/acct/lgs/cancel') return this.lgsCancel(s, b, H);
+      if (p === '/acct/dr/create') return this.drCreate(s, b, H);
+      if (p === '/acct/dr/join') return this.drJoin(s, b, H);
+      if (p === '/acct/dr/leave') return this.drLeave(s, b, H);
+      if (p === '/acct/dr/pick') return this.drPick(s, b, H);
+      if (p === '/acct/dr/auto') return this.drAutoSet(s, b, H);
       if (p === '/acct/save') return this.save(s, b, H);
       if (p === '/acct/del') { await this.ctx.storage.delete('t:' + s.key + ':' + String(b.id || '')); return json({ ok: true }, 200, H); }
       if (p === '/acct/close') { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (u && u.owner) return json({ error: 'the owner account stays' }, 400, H); if (!u || !(await sameSecret(await passHash(String(b.pass || ''), u.salt), u.hash))) return json({ error: 'that password doesn’t match' }, 403, H);
         for (const pre of ['t:', 'b:', 'o:', 'c:', 'r:']) { const L = await S.list({ prefix: pre + s.key + ':' }); if (L.size) await S.delete([...L.keys()]); }
         { const E = await S.list({ prefix: 'e:' }); const mine = [...E.keys()].filter(k => k.endsWith(':' + s.key)); if (mine.length) await S.delete(mine); }
+        { const E = await S.list({ prefix: 're:' }); const mine = [...E.keys()].filter(k => k.endsWith(':' + s.key)); if (mine.length) await S.delete(mine); }   /* draft-room bankrolls too */
         await S.delete(['u:' + s.key, 'ib:' + s.key]); return json({ ok: true }, 200, H); }
       if (p === '/acct/logout') { await this.ctx.storage.delete('s:' + b.token); return json({ ok: true }, 200, H); }
       return json({ error: 'not found' }, 404, H);
@@ -278,7 +288,7 @@ export class Accounts {
     const C = await S.list({ prefix: 'c:' + s.key + ':' }), lg = [], ib = await S.get('ib:' + s.key), cfg = (await S.get('cfg')) || {};
     for (const lid of (u.lgs || [])) { const g = await S.get('G:' + lid), e = await S.get('e:' + lid + ':' + s.key); if (g && e) lg.push({ lid, name: g.name, status: lgStatus(g, this.now()), bal: e.bal, start: e.start, open: e.open || 0, starts: g.starts, ends: g.ends, sports: g.sports || null }); }
     return json({ name: s.name, owner: !!u.owner, since: u.at, wallet: u.dd, store: this.env.STORE_ON === 'yes', tickets: [...L.values()].sort((a, b) => b.ts - a.ts), bets: [...B.values()].sort((a, b) => b.ts - a.ts).slice(0, 100),
-      runs: [...C.values()].sort((a, b) => b.ts - a.ts).slice(0, 40), xp: u.xp || 0, rank: rankOf(u.xp || 0), trophies: u.tr || {}, xplog: (u.xpl || []).slice(-20).reverse(), leagues: lg, pub: !!u.pub, pubOpen: !!u.pubOpen, cap: !!u.cap, lgOpen: this.env.LG_OPEN === 'yes' || !!cfg.lgOpen || !!u.owner, inbox: ib ? { msgs: ib.msgs.slice(-50), unread: ib.uread || 0 } : { msgs: [], unread: 0 } }, 200, H); }
+      drafts: await this.drMine(s.key, u), runs: [...C.values()].sort((a, b) => b.ts - a.ts).slice(0, 40), xp: u.xp || 0, rank: rankOf(u.xp || 0), trophies: u.tr || {}, xplog: (u.xpl || []).slice(-20).reverse(), leagues: lg, pub: !!u.pub, pubOpen: !!u.pubOpen, cap: !!u.cap, lgOpen: this.env.LG_OPEN === 'yes' || !!cfg.lgOpen || !!u.owner, inbox: ib ? { msgs: ib.msgs.slice(-50), unread: ib.uread || 0 } : { msgs: [], unread: 0 } }, 200, H); }
   /* XP and D$ prizes land here: XP on the account (with a short log), prizes in the wallet as earned D$ */
   async award(key, xp, prize, why) { const S = this.ctx.storage, u = await S.get('u:' + key); if (!u) return; u.xp = (u.xp || 0) + (xp || 0); u.xpl = [...(u.xpl || []), { t: this.now(), xp: xp || 0, dd: prize || 0, why }].slice(-40);
     if (prize) { const W = ddWallet(u); W.bal = r2(W.bal + prize); W.prize = r2((W.prize || 0) + prize); u.dd = W; } await S.put('u:' + key, u); this._bd = null; }
@@ -294,7 +304,10 @@ export class Accounts {
     if (run && run.ends <= this.now()) return json({ error: 'time’s up on that run — no new bets' }, 400, H);
     const lid = !run && b.league ? String(b.league).replace(/[^a-z0-9]/gi, '').slice(0, 24) : null, lg = lid ? await S.get('G:' + lid) : null, ek = lid ? 'e:' + lid + ':' + s.key : null, ent = ek ? await S.get(ek) : null;
     if (lid) { if (!lg || !ent) return json({ error: 'join that league first' }, 400, H); const st = lgStatus(lg, this.now()); if (st === 'open') return json({ error: `${lg.name} hasn’t started yet` }, 400, H); if (st !== 'live') return json({ error: `${lg.name} is over — no new bets` }, 400, H); }
-    const pot = run ? run.bal : ent ? ent.bal : W.bal;
+    const did = !run && !lid && b.dr ? String(b.dr).replace(/[^a-z0-9]/gi, '').slice(0, 24) : null, room = did ? await S.get('R:' + did) : null, dk = did ? 're:' + did + ':' + s.key : null, dent = dk ? await S.get(dk) : null;
+    if (did) { if (!room || !dent) return json({ error: 'you’re not in that draft room' }, 400, H); const st = drStatus(room, this.now()); if (st === 'open' || st === 'draft') return json({ error: `${room.name} hasn’t finished its draft yet` }, 400, H); if (st !== 'live') return json({ error: `${room.name} is over — no new tickets` }, 400, H);
+      if (room.fmt !== 'pick') return json({ error: 'a team draft plays its tickets on its own every day' }, 400, H); if ((dent.day || {})[drDay(this.now())]) return json({ error: 'you’ve played today’s ticket in this room — the next one opens tomorrow' }, 400, H); }
+    const pot = run ? run.bal : ent ? ent.bal : dent ? dent.bal : W.bal;
     const stake = Math.round(+b.stake * 100) / 100; if (!(stake >= 1)) return json({ error: 'the smallest bet is D$1' }, 400, H); if (stake > pot) return json({ error: `${run ? 'this run has' : 'you have'} D$${pot.toLocaleString('en-US')}` }, 400, H);
     const want = Array.isArray(b.legs) ? b.legs.slice(0, DD_LEGS + 1) : []; if (!want.length) return json({ error: 'add a leg' }, 400, H); if (want.length > DD_LEGS) return json({ error: `up to ${DD_LEGS} legs` }, 400, H);
     const mode = b.mode === 'sgp' ? 'sgp' : 'parlay', seen = new Set(), per = new Map(), legs = [];
@@ -308,14 +321,22 @@ export class Accounts {
     if (run) { const c = chal(run.cid); const bad = c && ruleCheck(c, legs); if (bad) return json({ error: bad }, 400, H); }
     if (lg) { if (lg.sports && legs.some(l => !lg.sports.includes(l.sp))) return json({ error: `${lg.name} is ${lg.sports.map(x => x.toUpperCase()).join(' / ')} only` }, 400, H);
       if (legs.some(l => l.t > lg.ends)) return json({ error: `every game has to start before ${lg.name} ends` }, 400, H); }
+    if (room) { /* every leg is one of YOUR characters' calls, at most 2 from any one of them (or exactly 2 legs in a two-pick room) */
+      const roster = (room.rosters || {})[s.key] || [], two = room.legs === 'two'; if (two ? legs.length !== 2 : legs.length < 2 || legs.length > roster.length * 2) return json({ error: two ? 'this room plays 2-pick tickets' : `a ticket here is 2 to ${roster.length * 2} picks: up to 2 from each of your characters` }, 400, H);
+      let board; try { board = (await this.feed()).board; } catch (e) { return json({ error: 'the board can’t be reached right now — try again in a minute' }, 503, H); }
+      const callers = legs.map(l => drCallers(drBoardGame(board, G.get(l.k)), l.mk, l.side, roster)); const off = callers.findIndex(c => !c.length);
+      if (off >= 0) return json({ error: `${legs[off].pick} isn’t a call from one of your characters` }, 400, H);
+      const who = drAssign(callers, 2); if (!who) return json({ error: 'up to 2 picks from each of your characters' }, 400, H); legs.forEach((l, i) => { l.v = who[i]; });
+      if (legs.some(l => l.t > room.ends)) return json({ error: `every game has to start before ${room.name} ends` }, 400, H); }
     const dec = ddTicketDec(legs, mode), id = this.now().toString(36) + rid(4);
     if (dec > DD_CAP) return json({ error: `that ticket pays over ${DD_CAP.toLocaleString('en-US')}x — the most any ticket can pay is ${DD_CAP.toLocaleString('en-US')}x the stake` }, 400, H);
     const bet = { id, ts: this.now(), stake, mode, dec: Math.round(dec * 1000) / 1000, toWin: Math.round(stake * (dec - 1) * 100) / 100, legs, status: 'open' };
     if (run) { bet.run = run.rid; bet.cid = run.cid; run.bal = r2(run.bal - stake); run.open = (run.open || 0) + 1; run.bets = (run.bets || 0) + 1; run.last = this.now(); await S.put(rk, run); }
     else if (ent) { bet.lg = lid; ent.bal = r2(ent.bal - stake); ent.open = (ent.open || 0) + 1; ent.bets = (ent.bets || 0) + 1; await S.put(ek, ent); this._lgs = null; }
+    else if (dent) { bet.dr = did; dent.bal = r2(dent.bal - stake); dent.open = (dent.open || 0) + 1; dent.bets = (dent.bets || 0) + 1; dent.day = { ...(dent.day || {}), [drDay(this.now())]: 1 }; await S.put(dk, dent); this._dr = null; }
     else { W.bal = r2(W.bal - stake); W.staked = r2(W.staked + stake); u.dd = W; await S.put('u:' + s.key, u); }
     await S.put('b:' + s.key + ':' + id, bet); await S.put('o:' + s.key + ':' + id, 1); this._bd = null; this._ch = null; await this.wake();
-    return json({ bet, wallet: W, run: run || null, entry: ent ? { lid, ...ent } : null }, 200, H); }
+    return json({ bet, wallet: W, run: run || null, entry: ent ? { lid, ...ent } : null, dentry: dent ? { did, ...dent } : null }, 200, H); }
   async wake() { try { const a = await this.ctx.storage.getAlarm(); if (a == null) await this.ctx.storage.setAlarm(this.now() + 10 * 60e3); } catch (e) { } }
   async scores(sp, day) { const k = sp + day; this._sc = this._sc || new Map(); const c = this._sc.get(k); if (c && this.now() - c.t < 5 * 60e3) return c.v;
     const f = this.fetchFn || fetch; const r = await f(`https://site.api.espn.com/apis/site/v2/sports/${ESPN_PATH[sp]}/scoreboard?dates=${day}&limit=400${ESPN_GROUP[sp] || ''}`); const v = new Map();
@@ -328,7 +349,7 @@ export class Accounts {
     this._sc.set(k, { t: this.now(), v }); return v; }
   /* v3.5.33 · the settle pass always books its next run, even if one bet in it throws — one bad record used to stop every bet from settling */
   async alarm() { try { await this.alarm0(); } catch (e) { console.warn('settle pass', e && e.message); }
-    try { const S = this.ctx.storage; if (((await S.list({ prefix: 'o:', limit: 1 })).size || (await S.list({ prefix: 'r:', limit: 1 })).size || (await S.list({ prefix: 'Gp:', limit: 1 })).size) && (await S.getAlarm()) == null) await S.setAlarm(this.now() + 10 * 60e3); } catch (e) { } }
+    try { const S = this.ctx.storage; if (((await S.list({ prefix: 'o:', limit: 1 })).size || (await S.list({ prefix: 'r:', limit: 1 })).size || (await S.list({ prefix: 'Gp:', limit: 1 })).size || (await S.list({ prefix: 'Rp:', limit: 1 })).size) && (await S.getAlarm()) == null) await S.setAlarm(this.now() + 10 * 60e3); } catch (e) { } }
   async alarm0() { const S = this.ctx.storage, O = await S.list({ prefix: 'o:' }); const dayOf = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(t)).replace(/-/g, '');
     for (const ok of O.keys()) { const [, key, id] = ok.split(':'); const bk = 'b:' + key + ':' + id, bet = await S.get(bk); if (!bet || bet.status !== 'open') { await S.delete(ok); continue; }
       let changed = false; for (const l of bet.legs) { if (l.res || l.t > this.now()) continue; let sc = null; try { sc = (await this.scores(l.sp, dayOf(l.t))).get(l.game); } catch (e) { }
@@ -343,15 +364,18 @@ export class Accounts {
             run.open = Math.max(0, (run.open || 1) - 1); run.w = run.w || 0; run.l = run.l || 0; run.p = run.p || 0; tally(run);
             await S.put(rk, run); if (!closed) await this.runCheck(key, run); } }
         else if (bet.lg) { const ek = 'e:' + bet.lg + ':' + key, e = await S.get(ek); if (e) { e.bal = r2(e.bal + fin.back); e.open = Math.max(0, (e.open || 1) - 1); e.w = e.w || 0; e.l = e.l || 0; e.p = e.p || 0; tally(e); e.peak = Math.max(e.peak || e.start, e.bal); await S.put(ek, e); this._lgs = null; } }
+        else if (bet.dr) { const dk = 're:' + bet.dr + ':' + key, e = await S.get(dk); if (e) { e.bal = r2(e.bal + fin.back); e.open = Math.max(0, (e.open || 1) - 1); e.w = e.w || 0; e.l = e.l || 0; e.p = e.p || 0; tally(e); e.peak = Math.max(e.peak || e.start, e.bal); await S.put(dk, e); this._dr = null; } }
         else { const u = await S.get('u:' + key); if (u) { const W = ddWallet(u); W.bal = r2(W.bal + fin.back); W.back = r2(W.back + fin.back); tally(W); u.dd = W; await S.put('u:' + key, u); } }
         await S.delete(ok); this._bd = null; this._ch = null; }
       await S.put(bk, bet); }
+    /* draft rooms: picks whose time ran out, today's team-draft tickets, rooms that finished */
+    try { await this.drTick(); } catch (e) { console.warn('draft tick', e && e.message); }
     /* challenge runs whose clock ran out */
     for (const [rk2] of await S.list({ prefix: 'r:' })) { const [, key, rid2] = rk2.split(':'); const run = await S.get('c:' + key + ':' + rid2); if (!run || run.status !== 'live') { await S.delete(rk2); continue; } await this.runCheck(key, run); }
     /* leagues that ended: pay the podium once every bet in them has settled (or three days on) */
     for (const [gk] of await S.list({ prefix: 'Gp:' })) { const lid = gk.slice(3), g = await S.get('G:' + lid); if (!g || g.paid || g.cancelled) { await S.delete(gk); continue; } if (this.now() < g.ends) continue;
       const E = [...(await S.list({ prefix: 'e:' + lid + ':' })).entries()]; if (E.some(([, e]) => e.open) && this.now() - g.ends < 3 * 864e5) continue; await this.lgsPay(lid, g, E); await S.delete(gk); }
-    if ((await S.list({ prefix: 'o:', limit: 1 })).size || (await S.list({ prefix: 'r:', limit: 1 })).size || (await S.list({ prefix: 'Gp:', limit: 1 })).size) await S.setAlarm(this.now() + 10 * 60e3); }
+    if ((await S.list({ prefix: 'o:', limit: 1 })).size || (await S.list({ prefix: 'r:', limit: 1 })).size || (await S.list({ prefix: 'Gp:', limit: 1 })).size || (await S.list({ prefix: 'Rp:', limit: 1 })).size) await S.setAlarm(this.now() + 10 * 60e3); }
   /* a run moves: checkpoints pay XP as it climbs; it ends won at the goal, busted under D$1 with nothing open, expired at the clock */
   async runCheck(key, run) { if (run.status !== 'live') return; const S = this.ctx.storage, c = chal(run.cid); let end = null;
     if (c) { const cps = checkpoints(c); let hit = run.cp || 0; while (hit < cps.length - 1 && run.bal >= cps[hit].amt) hit++;
@@ -424,6 +448,84 @@ export class Accounts {
   async lgsOne(lid, H) { const S = this.ctx.storage, g = await S.get('G:' + lid.replace(/[^a-z0-9]/gi, '')); if (!g || g.cancelled) return json({ error: 'no such league' }, 404, H);
     const st = lgStatus(g, this.now()), rows = st === 'final' ? g.results : lgRank([...(await S.list({ prefix: 'e:' + g.lid + ':' })).values()]).slice(0, 200).map(e => ({ name: e.name, bal: e.bal, start: e.start, peak: e.peak, w: e.w, l: e.l, p: e.p, open: e.open || 0, bets: e.bets || 0 }));
     return json({ league: { ...g, results: undefined, status: st, pool: g.prizes.reduce((a, x) => a + x, 0), fee: g.fee != null ? g.fee : LG_FEE }, rows }, 200, H); }
+  /* ═══ DRAFT ROOMS (v3.5.34 · chat/draft-lib.mjs has the why) ═══
+     R:<did> the room · re:<did>:<key> a player's bankroll in it · Rp:<did> while it's going (keeps the settle pass running) · u.drs the rooms a member is in */
+  async feed() { if (this._fd && this.now() - this._fd.t < 5 * 60e3) return this._fd.v; const f = this.fetchFn || fetch; const r = await f(FEED_URL, { cf: { cacheTtl: 120 } }); if (!r.ok) throw new Error('feed'); const v = await r.json(); this._fd = { t: this.now(), v }; return v; }
+  drView(R, E, key) { const now = this.now(), st = drStatus(R, now), names = R.names || {}, nm = k => (R.players.find(x => x.key === k) || {}).name || k, turn = st === 'draft' ? R.order[R.picks.length] : null;
+    const rows = drRank(R.players.map(p => { const e = (E || {})[p.key] || {}; return { key: p.key, name: p.name, bal: e.bal != null ? e.bal : R.bank, start: R.bank, w: e.w || 0, l: e.l || 0, p: e.p || 0, open: e.open || 0, bets: e.bets || 0, joined: p.at, roster: (R.rosters || {})[p.key] || [], played: !!((e.day || {})[drDay(now)]) }; }));
+    return { did: R.did, name: R.name, fmt: R.fmt, fmtLab: (DR_FMT[R.fmt] || {}).lab, legs: R.legs || 'per', by: R.by, size: R.size, per: R.per, days: R.days, bank: R.bank, fee: R.fee, pot: R.pot || 0, priv: !!R.priv, status: st, at: R.at,
+      players: R.players.map(p => ({ name: p.name, auto: !!p.auto, me: p.key === key })), order: (R.order || []).map(nm), picks: R.picks.map(x => ({ who: nm(x.key), v: x.v, auto: !!x.auto, me: x.key === key })), turn: turn ? nm(turn) : null, myTurn: !!turn && turn === key, turnAt: R.turnAt || null,
+      pool: R.pool || null, names, colors: R.colors || {}, starts: R.starts || null, ends: R.ends || null, rows: rows.map(r => ({ ...r, key: undefined, me: r.key === key })), results: R.results || null, ...(key && R.byKey === key && R.code ? { code: R.code } : {}) }; }
+  async drEntries(R) { const S = this.ctx.storage, E = {}; for (const p of R.players) { const e = await S.get('re:' + R.did + ':' + p.key); if (e) E[p.key] = e; } return E; }
+  async drMine(key, u) { const S = this.ctx.storage, out = []; for (const did of (u.drs || []).slice(-12)) { const R = await S.get('R:' + did); if (!R) continue; out.push(this.drView(R, await this.drEntries(R), key)); } return out.reverse(); }
+  async drList(H) { if (!this._dr || this.now() - this._dr.t > 30e3) { const S = this.ctx.storage, now = this.now(), rooms = [];
+      for (const R of (await S.list({ prefix: 'R:' })).values()) { if (R.priv || R.cancelled) continue; const st = drStatus(R, now); if (st === 'final' && now - (R.final || 0) > 7 * 864e5) continue; rooms.push({ did: R.did, name: R.name, fmt: R.fmt, fmtLab: (DR_FMT[R.fmt] || {}).lab, by: R.by, size: R.size, n: R.players.length, days: R.days, fee: R.fee, pot: R.pot || 0, status: st, at: R.at, players: R.players.map(p => p.name), winner: R.results && R.results[0] ? R.results[0].name : null }); }
+      const order = { open: 0, draft: 1, live: 2, settling: 3, final: 4 }; rooms.sort((a, b) => order[a.status] - order[b.status] || b.at - a.at); this._dr = { t: now, v: { rooms: rooms.slice(0, 40) } }; }
+    return json(this._dr.v, 200, H); }
+  async drOne(did, H) { const R = await this.ctx.storage.get('R:' + did.replace(/[^a-z0-9]/gi, '')); if (!R || R.cancelled) return json({ error: 'no such draft room' }, 404, H); return json({ room: this.drView(R, await this.drEntries(R), null) }, 200, H); }
+  async drFee(key, fee, why) { if (!(fee > 0)) return true; const S = this.ctx.storage, u = await S.get('u:' + key); if (!u) return false; const W = ddWallet(u); if (!(W.bal >= fee)) return false; W.bal = r2(W.bal - fee); W.fees = r2((W.fees || 0) + fee); if (!W.at) W.at = this.now(); u.dd = W; await S.put('u:' + key, u); this._bd = null; return true; }
+  async drRefund(R, key, why) { if (!(R.fee > 0)) return; const S = this.ctx.storage, u = await S.get('u:' + key); if (!u) return; const W = ddWallet(u); W.bal = r2(W.bal + R.fee); W.fees = r2(Math.max(0, (W.fees || 0) - R.fee)); u.dd = W; u.xpl = [...(u.xpl || []), { t: this.now(), xp: 0, dd: R.fee, why }].slice(-40); await S.put('u:' + key, u); this._bd = null; }
+  async drCreate(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H);
+    const live = []; for (const did of (u.drs || [])) { const R = await S.get('R:' + did); if (R && ['open', 'draft', 'live', 'settling'].includes(drStatus(R, this.now()))) live.push(R); } if (live.length >= 4) return json({ error: 'four draft rooms at a time — finish one first' }, 400, H);
+    const fmt = b.fmt === 'auto' ? 'auto' : 'pick', F = DR_FMT[fmt], size = Math.max(2, Math.min(4, Math.round(+b.size || 2))), days = DR_DAYS.includes(+b.days) ? +b.days : 7, fee = DR_FEES.includes(+b.fee) ? +b.fee : 0;
+    let pool = []; try { pool = drPool(await this.feed(), this.now()); } catch (e) { return json({ error: 'the characters can’t be reached right now — try again in a minute' }, 503, H); }
+    if (pool.length < size * F.per) return json({ error: `only ${pool.length} characters are making calls right now — that's enough for ${Math.floor(pool.length / F.per)} players` }, 400, H);
+    let name = str(b.name, 32); if (name && clean(name) !== name) return json({ error: 'pick a cleaner name' }, 400, H); if (!name) name = `${u.name}’s ${fmt === 'auto' ? 'team draft' : 'head-to-head'}`;
+    if (!(await this.drFee(s.key, fee))) return json({ error: `this room costs D$${fee} to join. You have D$${(+ddWallet(u).bal || 0).toLocaleString('en-US')}.` }, 400, H);
+    const did = this.now().toString(36) + rid(4), R = { did, fmt, legs: fmt === 'pick' && b.legs === 'two' ? 'two' : 'per', name, by: u.name, byKey: s.key, at: this.now(), size, per: F.per, days, bank: F.bank, fee, pot: fee, priv: !!b.priv, code: b.priv ? rid(6).toUpperCase().replace(/[^A-Z0-9]/g, 'X') : null, players: [{ key: s.key, name: u.name, at: this.now() }], picks: [], order: null };
+    await S.put('R:' + did, R); await S.put('Rp:' + did, 1); const u2 = await S.get('u:' + s.key); u2.drs = [...(u2.drs || []).filter(x => x !== did), did].slice(-30); await S.put('u:' + s.key, u2); this._dr = null; await this.wake();
+    return json({ room: this.drView(R, {}, s.key), wallet: ddWallet(u2) }, 200, H); }
+  async drJoin(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H);
+    let R = null; if (b.code) { const code = String(b.code).toUpperCase().replace(/[^A-Z0-9]/g, ''); for (const x of (await S.list({ prefix: 'R:' })).values()) if (x.code && x.code === code && !x.cancelled) { R = x; break; } if (!R) return json({ error: 'no room has that code' }, 404, H); }
+    else R = await S.get('R:' + String(b.id || '').replace(/[^a-z0-9]/gi, '')); if (!R || R.cancelled) return json({ error: 'no such draft room' }, 404, H);
+    if (R.priv && !b.code) return json({ error: 'that room is private — ask for its code' }, 403, H);
+    if (drStatus(R, this.now()) !== 'open' || R.players.length >= R.size) return json({ error: 'that room is full' }, 400, H); if (R.players.some(p => p.key === s.key)) return json({ error: 'you’re already in' }, 400, H);
+    if (!(await this.drFee(s.key, R.fee))) return json({ error: `${R.name} costs D$${R.fee} to join. You have D$${(+ddWallet(u).bal || 0).toLocaleString('en-US')}.` }, 400, H);
+    R.players.push({ key: s.key, name: u.name, at: this.now() }); R.pot = r2((R.pot || 0) + (R.fee || 0)); const u2 = await S.get('u:' + s.key); u2.drs = [...(u2.drs || []).filter(x => x !== R.did), R.did].slice(-30); await S.put('u:' + s.key, u2);
+    if (R.players.length >= R.size) await this.drStartDraft(R); else await S.put('R:' + R.did, R); this._dr = null;
+    return json({ room: this.drView(R, await this.drEntries(R), s.key), wallet: ddWallet(u2) }, 200, H); }
+  /* the room is full: seats are drawn at random, the draft opens (snake order), every player gets the room's bankroll */
+  async drStartDraft(R) { const S = this.ctx.storage, seats = R.players.map(p => p.key); for (let i = seats.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [seats[i], seats[j]] = [seats[j], seats[i]]; }
+    let pool = []; try { pool = drPool(await this.feed(), this.now()); } catch (e) { }
+    R.order = drSnake(seats, R.per); R.pool = pool.map(x => ({ v: x.v, name: x.name, color: x.color, w: x.w, n: x.n, r: x.r })); R.names = Object.fromEntries(pool.map(x => [x.v, x.name])); R.colors = Object.fromEntries(pool.map(x => [x.v, x.color])); R.rosters = {}; R.turnAt = this.now() + DR_PICK_MS; R.drafting = this.now();
+    for (const p of R.players) await S.put('re:' + R.did + ':' + p.key, { name: p.name, bal: R.bank, start: R.bank, peak: R.bank, w: 0, l: 0, p: 0, open: 0, bets: 0, joined: p.at, day: {} });
+    await this.drAdvance(R); }
+  /* after a pick: auto-drafters pick at once; when everyone has their characters, the room goes live (from now, for its days) */
+  async drAdvance(R) { const S = this.ctx.storage; while (R.picks.length < R.order.length) { const k = R.order[R.picks.length], p = R.players.find(x => x.key === k); if (!(p && p.auto)) break; this.drPickFor(R, k, null, true); }
+    if (R.picks.length >= R.order.length && !R.starts) { R.starts = this.now(); R.ends = this.now() + R.days * 864e5; R.turnAt = null; } await S.put('R:' + R.did, R); this._dr = null; }
+  drPickFor(R, key, v, auto) { const taken = new Set(R.picks.map(x => x.v)); const pick = v && !taken.has(v) && (R.pool || []).some(x => x.v === v) ? v : drAutoPick(R.pool || [], taken); if (!pick) return false;
+    R.picks.push({ key, v: pick, t: this.now(), ...(auto ? { auto: true } : {}) }); R.rosters = R.rosters || {}; R.rosters[key] = [...(R.rosters[key] || []), pick]; R.turnAt = this.now() + DR_PICK_MS; return true; }
+  async drPick(s, b, H) { const S = this.ctx.storage, R = await S.get('R:' + String(b.id || '').replace(/[^a-z0-9]/gi, '')); if (!R) return json({ error: 'no such draft room' }, 404, H);
+    if (drStatus(R, this.now()) !== 'draft') return json({ error: 'the draft isn’t on' }, 400, H); if (R.order[R.picks.length] !== s.key) return json({ error: 'it’s not your pick yet' }, 400, H);
+    const v = String(b.v || ''); if (!(R.pool || []).some(x => x.v === v)) return json({ error: 'that character isn’t in the draft' }, 400, H); if (R.picks.some(x => x.v === v)) return json({ error: `${(R.names || {})[v] || v} is taken` }, 400, H);
+    this.drPickFor(R, s.key, v, false); await this.drAdvance(R); return json({ room: this.drView(R, await this.drEntries(R), s.key) }, 200, H); }
+  async drAutoSet(s, b, H) { const S = this.ctx.storage, R = await S.get('R:' + String(b.id || '').replace(/[^a-z0-9]/gi, '')); if (!R) return json({ error: 'no such draft room' }, 404, H); const p = R.players.find(x => x.key === s.key); if (!p) return json({ error: 'you’re not in that room' }, 400, H);
+    p.auto = b.on !== false; if (drStatus(R, this.now()) === 'draft') await this.drAdvance(R); else await S.put('R:' + R.did, R); this._dr = null; return json({ room: this.drView(R, await this.drEntries(R), s.key) }, 200, H); }
+  async drLeave(s, b, H) { const S = this.ctx.storage, R = await S.get('R:' + String(b.id || '').replace(/[^a-z0-9]/gi, '')); if (!R) return json({ error: 'no such draft room' }, 404, H);
+    if (drStatus(R, this.now()) !== 'open') return json({ error: 'the draft has started — you’re in it to the end' }, 400, H); if (!R.players.some(p => p.key === s.key)) return json({ error: 'you’re not in that room' }, 400, H);
+    if (R.byKey === s.key) { R.cancelled = true; for (const p of R.players) await this.drRefund(R, p.key, `↩︎ ${R.name} was called off: entry fee back`); await S.delete('Rp:' + R.did); }
+    else { R.players = R.players.filter(p => p.key !== s.key); R.pot = r2(Math.max(0, (R.pot || 0) - (R.fee || 0))); await this.drRefund(R, s.key, `↩︎ You left ${R.name}: entry fee back`); }
+    await S.put('R:' + R.did, R); const u = await S.get('u:' + s.key); if (u) { u.drs = (u.drs || []).filter(x => x !== R.did); await S.put('u:' + s.key, u); } this._dr = null; return json({ ok: true, cancelled: !!R.cancelled }, 200, H); }
+  /* the settle pass for draft rooms: a pick whose clock ran out is made for you; today's team-draft tickets go on once the board is out;
+     a finished room pays its pot and XP once every ticket in it has settled (or three days on); a room nobody filled in 48 hours is called off */
+  async drTick() { const S = this.ctx.storage, now = this.now();
+    for (const [pk] of await S.list({ prefix: 'Rp:' })) { const did = pk.slice(3), R = await S.get('R:' + did); if (!R || R.cancelled || R.paid) { await S.delete(pk); continue; } const st = drStatus(R, now);
+      if (st === 'open' && now - R.at > DR_OPEN_MS) { R.cancelled = true; for (const p of R.players) await this.drRefund(R, p.key, `↩︎ ${R.name} didn’t fill: entry fee back`); await S.put('R:' + did, R); await S.delete(pk); this._dr = null; continue; }
+      if (st === 'draft') { let moved = false; while (R.picks.length < R.order.length && R.turnAt && now >= R.turnAt) { if (!this.drPickFor(R, R.order[R.picks.length], null, true)) break; R.turnAt = now + DR_PICK_MS; moved = true; } if (moved) await this.drAdvance(R); continue; }
+      if (st === 'live' && R.fmt === 'auto') await this.drAutoDay(R);
+      if (st === 'settling') { const E = await this.drEntries(R); if (Object.values(E).some(e => e.open) && now - R.ends < 3 * 864e5) continue; await this.drPay(R, E); await S.delete(pk); } } }
+  /* the team draft's day: each player's characters' 2 best calls, D$2 on every single and D$5 on the parlay of them all */
+  async drAutoDay(R) { const S = this.ctx.storage, now = this.now(), day = drDay(now); R.built = R.built || {}; if (R.built[day]) return;
+    let feed, G; try { feed = await this.feed(); G = await this.slate(); } catch (e) { return; } const board = feed && feed.board; if (!board || !(board.games || []).some(b => b.day === day)) return;
+    let any = false; for (const p of R.players) { const roster = (R.rosters || {})[p.key] || [], legs = drAutoLegs(board, G, roster, now, ddPrice, day); if (!legs.length) continue; any = true;
+      const dk = 're:' + R.did + ':' + p.key, e = await S.get(dk); if (!e) continue; const place = async (L, stake, kind) => { if (!(e.bal >= stake)) return; const dec = ddTicketDec(L, 'parlay'), id = this.now().toString(36) + rid(4);
+          const bet = { id, ts: this.now(), stake, mode: 'parlay', dec: Math.round(dec * 1000) / 1000, toWin: r2(stake * (dec - 1)), legs: L.map(l => ({ ...l, res: null })), status: 'open', dr: R.did, auto: kind }; e.bal = r2(e.bal - stake); e.open = (e.open || 0) + 1; e.bets = (e.bets || 0) + 1;
+          await S.put('b:' + p.key + ':' + id, bet); await S.put('o:' + p.key + ':' + id, 1); };
+      if (legs.length >= 2) await place(legs, DR_PARLAY, 'parlay'); for (const l of legs) await place([l], DR_SINGLE, 'single'); e.day = { ...(e.day || {}), [day]: 1 }; await S.put(dk, e); }
+    if (any || +new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date(now)) >= 22) { R.built[day] = 1; await S.put('R:' + R.did, R); this._dr = null; } }
+  async drPay(R, E) { const rows = drRank(R.players.map(p => ({ key: p.key, name: p.name, joined: p.at, ...(E[p.key] || { bal: R.bank, w: 0, l: 0, p: 0 }) }))), top = rows[0], winners = rows.filter(r => r.bal === top.bal), share = winners.length ? r2((R.pot || 0) / winners.length) : 0;
+    for (const r of rows) { const win = winners.includes(r); await this.award(r.key, (win ? DR_XP_WIN : 0) + DR_XP_PLAY, win ? share : 0, `${win ? '🏆' : '🧩'} ${R.name}: ${win ? 'won' : '#' + (rows.indexOf(r) + 1)}`); }
+    R.paid = true; R.final = this.now(); R.results = rows.map((r, i) => ({ name: r.name, bal: r.bal, w: r.w || 0, l: r.l || 0, p: r.p || 0, place: winners.includes(r) ? 1 : i + 1, prize: winners.includes(r) ? share : 0, roster: (R.rosters || {})[r.key] || [] })); await this.ctx.storage.put('R:' + R.did, R); this._dr = null; }
   /* ── the subscriber inbox: members write to the desk, the desk writes back (one thread per member) ── */
   async inboxSend(s, b, H) { const S = this.ctx.storage, u = await S.get('u:' + s.key); if (!u) return json({ error: 'sign in first' }, 401, H); if (s.owner) return json({ error: 'reply from the admin inbox' }, 400, H);
     const text = clean(String(b.text || '').replace(/[<>]/g, '').trim()).slice(0, 1000); if (text.length < 2) return json({ error: 'write a message' }, 400, H);

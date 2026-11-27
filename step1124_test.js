@@ -119,7 +119,8 @@ const RUN = { rid: 'r1', cid: CJ, name: 'Tester', ts: AT - 3 * 36e5, ends: AT + 
     T('✕ closes the step', !(await p.locator('.sxs').count()));
     /* ── 2 · ✍️ Pick my own ── */
     await p.click('.runcard [data-act="qpopen"]'); await p.waitForTimeout(700);
-    T('Quick Pick has a fourth way: ✍️ Pick my own', (await p.locator('.qps [data-act="qpsrc"][data-v="own"]').count()) === 1 && /Pick my own/.test(await p.locator('.qps .qp-src').innerText()));
+    await p.click('.qps [data-act="qpmore"]'); await p.waitForTimeout(250);
+    T('Quick Pick has ✍️ Pick my own (v81: under More ways)', (await p.locator('.qps [data-act="qpsrc"][data-v="own"]').count()) === 1 && /Pick my own/.test(await p.locator('.qps .qp-ms').innerText()));
     await p.click('.qps [data-act="qpsrc"][data-v="own"]'); await p.waitForTimeout(400);
     const own = async () => p.evaluate(() => { const s = document.querySelector('.qps'); return s ? s.innerText.replace(/\s+/g, ' ') : ''; });
     let q = await own();
@@ -157,14 +158,14 @@ const RUN = { rid: 'r1', cid: CJ, name: 'Tester', ts: AT - 3 * 36e5, ends: AT + 
     const chalkRun = { ...RUN, rid: 'r2', cid: '7d1.2x50-chalk-any', start: 50, bal: 50, goal: 60, route: 'stairs', open: 0, bets: 0, l: 0 };
     ({ ctx, p, errs } = await page([chalkRun]));
     await p.goto('https://desk.test/desk/#challenges', { waitUntil: 'load' }); await p.waitForTimeout(2400);
-    await p.click('.runcard [data-act="qpopen"]'); await p.waitForTimeout(500); await p.click('.qps [data-act="qpsrc"][data-v="own"]'); await p.waitForTimeout(300);
+    await p.click('.runcard [data-act="qpopen"]'); await p.waitForTimeout(500); await p.click('.qps [data-act="qpmore"]'); await p.waitForTimeout(150); await p.click('.qps [data-act="qpsrc"][data-v="own"]'); await p.waitForTimeout(300);
     const prices = await p.evaluate(() => [...document.querySelectorAll('.qpo-l b')].map(b => Number(b.innerText.replace('−', '-'))));
     T('a Chalk walk run only sees favorites at −130 or shorter', prices.length > 0 && prices.every(x => x <= -130), JSON.stringify(prices));
     await ctx.close();
     const twoRun = { ...RUN, rid: 'r4', cid: '3d1.25x250-two-any', start: 250, bal: 250, goal: 312.5, ends: AT + 3 * 864e5 - 3 * 36e5, route: 'stairs', open: 0, bets: 0, l: 0 };
     ({ ctx, p, errs } = await page([twoRun]));
     await p.goto('https://desk.test/desk/#challenges', { waitUntil: 'load' }); await p.waitForTimeout(2400);
-    await p.click('.runcard [data-act="qpopen"]'); await p.waitForTimeout(500); await p.click('.qps [data-act="qpsrc"][data-v="own"]'); await p.waitForTimeout(300);
+    await p.click('.runcard [data-act="qpopen"]'); await p.waitForTimeout(500); await p.click('.qps [data-act="qpmore"]'); await p.waitForTimeout(150); await p.click('.qps [data-act="qpsrc"][data-v="own"]'); await p.waitForTimeout(300);
     for (const k of ['ncaab|CSU@ARIZ', 'ncaab|SJSU@UCSD', 'nhl|MIN@SJ']) { await p.click(`.qpo-l[data-k="${k}"][data-mk="total"][data-side="over"]`); await p.waitForTimeout(120); }
     q = await own();
     T('a Two-teamers run with three legs: it says why and won\'t place', /Two-teamers: every ticket has exactly 2 legs/.test(q) && await p.locator('.qps [data-act="qpplace"]').isDisabled(), (q.match(/Two-teamers.{0,80}/) || [q.slice(0, 300)])[0]);
@@ -194,9 +195,9 @@ const RUN = { rid: 'r1', cid: CJ, name: 'Tester', ts: AT - 3 * 36e5, ends: AT + 
     await p.click('.runcard [data-act="ghoston"]'); await p.waitForTimeout(900);
     const gb = await p.evaluate(() => { const g = document.querySelector('.runcard .gh-box'); return g ? g.innerText.replace(/\s+/g, ' ') : ''; });
     /* House money from D$50: day 1 D$2.50 cashes at 3.64 → D$56.60; day 2 D$5.80 misses → D$50.80; day 3 no ticket; today D$2.90 in play → D$47.90, D$60.37 if it cashes */
-    T('the ghost is the lane\'s best (the Scout, its lane record), racing the same challenge from the same start on the same route', /GHOST RUN/i.test(gb) && /The Scout: the best in open book, 731–508, \+32\.2u/.test(gb), gb.slice(0, 300));
-    T('…side by side: you D$45, the ghost D$47.90 after its own tickets (cash, miss, a day off, one in play)', /YOU\s*D\$45\s*0–1/i.test(gb) && /SCOUT\s*D\$47\.90\s*1–1 · in play → D\$60\.37/i.test(gb), gb);
-    T('…who leads and by how much, its days as a strip, and its ticket today', /The ghost leads by D\$2\.90/.test(gb) && (await p.locator('.runcard .gh-strip i').count()) === 4 && /✓/.test(await p.locator('.runcard .gh-strip i.w').innerText()) && /Its ticket today/i.test(gb) && /SJSU ML \+105/.test(gb) && /✓ Under 158\.5 −105/.test(gb), gb);
+    T('the ghost is the lane\'s best (the Scout, its lane record), racing the same challenge from the same start on the same route', /GHOST RUN/i.test(gb) && /Racing The Scout, the best in open book\. Last 60 days in this lane: 731–508, \+32\.2u/.test(gb), gb.slice(0, 300));
+    T('…side by side: you D$45, the ghost D$47.90 after its own tickets (cash, miss, a day off, one in play)', /YOU\s*D\$45\s*0–1 in this challenge/i.test(gb) && /SCOUT\s*D\$47\.90\s*1–1 in this challenge · in play → D\$60\.37/i.test(gb), gb);
+    T('…who leads and by how much, its days as a strip, and its ticket today', /Scout leads by D\$2\.90/.test(gb) && (await p.locator('.runcard .gh-strip i').count()) === 4 && /✓/.test(await p.locator('.runcard .gh-strip i.w').innerText()) && /Its ticket today/i.test(gb) && /SJSU ML \+105/.test(gb) && /✓ Under 158\.5 −105/.test(gb), gb);
     T('…and the ghost rides the road map', (await p.locator('.runcard .rd-gh').count()) === 1);
     if (SHOTS) await p.locator('.runcard').screenshot({ path: path.join(SHOTS, 'ghost_card.png') });
     await p.reload({ waitUntil: 'load' }); await p.waitForTimeout(2400);

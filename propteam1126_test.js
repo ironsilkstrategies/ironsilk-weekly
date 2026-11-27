@@ -18,5 +18,10 @@ setTimeout(() => { try {
   T('a game pick is untouched', w.eval('pkShow(window.__l)') === 'BUF ML');
   w.__l = { player: 'Josh Allen', team: 'BUF', pick: 'Josh Allen (BUF) 250+ pass yds' };
   T('never doubled', w.eval('pkShow(window.__l)') === 'Josh Allen (BUF) 250+ pass yds');
+  /* v3.5.34 · "Can we get live updates here" (Props): a card whose sport's page wasn't loaded on this phone still gets its game, from today's card */
+  w.localStorage.setItem('d4.todaycard', JSON.stringify({ by: { nfl: { picks: [{ game: 'KC@BUF', start: '2026-11-27T01:20:00Z', pick: 'BUF ML' }] } } }));
+  const o = JSON.parse(w.eval(`JSON.stringify(pubPropOpp('nfl','KC'))`) || 'null');
+  T('a prop\'s game from today\'s card when the NFL page hasn\'t loaded: KC at BUF, with the kickoff', o && o.opp === 'BUF' && o.home === false && o.start === '2026-11-27T01:20:00Z', JSON.stringify(o));
+  T('…and nothing invented for a team with no game today', w.eval(`pubPropOpp('nfl','SEA')`) === null);
 } catch (e) { T('no crash', false, String(e && e.stack || e).slice(0, 400)); }
 const f = out.filter(x => x.startsWith('FAIL')).length; console.log(out.join('\n')); console.log(`${out.length - f} pass / ${f} fail`); process.exit(f ? 1 : 0); }, 2500);

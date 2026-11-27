@@ -1511,6 +1511,14 @@ function pubHeavy(x){if(!x)return false;const pr=x.price;if(pr==null||pr===''||!
    tonight's opponent and home/road, the characters with it (each one's own chance), and the fair odds of their average read.
    Records and numbers only — no method. Capped at 150 props. */
 let PUB_PROPS_MEMO=null;
+/* v3.5.34 · Nov 26, Chris: "Can we get live updates here" (Props) — cards went out as "NFL · KC" with no game when that sport's page
+   hadn't loaded its games on this phone, so the public page could never follow them live. Other places this phone knows tonight's games:
+   today's card (every pick's game and start) and the My Games scoreboard. */
+function pubPropOpp(sp,team){let o=null;try{o=typeof cpropOpp==='function'?cpropOpp(sp,team):null;}catch(e){}if(o)return o;
+  const mk=(gl,start)=>{const [a,h]=String(gl).split('@');if(!a||!h)return null;const home=h===team;if(!home&&a!==team)return null;return{opp:home?a:h,home,start:start||null};};
+  try{const T=roGet(TC_KEY,{},30e3)||{};const B=((T.by||{})[sp]||{});for(const x of (B.picks||[])){const r=x&&x.game&&mk(x.game,x.start);if(r)return r;}}catch(e){}
+  try{const L=(typeof MG_LIVE!=='undefined'&&MG_LIVE[sp])||{};const d=today();for(const [k,ev] of Object.entries(L)){const e=(ev||[]).find(z=>z.date===d);if(!e)continue;const r=mk(k,e.start);if(r)return r;}}catch(e){}
+  return null;}
 function pubPropVal(sp,row,k){const K=Object.keys(PST_STATS[sp]||{});const one=x=>{const i=K.indexOf(x);return i<0?null:row[i+1];};
   const parts=PST_COMBO[k];if(!parts)return one(k);let t=0;for(const x of parts){const v=one(x);if(v==null)return null;t+=+v;}return t;}
 function pubProps(){try{const k=today()+'|'+Math.floor(Date.now()/120e3);if(PUB_PROPS_MEMO&&PUB_PROPS_MEMO.k===k)return PUB_PROPS_MEMO.val;
@@ -1522,7 +1530,7 @@ function pubProps(){try{const k=today()+'|'+Math.floor(Date.now()/120e3);if(PUB_
     const L=P.r.map(r=>({d:String(r[0]),v:pubPropVal(o.sp,r,o.k)})).filter(x=>x.v!=null).slice(-10);if(L.length<3)return;
     const hit=v=>o.side==='under'?v<o.thr:v>=o.thr;const h=a=>a.filter(x=>hit(x.v)).length;const l5=L.slice(-5);
     let st=0;const first=hit(L[L.length-1].v);for(let i=L.length-1;i>=0;i--){if(hit(L[i].v)===first)st++;else break;}
-    const opp=typeof cpropOpp==='function'?cpropOpp(o.sp,o.team):null;const g=opp&&opp.g;const start=g&&(g.date||g.start)||null;
+    const opp=pubPropOpp(o.sp,o.team);const g=opp&&opp.g;const start=(g&&(g.date||g.start))||(opp&&opp.start)||null;
     const avg=o.by.reduce((a,b)=>a+b.p,0)/o.by.length;const fair=avg>=0.5?-Math.round(100*avg/(1-avg)):Math.round(100*(1-avg)/avg);
     out.push({id:[o.sp,pstId(o.player),o.k,o.thr,o.side].join('|'),sp:o.sp,player:o.player,team:o.team,k:o.k,lab:(typeof CPROP_LAB!=='undefined'&&CPROP_LAB[o.k])||o.k,thr:o.thr,side:o.side,
       opp:opp?opp.opp:null,home:opp?!!opp.home:null,start,last:L.map(x=>+(+x.v).toFixed(1)),dates:L.map(x=>x.d),l5:[h(l5),l5.length],l10:[h(L),L.length],streak:first?st:-st,
@@ -1630,9 +1638,8 @@ function ghostBuild(V,d){const from=dayShift(d,-60),from31=dayShift(d,-30),days=
   /* each character's record in every lane it plays: one pass over its calls */
   const rec={};Object.entries(by).forEach(([v,L])=>L.forEach(x=>{if(x.r==null||x.r===2)return;for(const sp of ['any',x.sp])for(const rule in GH_RULE){if(!GH_RULE[rule](x))continue;const k=rule+'|'+sp,R=(rec[k]=rec[k]||{}),o=(R[v]=R[v]||{w:0,l:0,u:0});if(x.r===1){o.w++;o.u+=pubUnits(x.pr,true);}else{o.l++;o.u-=1;}}}));
   const dec=pr=>pr>0?1+pr/100:1+100/Math.abs(pr),lanes={};
-  for(const rule in GH_RULE)for(const sp of GH_SP){if(rule==='world'&&sp!=='any')continue;const k=rule+'|'+sp,R=rec[k];if(!R)continue;   /* (a world tour crosses sports: it has no one-sport lane) */
-    const top=Object.entries(R).filter(([,o])=>o.w+o.l>=8).sort((a,b)=>b[1].u-a[1].u||b[1].w-a[1].w)[0];if(!top||!(top[1].u>0))continue;
-    const v=top[0],o=top[1],C=CHARS[v]||{},mine=(by[v]||[]).filter(x=>x.day>=from31&&(sp==='any'||x.sp===sp)&&GH_RULE[rule](x));
+  /* one character's ghost in one lane: a ticket a day from its own most confident calls that fit the lane */
+  const runOf=(v,rule,sp)=>{const mine=(by[v]||[]).filter(x=>x.day>=from31&&(sp==='any'||x.sp===sp)&&GH_RULE[rule](x));
     const perDay=new Map();mine.forEach(x=>{const a=perDay.get(x.day)||[];a.push(x);perDay.set(x.day,a);});
     const K={},T={};
     for(const kk of GH_KS(rule)){const row=days.map(()=>null);
@@ -1644,7 +1651,17 @@ function ghostBuild(V,d){const from=dayShift(d,-60),from31=dayShift(d,-30),days=
         row[DI.get(day)]=[res,+dd.toFixed(3)];
         if(day===d)T[kk]=pick.map(x=>[x.pick,x.pr,x.r,x.sp,x.g]);}
       K[kk]=row;}
-    lanes[k]={v,n:C.label||v,c:C.color||'#999',w:o.w,l:o.l,u:+o.u.toFixed(2),k:K,...(Object.keys(T).length?{t:T}:{})};}
+    return{K,T};};
+  /* v3.5.34 · Nov 26, 7:30 PM, Chris: "the option to also tail a separate character ghost than the one you're going against… where you are
+     on the challenge vs all characters… I also want to see what the character record was in the challenge". Every character with 8+
+     graded calls in a lane rides along now (all), its days packed small: "1:2.596" a cashed 2.596 ticket, "" no ticket, comma-separated. */
+  const pack=K=>{const o={};for(const kk in K)o[kk]=K[kk].map(x=>x?x[0]+':'+x[1]:'').join(',').replace(/,+$/,'');return o;};
+  for(const rule in GH_RULE)for(const sp of GH_SP){if(rule==='world'&&sp!=='any')continue;const k=rule+'|'+sp,R=rec[k];if(!R)continue;   /* (a world tour crosses sports: it has no one-sport lane) */
+    const ranked=Object.entries(R).filter(([,o])=>o.w+o.l>=8).sort((a,b)=>b[1].u-a[1].u||b[1].w-a[1].w);if(!ranked.length)continue;
+    const all=ranked.map(([v,o])=>{const C=CHARS[v]||{},{K,T}=runOf(v,rule,sp);return{v,n:C.label||v,c:C.color||'#999',w:o.w,l:o.l,u:+o.u.toFixed(2),r:pack(K),...(Object.keys(T).length?{t:T}:{})};});
+    const top=ranked[0];if(!(top[1].u>0)){lanes[k]={all};continue;}   /* nobody up in the lane: no default ghost, but every character can still be raced */
+    const v=top[0],o=top[1],C=CHARS[v]||{},{K,T}=runOf(v,rule,sp);
+    lanes[k]={v,n:C.label||v,c:C.color||'#999',w:o.w,l:o.l,u:+o.u.toFixed(2),k:K,...(Object.keys(T).length?{t:T}:{}),all};}
   return{v:1,d,gen:Date.now(),days,lanes};}
 /* a fingerprint of what the ghosts are built from: a new graded call, a new day */
 function ghostSig(V,d){let n=0,g=0;const from=dayShift(d,-60);(V||[]).forEach(c=>{const day=String(c&&c.date||'').slice(0,10);if(day<from||day>d)return;n++;if(c.hit!=null||c.push)g++;});return d+'|'+n+'|'+g;}
