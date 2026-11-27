@@ -16,7 +16,7 @@ const ch = (v, name, title, color) => ({ v, name, chip: name, color, title, bio:
 const FEED = { v: 4, beta: true, brand: 'TheDesk', generated: AT - 20 * 60e3, record: { w: 59, l: 41, pu: 0, u: 4.09, first: '2026-10-06' }, history: [], updates: [], cashed: [], unlockMin: 30,
   today: { d: D, lockedAt: AT - 4 * 36e5, unlockMin: 30, props: [], picks: [] },
   characters: [ch('Pred', 'The Oracle', 'The Oracle', '#A78BFA'), ch('Scout', 'The Scout', 'The Talent Hunter', '#FB7185')],
-  founder: { tix: [], rec: { cashed: 0, lost: 39 } },
+  founder: { tix: [], rec: { hits: 1 } },
   props: { d: D, props: Array.from({ length: 30 }, (_, i) => prop(i)) } };
 /* one game the book only posted a spread and a total for, one with all three */
 const SLATE = { v: 1, ts: AT - 10 * 60e3, tz: 'America/Chicago', ranks: {}, days: [{ d: D, games: [
@@ -74,7 +74,7 @@ async function page(b, dev, o = {}) { const ctx = await b.newContext({ ...dev, s
 
     await p.evaluate(() => { location.hash = '#longshots'; }); await p.waitForTimeout(800);
     const ls = await p.evaluate(() => document.querySelector('#v-longshots').innerText.replace(/\s+/g, ' '));
-    T('the empty LongShots page says why, and keeps the 30-day record on screen', /No LongShot ticket up yet today/i.test(ls) && /Yesterday’s tickets come down when today’s card locks/.test(ls) && /Last 30 days: 0 cashed, 39 lost/.test(ls), ls.slice(0, 400));
+    T('the empty LongShots page says why, and shows how many have cashed, never the losses (v83: "just how many times it\'s hit")', /No LongShot ticket up yet today/i.test(ls) && /Yesterday’s tickets come down when today’s card locks/.test(ls) && /🎯 1 LongShot cashed so far/.test(ls) && !/lost|Last 30 days/i.test(ls), ls.slice(0, 400));
 
     await p.evaluate(() => { location.hash = '#join'; }); await p.waitForTimeout(800);
     const jr = await p.evaluate(() => { const r0 = [...document.querySelectorAll('#v-join tr')].find(x => /chatroom/i.test(x.innerText)); const last = r0 && r0.querySelector('td:last-child'); return r0 ? r0.innerText.replace(/\s+/g, ' ') + '|' + (last && last.querySelector('svg.y') ? 'yes' : 'no') : null; });
@@ -135,6 +135,14 @@ async function page(b, dev, o = {}) { const ctx = await b.newContext({ ...dev, s
     T('a card that won\'t fit in storage takes the stale saved one with it', await p.evaluate(() => localStorage.getItem('tdp.feed') === null));
     T('…and the page still shows today\'s card (59–41)', /59–41/.test(await p.evaluate(() => document.querySelector('#v-today').innerText)));
     await ctx.close();
+    /* ── v83: a feed from the machine before 3.5.36 still carries the 30-day pair: its cashed count shows, the losses never do ── */
+    for (const [rec, want] of [[{ cashed: 0, lost: 39 }, null], [{ cashed: 2, lost: 39 }, '🎯 2 LongShots cashed so far']]) {
+      FEED.founder.rec = rec; ({ ctx, p, errs } = await page(b, PHONE));
+      await p.goto('https://desk.test/desk/#longshots', { waitUntil: 'load' }); await p.waitForTimeout(2000);
+      const tx = await p.evaluate(() => document.querySelector('#v-longshots').innerText.replace(/\s+/g, ' '));
+      T(`an older feed (${rec.cashed} cashed, ${rec.lost} lost): ${want ? '"' + want + '"' : 'no line at all'}, and never the losses`, !/lost\b|Last 30 days/i.test(tx) && (want ? tx.includes(want) : !/cashed/i.test(tx)), tx.slice(0, 300));
+      await ctx.close(); }
+    FEED.founder.rec = { hits: 1 };
   } catch (e) { T('test ran', false, e.stack); }
   await b.close();
   /* ── the publishers: compact JSON (2.6 MB → 1.5 MB on a full board; same data) ── */

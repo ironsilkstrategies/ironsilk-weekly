@@ -1554,11 +1554,21 @@ function pubFounder0(L){const d=today(),lo7=dayShift(d,-7),lo30=dayShift(d,-30);
     let p0=t.p>0&&t.p<1?+t.p:legs.every(l=>l.p!=null)?legs.reduce((a,l)=>a*l.p,1):null,now=null;try{const L=liveTicketChance(t);if(L&&L.any)now=+L.p.toFixed(5);}catch(e){}
     return{id:hash(t.id),name:t.name&&!/^Ticket\s*#/i.test(t.name)?String(t.name).slice(0,40):null,date:t.date,legs,dec:dec?+dec.toFixed(3):null,res,hit:legs.filter(l=>l.st==='hit').length,p0:p0!=null?+(+p0).toFixed(5):null,now};};
   const pool=L.filter(mine).filter(t=>String(t.date||'')>=lo30);const all=pool.map(read);
-  const rec={cashed:all.filter(t=>t.res==='cashed').length,lost:all.filter(t=>t.res==='lost').length};
+  /* v3.5.36 · Chris, Nov 27: "I'd rather it not show the record … just how many times it's hit". The public card carries the founder's
+     hits only, no losses: every LongShot that cashed since his first. They come from where a result is frozen (the settled ledger, and a
+     ticket's own finalRecord), not from grading again: LS.locked keeps archived tickets only a few days and an old ticket whose finals are
+     gone re-grades to "open" (the Nov 23 3-for-3 had dropped out that way), plus any that cashed since the ledger's last pass. Tickets
+     switched off and ones carrying a -1000 moneyline stay out, like the cards. */
+  const won=new Set();pool.forEach((t,i)=>{if(all[i].res==='cashed'||(t.finalRecord&&t.finalRecord.won===true))won.add(String(t.id));});
+  try{const hid=new Set(L.filter(t=>t&&t.pubHide).map(t=>String(t.id))),SA=typeof settledAll==='function'?settledAll():{};
+    L.filter(mine).forEach(t=>{if(t.finalRecord&&t.finalRecord.won===true)won.add(String(t.id));});
+    for(const id in SA){const e=SA[id];if(!e||e.won!==true||e.src!=='mine'||hid.has(String(id)))continue;
+      if(Array.isArray(e.legs)&&e.legs.some(l=>l&&pubHeavy({m:/\bML$/i.test(String(l.pk||'').trim())?'ml':'',price:l.pr,pick:l.pk})))continue;won.add(String(id));}}catch(e){}
+  const rec={hits:won.size};
   const ord={live:0,open:1,cashed:2,lost:3};
   /* v3.0.29 · Chris, Nov 15: "always archive yesterday's longshots when the new slate is froze in the machine after master eval… keep
      the record". Once today's card is frozen, only tickets from today on stay on the page; before the freeze (overnight), the latest
-     day's tickets stay up. The 30-day record above still counts every one. */
+     day's tickets stay up. The hit count above still counts every one. */
   let fd=null;try{const Fz=roGet(FREEZE_KEY,null,3e3);if(Fz&&Fz.d===d)fd=d;}catch(e){}
   /* v3.0.36 · a ticket's day is its LAST game's day, not the day it was placed: a slip placed last night for tonight's games stays up */
   const tday=t=>t.legs.reduce((m,l)=>{const g=String(l.day||'').slice(0,10);return g>m?g:m;},String(t.date||''));
@@ -1690,7 +1700,7 @@ function publicFeedCore(full){const beta=pubBeta();const S=best5State();try{best
        its 30-minute unlock. Today lives in "today" (gated); it joins the history once the day turns. */
     history:hist.filter(h=>!S||!S.d||h.d<S.d),unlockMin:30,plans:PUB_PLANS,
     ...(beta?(()=>{const d=S&&S.d||today();const vip=S.locked?pubVip(VB):null,characters=pubCharacters(VB,d),bloodlines=pubBloodlines(),board=pubBoard(VB),founder=pubFounder(),propsb=pubProps();
-      return{beta:true,vip,characters,bloodlines,board,founder,props:propsb,betaSig:JSON.stringify([propsb?propsb.props.map(x=>x.id+x.votes):0,founder?founder.tix.map(t=>t.res+':'+t.legs.map(l=>l.st[0]+(l.prog?l.prog.v:'')+(l.st==='live'&&l.q!=null?'~'+Math.round(l.q*10):'')).join('')):0,board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit),c.par?['game','suit','props'].map(k=>c.par[k].w+'-'+c.par[k].l+'-'+c.par[k].p):0]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
+      return{beta:true,vip,characters,bloodlines,board,founder,props:propsb,betaSig:JSON.stringify([propsb?propsb.props.map(x=>x.id+x.votes):0,founder?[founder.rec&&founder.rec.hits,...founder.tix.map(t=>t.res+':'+t.legs.map(l=>l.st[0]+(l.prog?l.prog.v:'')+(l.st==='live'&&l.q!=null?'~'+Math.round(l.q*10):'')).join(''))]:0,board?board.games.map(g=>[g.picks.length,g.picks.map(p=>p.tier+(p.unan?'*':'')+(p.off?'!':'')),Object.values(g.calls).reduce((n,a)=>n+a.length,0)]):0,vip?[(vip.top10||[]).length,(vip.parlays||[]).length,vip.banker&&vip.banker.legs.map(l=>l.hit)]:0,characters.map(c=>[c.picks.length,c.picks.map(p=>p.hit),c.par?['game','suit','props'].map(k=>c.par[k].w+'-'+c.par[k].l+'-'+c.par[k].p):0]),bloodlines&&bloodlines.cells.map(c=>c.gen)])};})():{beta:false})};}
 function publicFeed(){return publicFeedCore(false);}
 function pubSig(F){return JSON.stringify([F.beta?F.betaSig:'',F.today&&F.today.picks.map(x=>x.hidden?'h':x.hit),F.today&&(F.today.props||[]).map(x=>x.hidden?'h':x.hit),F.parlay&&F.parlay.legs.map(l=>l.hidden?'h':l.hit),(F.cashed||[]).map(c=>c.id),(F.updates||[]).map(u=>u.ts),F.cal?F.cal.d.length:0]);}   /* (the calendar's day count: the first load of v3.5.10 publishes it once) */
 

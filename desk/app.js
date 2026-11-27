@@ -428,6 +428,10 @@ function founderSum(t) { const L = t.legs || []; if (L.length < 2) return ''; co
   const hm = hitMiss(L.map(l => (l.st === 'hit' ? 'w' : l.st === 'miss' ? 'l' : l.st === 'push' ? 'p' : 'o')));
   return `<div class="tk-sum">${p0 != null ? `<b>${fmtP(p0)}</b> · 1 in ${p1in(p0)} · ` : ''}${L.length} legs${hm ? ' · ' + hm : ''}${live ? ` · <span class="lv-on">● ${live} live</span>` : ''}${togo ? ` · ${togo} to go` : ''}${nx ? ` · next ${esc(clock(new Date(nx).toISOString()))}` : ''}</div>
     ${started && p0 != null && now != null ? `<div class="tk-live ${lost ? 'dn' : now >= p0 ? 'up' : ''}">📡 ${live ? 'Live' : 'Now'} cash chance ${lost ? '0% · busted' : `${fmtP(now)} · 1 in ${p1in(now)} <small>(was 1 in ${p1in(p0)} pre-game)</small>`}</div>` : ''}${live && S.liveAt ? `<div class="tk-upd">Scores updated ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }))}</div>` : ''}`; }
+/* v83 · Chris, Nov 27: "I'd rather it not show the record … just how many times it's hit". The LongShots page shows the founder's hits only:
+   how many have cashed since his first (the machine counts them from his frozen ledger). No losses, and no line at all before the first hit.
+   An older feed still carrying the 30-day cashed/lost pair shows its cashed count the same way, never the losses. */
+const lsHits = R => { const n = R && fin(+R.hits) ? +R.hits : R && fin(+R.cashed) ? +R.cashed : 0; return n > 0 ? Math.round(n) : 0; };
 /* v76 · the founder's LongShot tickets, one card each (the LongShots tab, Today, and his own profile and My tickets) */
 const founderTix = () => { const F = S.feed && S.feed.beta !== false && S.feed.founder; return F && Array.isArray(F.tix) ? F.tix : []; };
 function founderCard(t0) { const t = effTicket(t0); const n = t.legs.length, done = t.legs.filter(l => l.st === 'hit' || l.st === 'miss' || l.st === 'push').length;
@@ -440,7 +444,7 @@ function founderHtml(page) {
   const F = S.feed && S.feed.beta !== false && S.feed.founder; if (!F || !Array.isArray(F.tix) || !F.tix.length) return '';
   const R = F.rec || {}, card = founderCard;
   if (!page) return `<section class="vsec" id="founder"><div class="vh"><h2 class="h2">Founder LongShot Parlays</h2>${vipBadge()}</div><p class="note">The founder’s live tickets are on the <button type="button" class="link" data-go="longshots">LongShots tab</button>.</p><div class="fgrid">${F.tix.filter(t => t.res === 'live' || t.res === 'open').slice(0, 1).map(card).join('')}</div></section>`;
-  return `<section class="vsec" id="founder"><div class="vh">${vipBadge()}${R.cashed + R.lost ? `<span class="f-rec">Last 30 days: <b>${R.cashed} cashed</b>, ${R.lost} lost</span>` : ''}</div>
+  return `<section class="vsec" id="founder"><div class="vh">${vipBadge()}${lsHits(R) ? `<span class="f-rec">🎯 <b>${lsHits(R)}</b> LongShot${lsHits(R) === 1 ? '' : 's'} cashed</span>` : ''}</div>
     <div class="fgrid">${F.tix.map(card).join('')}</div></section>`;
 }
 /* ── Desk Dollars (v3.0.22). D$1,000 on sign-up, play money only. Open a game on the Slate → tap a line → it lands on your
@@ -679,9 +683,9 @@ function viewLongshots() {
   const el = $('#v-longshots'), F = S.feed;
   const body = F ? founderHtml(true) : '', R = (F && F.beta !== false && F.founder && F.founder.rec) || {};
   /* v82 audit · the empty page said only "No LongShots up right now": yesterday's tickets come down when today's card locks (Chris, Nov 15),
-     so say that, and keep the 30-day record on screen like the full page does */
+     so say that. v83: and how many have cashed, never the losses (lsHits) */
   el.innerHTML = `<h1 class="title">Founder LongShot Parlays</h1><p class="lede">Real tickets the founder placed: big odds, posted as he plays them, graded live leg by leg. Tap “Tail this” to copy one, then paste it into your book.</p>
-    ${body || (F || S.feedErr ? `<div class="paper blank"><b>No LongShot ticket up yet today</b><p>The founder’s next ticket lands here the moment it’s in. Yesterday’s tickets come down when today’s card locks; the record keeps every one.</p>${R.cashed + R.lost ? `<p class="f-rec">Last 30 days: <strong>${R.cashed} cashed</strong>, ${R.lost} lost</p>` : ''}</div>` : '<div class="shimmer"></div>')}${footHtml()}`;
+    ${body || (F || S.feedErr ? `<div class="paper blank"><b>No LongShot ticket up yet today</b><p>The founder’s next ticket lands here the moment it’s in. Yesterday’s tickets come down when today’s card locks.</p>${lsHits(R) ? `<p class="f-rec">🎯 <strong>${lsHits(R)}</strong> LongShot${lsHits(R) === 1 ? '' : 's'} cashed so far</p>` : ''}</div>` : '<div class="shimmer"></div>')}${footHtml()}`;
 }
 function tailText(t) { return [`TheDesk · ${t.name || 'Founder LongShot Parlay'} (${t.legs.length} legs${t.dec ? ', ' + decAm(t.dec) : ''})`, ...t.legs.map((l, i) => `${i + 1}. ${legText(l)}${l.price != null ? ' (' + odds(l.price) + ')' : ''}${l.game ? ' · ' + matchup(l) : ''}`), CFG.home || 'https://ironsilkweekly.com/desk/'].join('\n'); }
 async function copyText(txt, ok) { try { await navigator.clipboard.writeText(txt); toast(ok); return; } catch (e) { }

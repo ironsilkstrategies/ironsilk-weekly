@@ -24,7 +24,19 @@ setTimeout(() => { try {
   T('live: DAL ML cashed (3-1 final), Zion 20+ P+R cashed from his line (21), UTAH ML still open → 2 of 3 hit', t.res === 'live' && t.hit === 2 && t.legs[0].st === 'hit' && t.legs[2].st === 'hit' && t.legs[2].prog && t.legs[2].prog.v === 21 && t.legs[1].st === 'open', JSON.stringify(t.legs.map(l => [l.pick, l.st, l.detail, l.prog])));
   T('the odds come from the ticket ($1 to win $57.95 → +5,795), never the stake or the ticket number', Math.abs(t.dec - 58.95) < 0.01 && !/1015000001|\$1\.00|57\.95|stake|toWin/.test(s), s.slice(0, 200));
   T('a ticket switched off, or carrying a -1000 moneyline, stays off the public site', !/BOS ML|MIN ML/.test(s));
-  T('the 30-day record counts every settled ticket, even ones older than the cards shown (Nov 10 cashed)', F.rec.cashed === 1 && F.rec.lost === 0 && !F.tix.some(x => x.date === '2026-11-10'), JSON.stringify(F.rec));
+  /* v3.5.36 · Chris, Nov 27: "I'd rather it not show the record … just how many times it's hit" — hits only, never the losses */
+  T('the hit count counts every cashed ticket, even ones older than the cards shown (Nov 10 cashed), and no record goes out', F.rec.hits === 1 && F.rec.lost === undefined && F.rec.cashed === undefined && !F.tix.some(x => x.date === '2026-11-10'), JSON.stringify(F.rec));
+  /* the frozen ledger: a cashed ticket long gone from LS.locked still counts; the machine's own, a hidden one and a -1000 moneyline don't */
+  w.eval(`set(SETTLED_KEY,{
+    old1:{id:'old1',d:'2026-11-03',src:'mine',won:true,w:2,l:0,p:0,legs:[{pk:'TOR ML',pr:150,h:'W'},{pk:'Over 6.5',pr:-110,h:'W'}]},
+    old2:{id:'old2',d:'2026-11-04',src:'mine',won:false,w:1,l:1,p:0,legs:[{pk:'BOS ML',pr:120,h:'W'},{pk:'NYR ML',pr:130,h:'L'}]},
+    old3:{id:'old3',d:'2026-11-05',src:'system',won:true,w:1,l:0,p:0,legs:[{pk:'DAL ML',pr:-130,h:'W'}]},
+    old4:{id:'old4',d:'2026-11-06',src:'mine',won:true,w:1,l:0,p:0,legs:[{pk:'MIN ML',pr:-1200,h:'W'}]},
+    ext1015000003:{id:'ext1015000003',d:'2026-11-14',src:'mine',won:true,w:1,l:0,p:0,legs:[{pk:'BOS ML',pr:120,h:'W'}]},
+    ext1015000004:{id:'ext1015000004',d:'2026-11-10',src:'mine',won:true,w:1,l:0,p:0,legs:[{pk:'TOR ML',pr:110,h:'W'}]}});`);
+  const F2 = w.eval('pubFounder0(get(LS.locked,[]))');
+  T('…from the frozen ledger: a cashed LongShot purged from the device still counts (2: Nov 3 and Nov 10, once each); the machine\'s own win, a switched-off ticket and a -1000 moneyline don\'t', F2.rec.hits === 2, JSON.stringify(F2.rec));
+  w.eval(`set(SETTLED_KEY,{});`);
   /* v3.0.29 · archive at the freeze: a ticket from the day before stays up until today's card is frozen, then comes off (record keeps it) */
   w.eval(`const L0=get(LS.locked,[]);L0.push({id:'extY',date:dayShift(today(),-1),name:'Ticket #9',source:'mine',imported:true,stake:'$1',toWin:'$9',legs:[{id:'y1',sport:'nhl',game:'TOR@MTL',pick:'TOR ML',price:110,gameDate:dayShift(today(),-1),book:'external'}]});set(LS.locked,L0);set(FREEZE_KEY,null);`);
   const before = w.eval(`pubFounder0(get(LS.locked,[])).tix.map(t=>t.date)`), td = w.eval('today()');
