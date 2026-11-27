@@ -23,7 +23,8 @@ const SLATE = { v: 1, ts: AT - 10 * 60e3, tz: 'America/Chicago', ranks: {}, days
   { k: 'ncaab|AAA@BBB', sp: 'ncaab', t: AT + 3 * 36e5, a: { ab: 'AAA', name: 'Aces', nick: 'Aces' }, h: { ab: 'BBB', name: 'Bees', nick: 'Bees' }, ln: { fav: 'BBB', line: 3.5, tot: 141.5, spA: -110, spH: -110, ov: -110, un: -110 } },
   { k: 'nba|CCC@DDD', sp: 'nba', t: AT + 5 * 36e5, a: { ab: 'CCC', name: 'Cats', nick: 'Cats' }, h: { ab: 'DDD', name: 'Dogs', nick: 'Dogs' }, ln: { fav: 'DDD', line: 5.5, tot: 224.5, mlA: 180, mlH: -220, spA: -110, spH: -110, ov: -110, un: -110 } }] }] };
 const ME = { name: 'Tester', since: AT - 40 * 864e5, xp: 300, rank: { name: 'Runner', next: 500, nextName: 'Hustler', pct: 0.3 }, trophies: {}, xplog: [], wallet: { bal: 975, bought: 0, prize: 0, w: 0, l: 0, p: 0 },
-  tickets: [], bets: [], runs: [], leagues: [], drafts: [], inbox: { msgs: [], unread: 0 }, pub: false };
+  tickets: [], bets: [], runs: [], leagues: [{ lid: 'lg1', name: 'Thanksgiving Week Classic', status: 'live', bal: 1012, start: 1000, open: 0, starts: AT - 3 * 864e5, ends: AT + 4 * 864e5, sports: ['nba', 'ncaab'] }],
+  drafts: [], inbox: { msgs: [], unread: 0 }, pub: false };
 const counts = { site: 0, raw: 0 };
 const route = r => { const u = new URL(r.request().url());
   if (/picks\.json$/.test(u.pathname)) { counts[u.hostname === 'raw.githubusercontent.com' ? 'raw' : 'site']++; return r.fulfill({ contentType: 'application/json', body: JSON.stringify(FEED) }); }
@@ -105,6 +106,10 @@ async function page(b, dev, o = {}) { const ctx = await b.newContext({ ...dev, s
     await p.evaluate(() => { location.hash = '#me'; }); await p.waitForTimeout(1500);
     const pr = await p.evaluate(() => { const c = document.querySelector('.pubrec'); if (!c) return null; const L = [...c.querySelectorAll('.chk')].map(x => Math.round(x.getBoundingClientRect().top)); return { pad: parseFloat(getComputedStyle(c).paddingLeft), tops: L }; });
     T('"Your public record" has room inside its card, one checkbox to a line', pr && pr.pad >= 12 && pr.tops.length === 2 && pr.tops[1] > pr.tops[0] + 20, JSON.stringify(pr));
+    await p.evaluate(() => { location.hash = '#slate'; }); await p.waitForTimeout(1500);
+    await p.click('.ddb'); await p.waitForTimeout(600);
+    const sl = await p.evaluate(() => { const x = document.querySelector('[data-act="ddclear"]'), pl = document.querySelector('[data-act="ddplace"]'), f = document.querySelector('#ddFrom'); return { sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, x: x && Math.round(x.getBoundingClientRect().right), ph: pl && Math.round(pl.getBoundingClientRect().height), opts: f ? f.options.length : 0 }; });
+    T('the D$ slip fits a phone with a league in its "From" menu (its ✕ sat 49px off the side), "Place it" on one line', sl.opts >= 2 && sl.sw === sl.cw && sl.x <= sl.cw && sl.ph <= 44, JSON.stringify(sl));
     T('no script errors (signed in)', errs.length === 0, errs.join(' | '));
     await ctx.close();
 

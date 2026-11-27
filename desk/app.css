@@ -1506,3 +1506,8 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 @media (max-width:359px){.brand b{display:none}.top{gap:6px;padding-left:12px;padding-right:12px}}
 /* v82 audit · at 320px "LongShots" ran into "Compete" in the bottom bar: it may break after Long there */
 @media (max-width:359px){.tabs button{line-height:1.05;text-align:center}}
+/* v82 audit · the D$ slip ran 49px off a phone: its "From" menu kept the width of its longest option ("🏆 Thanksgiving Week Classic · D$1,012")
+   and pushed "Place it" and ✕ off the side. The text column shrinks now, the menu fits it, the buttons keep one line. */
+.pslipbar>div{flex:1 1 auto;min-width:0}.ddslip select{max-width:100%;min-width:0;text-overflow:ellipsis}
+.pslipbar .btn{flex:none;white-space:nowrap}.ddslip .btn.sm{padding:0 12px}
+.ddslip [data-act="ddclear"]{text-decoration:none;font-size:20px;min-width:40px}
