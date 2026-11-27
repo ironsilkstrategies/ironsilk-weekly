@@ -1511,3 +1511,15 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .pslipbar>div{flex:1 1 auto;min-width:0}.ddslip select{max-width:100%;min-width:0;text-overflow:ellipsis}
 .pslipbar .btn{flex:none;white-space:nowrap}.ddslip .btn.sm{padding:0 12px}
 .ddslip [data-act="ddclear"]{text-decoration:none;font-size:20px;min-width:40px}
+/* v83 · Chris, Nov 27: "the app glitches from time to time where certain buttons will disappear (most recent was my 'my tickets' button)
+   but also sometimes there's only 4 tabs at the bottom". Anything on a page that ran past the right edge (a long menu, a form, a card a
+   few pixels too wide on a small phone) widened the whole page on a phone: the bottom bar stretched off the side (half the tabs gone, or
+   all of them) and the top bar's buttons slid away. The page and the top bar clip sideways now, so nothing can widen it; the name in the
+   top bar gives way before a button does; the run cards fit a 320px phone. */
+@supports (overflow:clip){#main,.top{overflow-x:clip}}
+@media (max-width:919px){.top .brand{min-width:0;flex:0 1 auto}.top .brand b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+/* on a desktop the header's row is the same ~1100px at any screen size: the install chip keeps to its icon (its words pushed "Join" out
+   of the menu and squeezed the name at 1440px and up) */
+@media (min-width:920px){.top .brand{flex:none}#installChip .ic-t{display:none}#installChip{padding:8px 10px}}
+.rgrid{grid-template-columns:minmax(0,1fr)}.runcard{min-width:0}
+@media (min-width:760px){.rgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}

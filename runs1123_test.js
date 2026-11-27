@@ -109,7 +109,12 @@ const RUN = { rid: 'r1', cid: CJ, name: 'Tester', ts: AT - 3 * 36e5, ends: AT + 
     T('…the stake reads in ink on its white field (it was white on white)', await p.evaluate(() => { const c = getComputedStyle(document.querySelector('#qpStake')); const v = (c.webkitTextFillColor || c.color).match(/\d+/g).map(Number); return v[0] + v[1] + v[2] < 200; }));
     T('…each leg says why (★ Unanimous · 6 of 6 characters) and the ticket shows price, stake, pays, and where the run lands', /★ Unanimous · 6 of 6 characters/.test(q) && /Pays D\$[\d.]+/.test(q) && /Run after a cash D\$[\d.]+/.test(q) && (await p.inputValue('#qpStake')) === '2.5', q.slice(q.indexOf('2-LEG'), q.indexOf('2-LEG') + 400));
     await p.click('[data-act="qpshuf"]'); await p.waitForTimeout(300); const L2 = await legsOf();
-    T('🔀 Shuffle keeps the best leg and swaps the other for the next one in line', L2.length === 2 && L2[0] === L[0] && L2[1] !== L[1], JSON.stringify(L2));
+    /* v83 · Chris, Nov 27: Shuffle swaps every leg that isn't locked (it only ever turned the last seat); 🔒 lock one to keep it */
+    T('🔀 Shuffle draws a new ticket from the legs that aren\'t locked: still 2 legs, a different pair', L2.length === 2 && JSON.stringify(L2.slice().sort()) !== JSON.stringify(L.slice().sort()), JSON.stringify([L, L2]));
+    await p.click('.qp-legs li:first-child [data-act="qphold"]'); await p.waitForTimeout(200); const Lk = await legsOf();
+    await p.click('[data-act="qpshuf"]'); await p.waitForTimeout(300); const L3 = await legsOf();
+    T('…🔒 lock a leg and shuffle: it stays, the other changes', L3.length === 2 && L3[0] === Lk[0] && L3[1] !== Lk[1], JSON.stringify([Lk, L3]));
+    await p.click('.qp-legs li:first-child [data-act="qphold"]'); await p.waitForTimeout(200);
     await p.click('[data-act="qpmore"]'); await p.waitForTimeout(200); q = await sheet();
     T('More ways: who\'s hot, tail a character, my favorites, best in a sport, go against the room, pick my own', ['Who’s hot', 'Tail a character', 'My favorites', 'Best in a sport', 'Go against the room', 'Pick my own'].every(x => q.includes(x)), q.slice(0, 600));
     await p.click('[data-act="qpsrc"][data-v="hot"]'); await p.waitForTimeout(300); q = await sheet(); L = await legsOf();

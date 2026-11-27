@@ -1955,7 +1955,9 @@ function runCard(r) { const c = chal(r.cid); if (!c) return ''; const live = r.s
     ${OPEN.length || done.length ? `<div class="rc-tix"><h4>${OPEN.length ? `${anyLive ? '<i class="rc-dot"></i>' : ''}On the board · ${OPEN.length} open` : 'Latest tickets'}${S.liveAt && anyLive ? `<small>scores ${esc(new Date(S.liveAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}</small>` : ''}</h4>${[...OPEN, ...done].map(b => rtkHtml(b, r)).join('')}</div>` : live ? `<p class="rc-empty">No tickets from this run yet. ⚡ Quick Pick builds today’s order from the desk’s picks, or build your own on the Slate. Every ticket from the run shows up here, live.</p>` : ''}</article>`; }
 /* ── ⚡ Quick Pick: today's order, filled from the desk. Three ways to pick: what the characters agree on, who's hot right now, or the
    best of the board in one sport. Every leg fits the run's rule and sport, one per game, priced off the Slate like any D$ ticket. ── */
-const QP = { rid: '', wal: false, lg: '', dr: '', src: 'agree', sp: '', who: '', off: 0, busy: false, own: [], ownRid: '', ownAll: false, k: 0, mk: ['ml', 'spread', 'total'], aim: 0, hold: [], more: false, tune: false };
+const QP = { rid: '', wal: false, lg: '', dr: '', src: 'agree', sp: '', who: '', off: 0, busy: false, own: [], ownRid: '', ownAll: false, k: 0, mk: ['ml', 'spread', 'total'], aim: 0, hold: [], base: [], more: false, tune: false };
+/* v83 · Chris, Nov 27: "I want it to have an option for up to 10 legs" (it stopped at 8) */
+const QP_KMAX = 10;
 /* ── v81 · Nov 26, 7:30 PM, Chris: "maybe even a quick pick ticket builder… with all the options in the machine plus whatever you think is
    missing or should be removed!" — and "dumbed down so that a novice could jump right on". ⚡ Quick Pick builds a ticket for a challenge run,
    your wallet, a league or a draft room. Three big buttons up top (Safest · The room agrees · Bigger payout) build one in a tap; "More ways"
@@ -1966,15 +1968,15 @@ const QP = { rid: '', wal: false, lg: '', dr: '', src: 'agree', sp: '', who: '',
 function qpCtx() { const M = AC.me || {};
   if (QP.rid) { const r = liveRuns().find(x => x.rid === QP.rid), c = r && chal(r.cid); if (!r || !c) return null; const O = orderFor(r.route, r.bal, r.start);
     const k0 = c.rule === 'singles' ? 1 : c.rule === 'three' ? Math.max(3, O.k) : c.rule === 'two' ? 2 : Math.max(c.rule === 'world' ? 2 : 1, O.k);
-    return { kind: 'run', key: 'run:' + r.rid, r, c, name: c.name, color: c.color, bal: r.bal, rule: c.rule, sport: c.sport, k0, kMin: c.rule === 'three' ? 3 : c.rule === 'world' ? 2 : 1, kMax: c.rule === 'singles' ? 1 : c.rule === 'two' ? 2 : 8, stake: Math.min(r.bal, O.stake), order: O, body: { run: r.rid }, from: 'this run' }; }
+    return { kind: 'run', key: 'run:' + r.rid, r, c, name: c.name, color: c.color, bal: r.bal, rule: c.rule, sport: c.sport, k0, kMin: c.rule === 'three' ? 3 : c.rule === 'world' ? 2 : 1, kMax: c.rule === 'singles' ? 1 : c.rule === 'two' ? 2 : QP_KMAX, stake: Math.min(r.bal, O.stake), order: O, body: { run: r.rid }, from: 'this run' }; }
   if (QP.lg) { const e = (M.leagues || []).find(x => x.lid === QP.lg); if (!e) return null; const sps = Array.isArray(e.sports) && e.sports.length ? e.sports : null;
-    return { kind: 'lg', key: 'lg:' + e.lid, name: e.name, color: '#E9C25A', bal: e.bal, rule: 'any', sport: sps && sps.length === 1 ? sps[0] : 'any', sports: sps, k0: 2, kMin: 1, kMax: 8, stake: Math.max(1, Math.min(e.bal, Math.round(e.bal * 0.05))), body: { league: e.lid }, from: e.name }; }
+    return { kind: 'lg', key: 'lg:' + e.lid, name: e.name, color: '#E9C25A', bal: e.bal, rule: 'any', sport: sps && sps.length === 1 ? sps[0] : 'any', sports: sps, k0: 2, kMin: 1, kMax: QP_KMAX, stake: Math.max(1, Math.min(e.bal, Math.round(e.bal * 0.05))), body: { league: e.lid }, from: e.name }; }
   if (QP.dr) { const X = drQpCtx(QP.dr); if (X) return X; return null; }
-  if (QP.wal) { const W = M.wallet; if (!W) return null; return { kind: 'wal', key: 'wal', name: 'Your wallet', color: '#E9C25A', bal: W.bal, rule: 'any', sport: 'any', k0: 2, kMin: 1, kMax: 8, stake: Math.max(1, Math.min(W.bal, +(store.get('qpstake') || 10))), body: {}, from: 'your wallet' }; }
+  if (QP.wal) { const W = M.wallet; if (!W) return null; return { kind: 'wal', key: 'wal', name: 'Your wallet', color: '#E9C25A', bal: W.bal, rule: 'any', sport: 'any', k0: 2, kMin: 1, kMax: QP_KMAX, stake: Math.max(1, Math.min(W.bal, +(store.get('qpstake') || 10))), body: {}, from: 'your wallet' }; }
   return null; }
 const qpOpen = () => !!(QP.rid || QP.wal || QP.lg || QP.dr);
 const qpDoor = (sub) => `<button type="button" class="qpdoor" data-act="qpopen" data-ctx="wal"><i aria-hidden="true">⚡</i><span><b>Quick Pick</b><small>${sub || 'Let the desk build you a D$ ticket in one tap: safest, what the room agrees on, or a bigger payout.'}</small></span><span class="qd-go">Build it →</span></button>`;
-function qpReset(o) { const same = (o.rid || '') === QP.rid && !!o.wal === QP.wal && (o.lg || '') === QP.lg && (o.dr || '') === QP.dr; QP.rid = o.rid || ''; QP.wal = !!o.wal; QP.lg = o.lg || ''; QP.dr = o.dr || ''; QP.off = 0; QP.busy = false; if (!same) { QP.hold = []; QP.k = 0; QP.aim = 0; } }
+function qpReset(o) { const same = (o.rid || '') === QP.rid && !!o.wal === QP.wal && (o.lg || '') === QP.lg && (o.dr || '') === QP.dr; QP.rid = o.rid || ''; QP.wal = !!o.wal; QP.lg = o.lg || ''; QP.dr = o.dr || ''; QP.off = 0; QP.busy = false; if (!same) { QP.hold = []; QP.k = 0; QP.aim = 0; QP.base = []; } }
 const qpLegId = l => l.k + '|' + l.mk + '|' + l.side;
 /* ── v64 · Nov 23, 11:26 PM, Chris: "even though you can quick pick you need to be able to manually pick your own ticket". ✍️ Pick my own:
    every line on the Slate that fits the run (its rule and sport, games that haven't started), the desk's own picks marked, tap to
@@ -2026,12 +2028,25 @@ function qpCands(c, src, sp, who, opt = {}) { const B = boardOf(), now = Date.no
       else score = (QP_TIER[pk.tier] || 0) + (pk.unan ? 1.5 : 0) + (pk.p || 0);
       add(g, { ...l, score, why: [pk.unan ? '★ Unanimous' : TIER[pk.tier] ? TIER[pk.tier][0] : '', C.length ? `${side} of ${C.length} characters` : '', src === 'safe' ? pct(ip) + '% by the price' : src === 'value' ? `pays ${odds(l.price)}` : pk.p != null ? pct(pk.p) + '%' : ''].filter(Boolean).join(' · '), b }); } }
   return [...out.values()].sort((x, y) => y.score - x.score || x.t - y.t); }
-/* the ticket: held legs stay put, the best of the rest fill it (🔀 shuffle rotates the last free seats), or — aiming for a payout — legs go
-   on best-first until the ticket pays about what was asked */
-function qpTicket(c, k, C, off, aim) { if (!C.length) return []; const kMin = c.kMin || 1, kMax = c.kMax || 8;
-  const H = C.filter(l => QP.hold.includes(qpLegId(l))).slice(0, kMax), used = new Set(H.map(l => l.k)), rest = C.filter(l => !used.has(l.k)); let legs = H.slice();
+/* the ticket: held legs stay put, the best of the rest fill it (🔀 shuffle draws new ones for every seat that isn't locked), or — aiming
+   for a payout — legs go on best-first until the ticket pays about what was asked.
+   v83 · Chris, Nov 27: "The shuffle option disappears when I'm locking picks". Shuffle only ever turned the last seat, and its button
+   counted the locked legs twice, so locking two on an 8-leg ticket hid it. Now every unlocked seat can change, the button stays while
+   there's anything to swap in, and the legs on screen lead the order (QP.base), so locking or unlocking one, or adding a leg, never moves
+   the others. */
+function qpFree(rest, need, off) { if (!off || rest.length <= need) return rest.slice(0, need);
+  if (need === 1) return [rest[off % rest.length]];
+  /* a window of the best that reaches one pick deeper with each press; a seeded draw from it, never the same set twice in a row */
+  const draw = (o, salt) => { const W = rest.slice(0, Math.min(rest.length, need + 1 + o)); let x = (Math.imul(o + 1, 2654435761) ^ Math.imul(need + salt, 40503)) >>> 0; const rnd = () => (x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 4294967296;
+    for (let i = W.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [W[i], W[j]] = [W[j], W[i]]; } const P = new Set(W.slice(0, need)); return rest.filter(l => P.has(l)); };
+  const prev = new Set(qpFree(rest, need, off - 1)); let got = draw(off, 0);
+  for (let salt = 1; salt < 8 && got.every(l => prev.has(l)); salt++) got = draw(off, salt);
+  return got; }
+function qpTicket(c, k, C, off, aim) { if (!C.length) return []; const kMin = c.kMin || 1, kMax = c.kMax || QP_KMAX;
+  const H = C.filter(l => QP.hold.includes(qpLegId(l))).slice(0, kMax), used = new Set(H.map(l => l.k)); let rest = C.filter(l => !used.has(l.k)), legs = H.slice();
+  if (QP.base.length) { const at = new Map(QP.base.map((id, i) => [id, i])), o = new Map(rest.map((l, i) => [l, i])), rk = l => at.has(qpLegId(l)) ? at.get(qpLegId(l)) : 1e4 + o.get(l); rest = rest.slice().sort((a, b) => rk(a) - rk(b)); }
   if (aim > 1) { const n = rest.length, R = n ? [...rest.slice(off % n), ...rest.slice(0, off % n)] : []; for (const l of R) { if (legs.length >= kMax) break; if (legs.length >= kMin && ddTicketDec(legs, 'parlay') >= aim) break; legs.push(l); } }
-  else { const need = Math.max(0, k - legs.length); if (need === 1 && rest.length) legs.push(rest[off % rest.length]); else if (need > 1) { const keep = rest.slice(0, need - 1), tail = rest.slice(need - 1); legs = [...legs, ...keep, ...(tail.length ? [tail[off % tail.length]] : [])]; } }
+  else { const need = Math.max(0, k - legs.length); if (need && rest.length) legs = [...legs, ...qpFree(rest, need, off)]; }
   if (c.rule === 'world' && legs.length >= 2 && new Set(legs.map(l => l.sp)).size < 2) { const other = C.find(l => l.sp !== legs[0].sp && !legs.includes(l)); if (other) legs = [...legs.slice(0, Math.max(1, legs.length - 1)), other]; }
   /* a wallet, league or draft ticket takes what the board has (one game fits: a single); a challenge run's order is the order */
   return legs.length >= (c.kind && c.kind !== 'run' ? kMin : Math.max(kMin, aim > 1 ? kMin : k)) ? legs : []; }
@@ -2095,7 +2110,8 @@ function qpSheet() { const Q = qpState(); if (!Q) return ''; const { X, c, k, ho
       <ol class="qp-legs">${legs.map((l, i) => { const held = QP.hold.includes(qpLegId(l)); return `<li class="${held ? 'held' : ''}"><span class="qp-n">${i + 1}</span><span class="qp-b"><b>${esc(readPick({ sp: l.sp, game: l.game, pick: l.pick }).big || l.pick)} <small>${esc(odds(l.price))}</small></b><small>${esc([LEAGUE[l.sp], matchup({ sp: l.sp, game: l.game }), whenLabel(new Date(l.t).toISOString())].filter(Boolean).join(' · '))}</small>${l.why ? `<em>${esc(l.why)}</em>` : ''}</span>${Q.own ? `<button type="button" class="qp-x" data-act="qpownx" data-i="${i}" aria-label="Take ${esc(l.pick)} off">✕</button>` : `<button type="button" class="qp-h${held ? ' on' : ''}" data-act="qphold" data-id="${esc(qpLegId(l))}" aria-pressed="${held}" aria-label="${held ? 'Unlock' : 'Keep'} ${esc(l.pick)}">${held ? '🔒' : '🔓'}</button>`}</li>`; }).join('')}</ol>
       ${Q.own && Q.bad ? `<p class="qp-bad">${esc(Q.bad)}</p>` : ''}
       <div class="qp-sum"><label>Stake <input id="qpStake" inputmode="decimal" value="${st}" aria-label="Stake in Desk Dollars"></label><span>Pays <b id="qpPays">${dd$(st * dec)}</b></span><span>${X.kind === 'run' ? 'Run after a cash' : 'Balance after a cash'} <b id="qpAfter">${dd$(X.bal - st + st * dec)}</b></span></div></div>
-      <div class="qp-go"><button type="button" class="btn foil" data-act="qpplace"${QP.busy || Q.bad ? ' disabled' : ''}>${QP.busy ? 'Placing…' : `Place it from ${esc(X.from)}`}</button>${!Q.own && C.length > legs.filter(l => QP.hold.includes(qpLegId(l))).length + (QP.aim ? 0 : Math.max(0, k - 1)) ? '<button type="button" class="btn line sm" data-act="qpshuf">🔀 Shuffle</button>' : ''}${Q.own ? '<button type="button" class="btn ghost sm" data-act="qpownclear">Clear</button>' : ''}${X.kind !== 'dr' ? '<button type="button" class="btn ghost sm" data-act="qpslip">Edit on the Slate</button>' : ''}</div>`
+      <div class="qp-go"><button type="button" class="btn foil" data-act="qpplace"${QP.busy || Q.bad ? ' disabled' : ''}>${QP.busy ? 'Placing…' : `Place it from ${esc(X.from)}`}</button>${Q.own ? '' : (() => { const held = legs.filter(l => QP.hold.includes(qpLegId(l))).length, free = legs.length - held, more = C.length - held, can = QP.aim ? more > 1 : free > 0 && more > free;
+        return `<button type="button" class="btn line sm" data-act="qpshuf"${can ? '' : ` disabled title="${free ? 'Every pick that fits is already on it' : 'Every leg is locked: unlock one to shuffle'}"`}>🔀 Shuffle</button>`; })()}${Q.own ? '<button type="button" class="btn ghost sm" data-act="qpownclear">Clear</button>' : ''}${X.kind !== 'dr' ? '<button type="button" class="btn ghost sm" data-act="qpslip">Edit on the Slate</button>' : ''}</div>`
       : Q.own ? `<div class="qp-empty sm">${esc(Q.bad)}</div>` : `<div class="qp-empty">${empty}</div>`}
     ${tune}${Q.dr ? drQpBody(X, legs) : Q.own ? qpOwnHtml(c, legs) : ''}
     <p class="note">Desk Dollars, play money. Lines are the Slate’s; the server prices the ticket again the moment you place it.${X.kind === 'run' ? ' The ticket comes off this run’s bankroll and shows on the run card, live.' : X.kind === 'wal' ? ' It shows in My tickets, live.' : ''}</p></section>`; }
@@ -2490,11 +2506,11 @@ document.addEventListener('click', async e => {
     const r = QP.rid && liveRuns().find(x => x.rid === QP.rid), c = r && chal(r.cid); if (c && c.sport !== 'any') QP.sp = c.sport; qpPaint(); if (!S.slate) { loadSlate().then(qpPaint, qpPaint); } }
   else if (act === 'qptail') { qpReset({ rid: a.dataset.rid }); QP.src = 'char'; QP.who = a.dataset.v; QP.more = true; SX.i = -1; qpPaint(); if (!S.slate) loadSlate().then(qpPaint, qpPaint); }
   else if (act === 'qpclose') { qpReset({}); qpPaint(); }
-  else if (act === 'qpsrc') { QP.src = a.dataset.v; QP.off = 0; QP.hold = []; if (QP.src === 'char' || QP.src === 'hot') QP.who = QP.src === 'char' ? QP.who : ''; qpPaint(); }
+  else if (act === 'qpsrc') { QP.src = a.dataset.v; QP.off = 0; QP.hold = []; QP.base = []; if (QP.src === 'char' || QP.src === 'hot') QP.who = QP.src === 'char' ? QP.who : ''; qpPaint(); }
   else if (act === 'qpmore') { QP.more = !(QP.more || !QP_MAIN.includes(QP.src)); if (!QP.more && !QP_MAIN.includes(QP.src)) QP.src = 'agree'; qpPaint(); }
-  else if (act === 'qpk') { const Q = qpState(); if (!Q) return; QP.k = Math.max(Q.X.kMin, Math.min(Q.X.kMax, Q.k + (+a.dataset.d || 0))); QP.off = 0; QP.tune = true; qpPaint(); }
-  else if (act === 'qpmk') { const m = a.dataset.v, on = QP.mk.includes(m); if (on && QP.mk.length === 1) { toast('Keep at least one bet type'); return; } QP.mk = on ? QP.mk.filter(x => x !== m) : [...QP.mk, m]; QP.off = 0; QP.tune = true; qpPaint(); }
-  else if (act === 'qpaim') { QP.aim = +a.dataset.v || 0; QP.off = 0; QP.tune = true; qpPaint(); }
+  else if (act === 'qpk') { const Q = qpState(); if (!Q) return; QP.base = Q.legs.map(qpLegId); QP.k = Math.max(Q.X.kMin, Math.min(Q.X.kMax, Q.k + (+a.dataset.d || 0))); QP.off = 0; QP.tune = true; qpPaint(); }
+  else if (act === 'qpmk') { const m = a.dataset.v, on = QP.mk.includes(m); if (on && QP.mk.length === 1) { toast('Keep at least one bet type'); return; } QP.mk = on ? QP.mk.filter(x => x !== m) : [...QP.mk, m]; QP.off = 0; QP.base = []; QP.tune = true; qpPaint(); }
+  else if (act === 'qpaim') { QP.aim = +a.dataset.v || 0; QP.off = 0; QP.base = []; QP.tune = true; qpPaint(); }
   else if (act === 'drqpick') { const Q = qpState(); if (!Q || !Q.dr) return; const o = { k: a.dataset.k, mk: a.dataset.mk, side: a.dataset.side, v: a.dataset.v }, same = x => x.k === o.k && x.mk === o.mk && x.side === o.side, i0 = QP.own.findIndex(x => same(x) && x.v === o.v);
     if (i0 >= 0) QP.own.splice(i0, 1); else { if (QP.own.some(same)) { toast('That pick is already on your ticket'); return; } if (QP.own.filter(x => x.v === o.v).length >= 2) { toast('Up to 2 picks from each character'); return; } if (Q.X.two && QP.own.length >= 2) { toast('This room plays exactly 2 picks: take one off first'); return; }
       const clash = QP.own.findIndex(x => x.k === o.k); if (clash >= 0) { QP.own.splice(clash, 1); toast('One pick a game: swapped it'); } QP.own.push(o); }
@@ -2514,9 +2530,9 @@ document.addEventListener('click', async e => {
   else if (act === 'drauto') { const P = acctPass(); if (!P) return; try { const j = await acctApi('/acct/dr/auto', { token: P.token, id: a.dataset.id, on: !!a.checked }); if (AC.me) AC.me.drafts = drMine().map(x => (x.did === j.room.did ? j.room : x)); viewLeagues(); } catch (err) { toast(err.message); } }
   else if (act === 'drshare') { const R = drMine().find(x => x.did === a.dataset.id); if (!R) return; const url = CFG.home + '#dr=' + encodeURIComponent(R.did), text = [`Draft against me on TheDesk: ${R.name}.`, `${R.fmt === 'auto' ? 'Team draft' : 'Head-to-head'} · ${R.size === 2 ? 'one on one' : R.size + ' players'} · ${R.days} days${R.fee ? ` · ${dd$(R.fee)} entry, winner takes the pot` : ' · free'}.`, R.code ? `Join code: ${R.code}` : '', 'Desk Dollars are play money, never cash. 21+.'].filter(Boolean).join('\n');
     try { if (navigator.share) { await navigator.share({ title: R.name + ' · TheDesk', text, url }); return; } } catch (err) { if (err && err.name === 'AbortError') return; } try { await navigator.clipboard.writeText(text + '\n' + url); toast('Invite copied: paste it anywhere'); } catch (err) { toast('Couldn’t copy the invite'); } }
-  else if (act === 'qphold') { const id = a.dataset.id; QP.hold = QP.hold.includes(id) ? QP.hold.filter(x => x !== id) : [...QP.hold, id]; qpPaint(); }
-  else if (act === 'qpwho') { QP.who = a.dataset.v; QP.off = 0; qpPaint(); }
-  else if (act === 'qpsp') { QP.sp = a.dataset.v; QP.off = 0; QP.hold = []; qpPaint(); }
+  else if (act === 'qphold') { const id = a.dataset.id, Q = qpState(); QP.base = Q ? Q.legs.map(qpLegId) : []; QP.off = 0; QP.hold = QP.hold.includes(id) ? QP.hold.filter(x => x !== id) : [...QP.hold, id]; qpPaint(); }
+  else if (act === 'qpwho') { QP.who = a.dataset.v; QP.off = 0; QP.base = []; qpPaint(); }
+  else if (act === 'qpsp') { QP.sp = a.dataset.v; QP.off = 0; QP.hold = []; QP.base = []; qpPaint(); }
   else if (act === 'qpshuf') { QP.off++; qpPaint(); }
   else if (act === 'qpownpick') { const g = slateGameOf(a.dataset.k), Q = qpState(); if (!g || !Q) return; const mk = a.dataset.mk, sd = a.dataset.side, hockey = g.sp === 'nhl', i0 = QP.own.findIndex(l => l.k === g.k && l.mk === mk && l.side === sd);
     if (i0 >= 0) QP.own.splice(i0, 1); else { const clash = l => l.k === g.k && (l.mk === mk || (mk !== 'total' && l.mk !== 'total') || (hockey && (mk === 'spread' || l.mk === 'spread')));
