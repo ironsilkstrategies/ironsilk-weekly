@@ -289,7 +289,7 @@ function readHtml(W, calls) {
   if (!R) return `<div class="slip-stub"><div class="read"><b>Why the desk likes it</b>${nums}${ch}</div></div>`;
   const first = paras[0] || '', rest = paras.slice(1);
   return `<div class="slip-stub"><div class="read"><b>${esc(R.who || 'The desk')}</b>${R.take ? `<p class="take">“${esc(R.take)}”</p>` : ''}
-    <div class="body">${first ? `<p>${esc(first)}</p>` : ''}${rest.length || nums ? `<details><summary>Read the rest</summary>${rest.map(t => `<p>${esc(t)}</p>`).join('')}${nums}</details>` : ''}</div>${ch}</div></div>`;
+    <div class="body">${first ? `<p>${esc(first)}</p>` : ''}${rest.length || nums ? `<details class="rd-more"><summary>Read the whole case</summary>${rest.map(t => `<p>${esc(t)}</p>`).join('')}${nums}</details>` : ''}</div>${ch}</div></div>`;
 }
 function slipHtml(x0, i, key, opt = {}) {
   const no = opt.no || `No. ${i + 1}`;
@@ -446,7 +446,7 @@ function founderCard(t0) { const t = effTicket(t0); const n = t.legs.length, don
   const chip = t.res === 'cashed' ? '<span class="fchip win">Cashed</span>' : t.res === 'lost' ? '<span class="fchip loss">Lost</span>' : t.res === 'live' ? `<span class="fchip live">● Live · ${t.hit} of ${n} hit</span>` : '<span class="fchip">Pending</span>';
   return `<article class="slip founder nostub ${t.res}"><div class="slip-head"><span>${esc(t.name || 'LongShot')} · ${n} legs</span>${chip}</div><div class="slip-main">
     <div class="f-odds">${t.dec ? `<b>${esc(decAm(t.dec))}</b><span>$10 pays <b>$${(10 * t.dec).toLocaleString('en-US', { maximumFractionDigits: 0 })}</b></span>` : ''}<span class="f-prog">${done} of ${n} settled</span></div>
-    ${founderSum(t)}<ol class="fl-list">${t.legs.map(founderLeg).join('')}</ol>
+    ${founderSum(t)}${n > 4 ? `<details class="fl-fold" data-fold="${esc(t.id)}"${FOLD.has(String(t.id)) ? ' open' : ''}><summary>${legStrip(t.legs)}<span class="fl-more">All ${n} legs</span></summary><ol class="fl-list">${t.legs.map(founderLeg).join('')}</ol></details>` : `<ol class="fl-list">${t.legs.map(founderLeg).join('')}</ol>`}
     ${t.res === 'open' || t.res === 'live' ? `<div class="row"><button type="button" class="btn foil" data-act="tail" data-id="${esc(t.id)}">📋 Tail this</button></div>` : ''}</div></article>`; }
 function founderHtml(page) {
   const F = S.feed && S.feed.founder; if (!F || !Array.isArray(F.tix) || !F.tix.length) return '';
@@ -669,6 +669,7 @@ function slipBar() { const all = propsAll(); const L = S.slip.map(id => all.find
   return `<div class="pslipbar"><div><b>Your slip · ${L.length} leg${L.length > 1 ? 's' : ''}</b><small>The room gives it ${(p * 100).toFixed(p < 0.1 ? 1 : 0)}% · fair ${esc(odds(am))}</small></div>
     <button type="button" class="btn sm" data-act="psliptrack">Track it</button><button type="button" class="btn ghost sm" data-act="pslipcopy">📋</button><button type="button" class="btn ghost sm" data-act="pslipclear">Clear</button></div>`; }
 function slipText() { const all = propsAll(); return 'TheDesk · my prop slip\n' + S.slip.map(id => all.find(x => x.id === id)).filter(Boolean).map(x => `• ${pWho(x)} ${pLine(x)}`).join('\n') + '\n' + (CFG.home || 'https://ironsilkweekly.com/desk/'); }
+const pfPills = f => { const P = []; if (f.sp !== 'all') P.push(fsPill('pfx', 'sp', esc(LEAGUE[f.sp] || f.sp))); if (f.stat !== 'all') P.push(fsPill('pfx', 'stat', esc(f.stat))); if (+f.min) P.push(fsPill('pfx', 'min', `Desk Score ${+f.min}+`)); return P; };
 function viewProps() {
   const el = $('#v-props'), F = S.feed, all = propsAll(), f = S.pf;
   if (!F) { el.innerHTML = '<div class="shimmer"></div>'; return; }
@@ -679,9 +680,10 @@ function viewProps() {
     ${howTo('props', 'How to read a prop card', ['<b>The Desk Score</b> (0–100) sums it all up: higher is stronger.', '<b>Gold bars</b> are his last 10 games: gold means he cleared the line that night. During his game a meter shows his number live.', 'Tap <b>＋ Add to slip</b> on a few cards to build your own ticket, then track it.'])}
     ${W.length ? `<div class="whisper" aria-label="Whispers"><div class="wh-track">${[...W, ...W].map(t => `<span>${esc(t)}</span>`).join('')}</div></div>` : ''}
     ${all.length ? `<div class="lenses" role="toolbar" aria-label="Lenses">${Object.entries(PL).map(([k, t]) => { const n = all.filter(x => lensOk(x, k)).length; return k === 'live' && !n && f.lens !== 'live' ? '' : chip('lens', k, t, n); }).join('')}</div>
-    <div class="lenses sub">${chip('sp', 'all', 'All sports')}${sps.map(s => chip('sp', s, LEAGUE[s] || s)).join('')}<span class="lsep"></span>${chip('stat', 'all', 'Every stat')}${stats.map(t => chip('stat', t, t)).join('')}</div>
-    <div class="ptools"><label class="pmin">Desk Score <b>${f.min || 0}+</b><input type="range" min="0" max="90" step="5" value="${f.min || 0}" data-act="pmin" aria-label="Minimum Desk Score"></label>
-      <div class="pview">${['cards', 'sheet'].map(v => `<button type="button" class="${f.view === v ? 'on' : ''}" data-act="pf" data-k="view" data-v="${v}">${v === 'cards' ? 'Cards' : 'Sheet'}</button>`).join('')}</div></div>
+    ${fsBar('props', pfPills(f), `<div class="pview">${['cards', 'sheet'].map(v => `<button type="button" class="${f.view === v ? 'on' : ''}" data-act="pf" data-k="view" data-v="${v}">${v === 'cards' ? 'Cards' : 'Sheet'}</button>`).join('')}</div>`)}
+    ${fsSheet('props', 'Filter the props', `<h4 class="fs-k">Sport</h4><div class="lenses sub wrap">${chip('sp', 'all', 'All sports')}${sps.map(s => chip('sp', s, LEAGUE[s] || s)).join('')}</div>
+      <h4 class="fs-k">Stat</h4><div class="lenses sub wrap">${chip('stat', 'all', 'Every stat')}${stats.map(t => chip('stat', t, t)).join('')}</div>
+      <h4 class="fs-k">Desk Score floor</h4><div class="ptools"><label class="pmin">Desk Score <b>${f.min || 0}+</b><input type="range" min="0" max="90" step="5" value="${f.min || 0}" data-act="pmin" aria-label="Minimum Desk Score"></label></div>`, `Show ${L.length} prop${L.length === 1 ? '' : 's'}`)}
     ${L.length ? (f.view === 'sheet' ? propSheet(L.slice(0, S.pN)) : `<div class="pgrid">${L.slice(0, S.pN).map(propCard).join('')}</div>`) + (L.length > S.pN ? `<div class="pmore"><button type="button" class="btn line" data-act="pmore">Show ${Math.min(P_STEP, L.length - S.pN)} more <small>${S.pN} of ${L.length}</small></button></div>` : '') : `<div class="paper blank"><b>Nothing through this lens</b><p>Try another lens, or lower the Desk Score.</p></div>`}`
     : F.beta === false && !F.props ? vipGate('Today’s prop board is for members', `Members get every prop the characters like, the minute the card locks. The Best ${((F.today || {}).props || []).length || 3} props on Today open 30 minutes before their games.`, 'today')
     : `<div class="paper blank"><b>Props post when the desk publishes today’s card</b><p>Check back closer to game time.</p></div>`}
@@ -1080,6 +1082,7 @@ function filterBarHtml(B, games, F) {
     : `The characters’ own calls${F.ch !== 'all' ? ` from <b>${esc(castOf(F.ch).name)}</b>` : ''}${+F.cf ? ` at <b>${+F.cf}%+</b> sure` : ''}${F.cf === TOP_CF ? topTxt : ''}${upTxt}.${F.up === 'win' ? ' Each one’s record in that kind of bet rides with its name.' : ''} 👑 #1 in that kind of bet · 🧊 the worst.`;
   if (F.fav === 'on') note = favNote(inW, F);
   if (cm && !F.lane) note += ' Strength chips are for the desk’s colored picks.';
+  S.bfNote = note;
   return `<div class="bf">
     <div class="seg tight" role="group" aria-label="View">${chip('view', 'time', '🕒 By time')}${chip('view', 'league', 'By league')}</div>
     <div class="seg tight" role="group" aria-label="Start time">${WINS.map(([w, l]) => chip('win', w, l, cnt(g => okW(g, w)))).join('')}</div>
@@ -1205,12 +1208,13 @@ function viewSlate() {
     <div class="seg" role="group" aria-label="League">${rsps.map(sp => `<button type="button" data-act="ranksp" data-sp="${sp}" aria-pressed="${sp === S.rankSp}">${esc(LEAGUE[sp])}</button>`).join('')}</div>
     <div class="paper">${shown.map(x => `<div class="rank"><span class="n">${x.rk}</span><span class="t">${esc(x.name || x.ab)}<small>${x.w}-${x.l}${x.st ? `, ${x.st[0] === 'W' ? 'won' : 'lost'} ${esc(x.st.slice(1))} straight` : ''}</small></span><span>${pips(x.l5)}</span><span class="r">${x.rt > 0 ? '+' : x.rt < 0 ? '−' : ''}${Math.abs(x.rt).toFixed(1)}</span></div>`).join('')}
       ${RK.length > 10 ? `<button type="button" class="more-btn" data-act="rankall">${S.rankAll ? 'Show the top 10' : `Show all ${RK.length}`}</button>` : ''}</div>` : '';
+  const FBH = bOn ? filterBarHtml(B, inSp, BF) : '', BFP = bOn ? bfPills(BF) : [];
   el.innerHTML = `<h1 class="title">${esc(label(D.d) === 'Today' ? weekday(D.d) + '’s sheet' : label(D.d) === 'Tomorrow' ? 'Tomorrow’s sheet' : shortDay(D.d))}</h1>
     <p class="lede">${bOn ? 'Every game by start time, with the desk’s colored picks. Tap a game to see which characters are with it, which are against it, and who has earned a say.' : 'Every game on the board with its line, the market’s odds and where each team sits in TheDesk Power Rankings. Tap a game for the details.'}</p>
     ${bOn && games.some(g => g.t > Date.now() + 5 * 60e3 && g.ln) ? qpDoor('Not sure what to play? The desk builds a D$ ticket from tonight’s games in one tap.') : ''}
     <div class="cols"><div><div class="seg" role="group" aria-label="Day and league">${list.map((d, i) => `<button type="button" data-act="slateday" data-i="${i}" aria-pressed="${i === S.slateDay}">${esc(label(d.d))}</button>`).join('')}
       ${sps.length > 1 ? `<button type="button" data-act="slatesp" data-sp="all" aria-pressed="${S.slateSp === 'all'}">All leagues</button>${sps.map(sp => `<button type="button" data-act="slatesp" data-sp="${sp}" aria-pressed="${sp === S.slateSp}">${esc(LEAGUE[sp])}</button>`).join('')}` : ''}</div>
-    ${bOn ? filterBarHtml(B, inSp, BF) : ''}
+    ${bOn ? fsBar('slate', BFP.length > 1 ? BFP.concat('<button type="button" class="fs-pill clear" data-act="bfclear">Clear all</button>') : BFP) + (BFP.length && S.bfNote ? `<p class="fs-note">${S.bfNote}</p>` : '') + fsSheet('slate', 'Filter the sheet', FBH, `Show ${games.length} game${games.length === 1 ? '' : 's'}`) : ''}
     <div class="paper"><div class="sheet-h"><b>${esc(shortDay(D.d))}</b><span>Lines as of ${esc(clock(SL.ts))}${stale ? ', waiting on a refresh' : ''}</span></div>
       ${bOn && B.fc ? '<p class="fc-key">🌦 <b>The Forecast</b> on each pick, that kind of bet over the last 7 days: ☀️ working · 🌤 warm · ⛅ even · 🌥 cooling · 🌧 not working · ⛈ broken</p>' : ''}
       ${games.some(g => g.t > Date.now() + 60e3 && g.ln) ? `<p class="fc-key dd-key">🎟 <b>Desk Dollars</b>: tap a price on any game that hasn’t started to put it on a ticket. ${DD_RULE}</p>` : ''}
@@ -1340,7 +1344,7 @@ function liveQ(l) {
 /* ── following a ticket live (v3.0.34, Chris, Nov 15: "make the public site do these features for the picks, parlays and longshots so
    people can follow easily"): every multi-leg ticket gets a summary — its chance, "1 in N", legs live, legs to go, the next start, and a
    📡 live cash chance against the pre-game number; every leg shows its live score and clock and its live chance (was X% pre-game). */
-const p1in = p => (p > 0 ? Math.max(1, Math.round(1 / p)).toLocaleString('en-US') : p === 0 ? '20,000+' : '—'); /* a 0 from the feed is a long shot rounded away, not a sure loser */
+const p1in = p => { if (!(p > 0)) return p === 0 ? '20,000+' : '—'; const n = 1 / p; return n >= 1e12 ? 'a trillion+' : n >= 1e9 ? Math.round(n / 1e9).toLocaleString('en-US') + ' billion' : Math.max(1, Math.round(n)).toLocaleString('en-US'); };   /* v88 · a ten-leg live ticket read “1 in 195,919,970,295,837,400,000,…” */ /* a 0 from the feed is a long shot rounded away, not a sure loser */
 const fmtP = p => (p == null ? '—' : p < 0.0001 ? '<0.01%' : p * 100 < 1 ? (p * 100).toFixed(2) + '%' : (p * 100).toFixed(1) + '%');
 function legNow(l0) { const l = l0.game ? liveGrade(l0) : l0, c = stateOf(l), lv = l.game ? liveOf(l) : null; return { l, c, lv, live: c === 'o' && !!lv && lv.state === 'in' }; }
 /* v62 · Nov 23, Chris: "the final score should be displayed no matter what the final results are with the final margin of victory
@@ -2257,6 +2261,9 @@ function chalSheet(id) { const c = chal(id); if (!c) return ''; const RU = RULES
     <h3>The rules</h3><ul class="cs-rules"><li>${esc(RU.icon)} <b>${esc(RU.lab)}</b>: ${esc(RU.desc)}.</li>${c.sport !== 'any' ? `<li>🏟 <b>${esc(SPORTS[c.sport])} only.</b></li>` : ''}<li>💵 The buy-in is <b>${dd$(c.start)}</b> from your wallet. It becomes the run’s bankroll, and whatever the run holds when it ends goes back to your wallet.</li><li>🚩 Every checkpoint you pass pays XP. Hit ${dd$(c.goal)} and you get <b>+${c.xp} XP and a ${dd$(c.prize)} prize</b> on top of the run’s ${dd$(c.goal)}+.</li><li>⏱ ${c.days} days. Under D$1 with nothing open, the run is busted.</li></ul>
     ${st ? `<p class="note">${st.live} running now · ${st.won} of ${st.tries} finished${st.fast ? ` · fastest: <b>${esc(st.fast.name)}</b> in ${cxTook(st.fast.took)}` : ''}</p>` : ''}
     <div class="cs-go">${running ? '<span class="fchip live">● You’re running this one</span>' : `<button type="button" class="btn foil" data-act="chaljoin" data-id="${esc(c.id)}" data-route="${pick}"${short || full ? ' disabled' : ''}>Buy in ${dd$(c.start)} · ${esc(ROUTES[pick].icon)} ${esc(ROUTES[pick].name)} route</button>${short ? `<small class="cs-wal no">Your wallet has ${dd$(W.bal)}. This one costs ${dd$(c.start)}.</small>` : full ? '<small class="cs-wal no">Three runs are live. Finish or quit one first.</small>' : W ? `<small class="cs-wal">Wallet ${dd$(W.bal)} → ${dd$(W.bal - c.start)} after the buy-in</small>` : ''}`}</div></section>`; }
+const cxPills = F => { const P = [], so = { easy: 'Easiest first', hard: 'Hardest first', prize: 'Biggest prize', pop: 'Most played' };
+  if (+F.d) P.push(fsPill('cxfx', 'd', `${+F.d} days`)); if (F.t) P.push(fsPill('cxfx', 't', esc((CTIERS.find(t => t.id === F.t) || {}).name || F.t)));
+  if (F.r && RULES[F.r]) P.push(fsPill('cxfx', 'r', `${RULES[F.r].icon} ${esc(RULES[F.r].lab)}`)); if (F.s && SPORTS[F.s]) P.push(fsPill('cxfx', 's', esc(SPORTS[F.s]))); if (F.sort && F.sort !== 'feat' && so[F.sort]) P.push(fsPill('cxfx', 'sort', so[F.sort])); return P; };
 function viewChallenges() {
   const el = $('#v-challenges'), B = CX.board, P = acctPass(), mine = (AC.me && AC.me.runs) || [], live = liveRuns(), done = mine.filter(r => !live.includes(r)).slice(0, 6), F = CX.f, L = chalFiltered(), D = dayPick();
   const chips = (k, opts) => opts.map(([v, l, col]) => `<button type="button" class="${F[k] === v ? 'on' : ''}" data-act="cxf" data-k="${k}" data-v="${v}"${col ? ` style="--tc:${col}"` : ''}>${l}</button>`).join('');
@@ -2266,12 +2273,13 @@ function viewChallenges() {
     ${live.length ? `<h2 class="h2">Your runs</h2><div class="rgrid">${live.map(runCard).join('')}</div>` : ''}
     <section class="cotd" style="--tc:${D.color}"><small>Challenge of the day</small><b>${esc(D.name)}</b><span>${dd$(D.start)} → ${dd$(D.goal)} · ${D.days} days · ${esc(D.tierName)} · +${D.xp} XP · ${dd$(D.prize)}</span><button type="button" class="btn foil sm" data-act="chalopen" data-id="${esc(D.id)}">See the road map</button></section>
     <h2 class="h2">Find your challenge</h2>
-    <div class="cxf"><div class="cxf-row">${chips('d', [[0, 'All'], [3, '3 days'], [7, '7 days'], [14, '14 days'], [30, '30 days']])}</div>
-      <div class="cxf-row tiers">${chips('t', [['', 'Every tier'], ...CTIERS.map(t => [t.id, t.name, t.color])])}</div>
+    <div class="cxf-top"><input class="cxf-q" type="search" placeholder="Search: heist, puck, dogs, moonshot…" value="${esc(F.q || '')}" data-input="cxq" aria-label="Search challenges">${fsBtn('challenges', cxPills(F).length)}</div>
+    ${cxPills(F).length ? `<div class="fs-pills solo" role="group" aria-label="Filters that are on">${cxPills(F).join('')}</div>` : ''}
+    ${fsSheet('challenges', 'Filter challenges', `<div class="cxf"><h4 class="fs-k">How long</h4><div class="cxf-row wrap">${chips('d', [[0, 'All'], [3, '3 days'], [7, '7 days'], [14, '14 days'], [30, '30 days']])}</div>
+      <h4 class="fs-k">Tier and rules</h4><div class="cxf-row tiers wrap">${chips('t', [['', 'Every tier'], ...CTIERS.map(t => [t.id, t.name, t.color])])}</div>
       <div class="cxf-sel"><select data-change="cxf" data-k="r" aria-label="Leg rule"><option value="">Every rule</option>${Object.entries(RULES).map(([k, v]) => `<option value="${k}"${F.r === k ? ' selected' : ''}>${v.icon} ${esc(v.lab)}</option>`).join('')}</select>
         <select data-change="cxf" data-k="s" aria-label="Sport"><option value="">Every sport</option>${Object.entries(SPORTS).map(([k, v]) => `<option value="${k}"${F.s === k ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select>
-        <select data-change="cxf" data-k="sort" aria-label="Sort">${[['feat', 'Featured'], ['easy', 'Easiest first'], ['hard', 'Hardest first'], ['prize', 'Biggest prize'], ['pop', 'Most played']].map(([k, v]) => `<option value="${k}"${F.sort === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
-      <input class="cxf-q" type="search" placeholder="Search: heist, puck, dogs, moonshot…" value="${esc(F.q || '')}" data-input="cxq" aria-label="Search challenges"></div>
+        <select data-change="cxf" data-k="sort" aria-label="Sort">${[['feat', 'Featured'], ['easy', 'Easiest first'], ['hard', 'Hardest first'], ['prize', 'Biggest prize'], ['pop', 'Most played']].map(([k, v]) => `<option value="${k}"${F.sort === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div></div>`, `Show ${L.length.toLocaleString('en-US')} challenge${L.length === 1 ? '' : 's'}`)}
     <p class="cx-count"><b>${L.length.toLocaleString('en-US')}</b> of 1,000</p>
     <div class="cxgrid">${L.slice(0, CX.show).map(chalCard).join('') || '<div class="paper blank"><b>Nothing matches</b><p>Loosen a filter.</p></div>'}</div>
     ${L.length > CX.show ? `<div class="row" style="justify-content:center"><button type="button" class="btn line" data-act="cxmore">Show more (${(L.length - CX.show).toLocaleString('en-US')} left)</button></div>` : ''}
@@ -2408,8 +2416,87 @@ function drQpBody(X, legs) { const by = drCalls(X), on = l => QP.own.some(o => o
 /* v81 · "dumbed down so that a novice could jump right on and feel comfortable… last thing I want is people saying it's too confusing":
    each busy page opens with three plain steps; one tap folds them away for good on this phone */
 const howSeen = k => { try { return localStorage.getItem('tdp.how.' + k) === '1'; } catch (e) { return false; } };
-const howTo = (k, title, steps) => howSeen(k) ? `<button type="button" class="howre" data-act="howopen" data-k="${k}">❓ How this works</button>`
-  : `<section class="howto" aria-label="${esc(title)}"><div class="howto-h"><b>${esc(title)}</b><button type="button" class="howx" data-act="howx" data-k="${k}" aria-label="Got it, hide this">Got it ✓</button></div><ol>${steps.map(x => `<li>${x}</li>`).join('')}</ol></section>`;
+const howTo = (k, title, steps) => { INFO['how-' + k] = { title, html: `<ol class="how-ol">${steps.map(x => `<li>${x}</li>`).join('')}</ol>` };
+  return howSeen(k) ? `<button type="button" class="howre" data-act="info" data-k="how-${k}">❓ ${esc(title)}</button>`
+    : `<div class="howto mini"><button type="button" class="howto-open" data-act="info" data-k="how-${k}" aria-haspopup="dialog"><i aria-hidden="true">📖</i><b>${esc(title)}</b><span>${steps.length} quick tips</span></button><button type="button" class="howx" data-act="howx" data-k="${k}" aria-label="Got it, hide this">✕</button></div>`; };
+/* ── v88 · THE CALM PASS ── Chris, Nov 27: "really try to modernize it… pop up filters pages etc… ways to compartmentalize things so the
+   screens aren't always so busy… but make sure we don't lose any of the tech and options we've built". Each room keeps one quick row on
+   the page; the rest of its filters rise in a sheet (the very same buttons and handlers as before) from a Filters button that counts
+   what's on, and every filter that's on rides under it as a pill you tap off. Explainers open from a one-line card, long reads and
+   ten-leg tickets fold, and the eight tabs became a dock of four you choose plus Rooms, which holds everything else and a Jump search. */
+const ROOMS = { open: false, edit: false, q: '' };
+const FS_IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h9M18 7h2M4 17h3M12 17h8"/><circle cx="15.5" cy="7" r="2.4"/><circle cx="9.5" cy="17" r="2.4"/></svg>';
+const fsBtn = (k, n) => `<button type="button" class="fs-btn${n ? ' on' : ''}" data-act="fsopen" data-k="${k}" aria-haspopup="dialog" aria-expanded="${S.fs === k}">${FS_IC}<span>Filters</span>${n ? `<b class="fs-n">${n}</b>` : ''}</button>`;
+const fsPill = (act, k, lab) => `<button type="button" class="fs-pill" data-act="${act}" data-k="${esc(k)}" aria-label="Turn off ${esc(String(lab).replace(/<[^>]+>/g, ''))}">${lab}<i aria-hidden="true">✕</i></button>`;
+const fsBar = (k, pills, right = '') => `<div class="fs-bar" data-fsbar="${k}">${fsBtn(k, pills.length)}${pills.length ? `<div class="fs-pills" role="group" aria-label="Filters that are on">${pills.join('')}</div>` : '<span class="fs-none">Showing everything</span>'}${right}</div>`;
+/* the sheet sits inside its room (so the room's own buttons work in it as they always have); it shows while S.fs names that room */
+function fsSheet(k, title, body, done) {
+  const on = S.fs === k;
+  return `<div class="fs-wrap${on ? ' open' : ''}" data-fs="${k}"${on ? '' : ' hidden'}><div class="sheet-bg" data-act="fsclose"></div>
+    <section class="csheet fsheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="fs-h"><h3>${esc(title)}</h3><button type="button" class="fs-x" data-act="fsclose" aria-label="Close">✕</button></div>
+    <div class="fs-body">${body}</div><div class="fs-f"><button type="button" class="btn foil fs-done" data-act="fsclose">${done}</button></div></section></div>`;
+}
+/* a room redraws on every tap in its sheet: the new sheet keeps the old one's scroll and focus, and doesn't slide in again */
+let FS_WAS = false, FS_Y = 0, FS_FOCUS = '';
+document.addEventListener('scroll', e => { const t = e.target; if (t && t.classList && t.classList.contains('fsheet')) FS_Y = t.scrollTop; }, true);
+function fsSettle() { const n = document.querySelector('.fs-wrap.open .fsheet');
+  if (n && !n.dataset.seen) { n.dataset.seen = '1';
+    if (FS_WAS) { n.classList.add('still'); n.scrollTop = FS_Y; const f = FS_FOCUS && n.querySelector(FS_FOCUS); if (f) try { f.focus({ preventScroll: true }); } catch (e) { } }
+    else { FS_Y = 0; const f = n.querySelector('.fs-x'); if (f) try { f.focus({ preventScroll: true }); } catch (e) { } } }
+  FS_WAS = !!n; document.body.classList.toggle('fs-on', !!n || !!(($('#infoLayer') || {}).innerHTML || '').trim() || ROOMS.open); }
+new MutationObserver(fsSettle).observe(document.getElementById('main'), { childList: true, subtree: true });
+const fsKey = el => { const D = (el && el.dataset) || {}; const ks = ['act', 'change', 'k', 'v'].filter(k => D[k] != null); return ks.length ? ks.map(k => `[data-${k}="${CSS.escape(String(D[k]))}"]`).join('') : ''; };
+let FS_RET = null;
+function fsOpen(k, from) { FS_RET = from || null; S.fs = k; FS_WAS = false; VIEWS[S.tab](); }
+function fsClose() { const k = S.fs; if (!k) return; S.fs = ''; FS_WAS = false; VIEWS[S.tab](); const b = document.querySelector(`[data-act="fsopen"][data-k="${k}"]`) || FS_RET; try { b && b.isConnected && b.focus({ preventScroll: true }); } catch (e) { } }
+/* the Slate's pills: each filter that's on, tap to turn just that one off */
+function bfPills(F) { const L = (A, v) => ((A.find(([k]) => String(k) === String(v)) || [])[1]) || esc(String(v)), P = [];
+  if (F.win !== BF0.win) P.push(fsPill('bfx', 'win', L(WINS, F.win)));
+  if (F.tier !== 'all') P.push(fsPill('bfx', 'tier', L(TIERS, F.tier)));
+  if (F.bt !== 'all') P.push(fsPill('bfx', 'bt', L(BTS, F.bt)));
+  if (F.ch !== 'all') P.push(fsPill('bfx', 'ch', esc((castOf(F.ch) || {}).name || F.ch)));
+  if (F.cf === TOP_CF) P.push(fsPill('bfx', 'cf', '🎯 Top 10% sure')); else if (+F.cf) P.push(fsPill('bfx', 'cf', `${+F.cf}%+ sure`));
+  if (F.say === 'top') P.push(fsPill('bfx', 'say', F.lane ? `👑 ${esc(F.lane)}` : '👑 #1s only'));
+  if (F.up === 'win') P.push(fsPill('bfx', 'up', '💰 Winning &amp; up'));
+  if (F.fav === 'on') P.push(fsPill('bfx', 'fav', '⭐ My favs'));
+  if (F.fc !== 'all') P.push(fsPill('bfx', 'fc', L(FCF, F.fc)));
+  return P; }
+/* ⓘ: what a room's explainer says, in a sheet, so the room itself stays the picks */
+const INFO = {}; let INFO_RET = null;
+function infoOpen(k, from) { const o = INFO[k]; if (!o) return; let n = $('#infoLayer'); if (!n) { n = document.createElement('div'); n.id = 'infoLayer'; document.body.appendChild(n); }
+  INFO_RET = from || document.activeElement;
+  n.innerHTML = `<div class="sheet-bg" data-act="infoclose"></div><section class="csheet infosheet" role="dialog" aria-modal="true" aria-label="${esc(o.title)}"><button type="button" class="cs-x" data-act="infoclose" aria-label="Close">✕</button><h3>${esc(o.title)}</h3><div class="info-b">${o.html}</div><button type="button" class="btn line info-ok" data-act="infoclose">Got it</button></section>`;
+  fsSettle(); const x = n.querySelector('.cs-x'); try { x && x.focus({ preventScroll: true }); } catch (e) { } }
+function infoClose() { const n = $('#infoLayer'); if (n) n.innerHTML = ''; fsSettle(); try { INFO_RET && INFO_RET.isConnected && INFO_RET.focus({ preventScroll: true }); } catch (e) { } }
+
+/* ── the dock: four rooms you choose + Rooms (everything else, a Jump search and the dock editor, rooms.js, loaded on first tap). All eight tab buttons stay in the page. ── */
+const DOCK0 = ['today', 'slate', 'props', 'cast'], DOCK_OK = ['today', 'slate', 'props', 'longshots', 'challenges', 'cast', 'chat', 'receipts'];
+S.dock = (() => { const d = store.get('dock'); return Array.isArray(d) && d.length >= 1 && d.length <= 4 && d.every(k => DOCK_OK.includes(k)) && new Set(d).size === d.length ? d : DOCK0.slice(); })();
+function dockPaint() { const bar = $('.tabs'); if (!bar) return; const pinned = S.dock;
+  for (const b of bar.querySelectorAll('[data-go]')) { const i = pinned.indexOf(b.dataset.go); b.classList.toggle('unpin', i < 0); b.style.order = i < 0 ? 99 : i; }
+  const r = bar.querySelector('.rooms-btn'); if (r) { const here = !pinned.some(k => k === S.tab || (k === 'challenges' && S.tab === 'leagues')); r.classList.toggle('here', here); r.setAttribute('aria-expanded', String(ROOMS.open));
+    const hot = [...bar.querySelectorAll('.unpin.live')].length; r.classList.toggle('live', hot > 0); }
+  const pill = bar.querySelector('.dock-pill'), cur = bar.querySelector('[data-go][aria-current="page"]:not(.unpin)') || bar.querySelector('.rooms-btn.here');
+  if (pill) { if (!cur || !bar.offsetParent) { pill.style.opacity = '0'; return; } const B = bar.getBoundingClientRect(), C = cur.getBoundingClientRect();
+    pill.style.opacity = '1'; pill.style.width = C.width + 'px'; pill.style.transform = `translateX(${(C.left - B.left).toFixed(1)}px)`; requestAnimationFrame(() => pill.classList.add('ready')); } }
+addEventListener('resize', () => dockPaint());
+let RM = null; const roomsLoad = () => RM || (RM = import('./rooms.js?v=1').then(m => { m.init(RMAPI); return m; }, e => { RM = null; throw e; }));
+const RMAPI = { S, ROOMS, store, esc, toast, $, acctPass: () => acctPass(), cTitle: c => cTitle(c), deskDay, teamName: (sp, ab) => teamName(sp, ab), LEAGUE, fin, clock, dockPaint: () => dockPaint(), settle: () => fsSettle() };
+function roomsOpen(f) { roomsLoad().then(m => m.open(f), () => toast('Rooms need a connection: try again in a moment')); }
+function roomsClose() { if (!ROOMS.open) return; ROOMS.open = false; ROOMS.edit = false; const n = $('#roomsLayer'); if (n) n.innerHTML = ''; dockPaint(); fsSettle(); try { const r = $('.tabs .rooms-btn'); r && r.offsetParent && r.focus({ preventScroll: true }); } catch (e) { } }
+/* keys: Esc closes the top sheet; ⌘K / Ctrl+K or "/" opens Jump; Tab stays inside an open sheet */
+document.addEventListener('keydown', e => {
+  const sheet = () => document.querySelector('#infoLayer .csheet') || document.querySelector('#roomsLayer .csheet') || document.querySelector('.fs-wrap.open .fsheet');
+  if (e.key === 'Escape') { if ((($('#infoLayer') || {}).innerHTML || '').trim()) infoClose(); else if (ROOMS.open) roomsClose(); else if (S.fs) fsClose(); else return; e.preventDefault(); return; }
+  if (e.key === 'Tab') { const s = sheet(); if (!s) return; const F = [...s.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')].filter(x => !x.disabled && x.offsetParent !== null); if (!F.length) return;
+    const i = F.indexOf(document.activeElement); if (e.shiftKey && i <= 0) { e.preventDefault(); F[F.length - 1].focus(); } else if (!e.shiftKey && (i < 0 || i === F.length - 1)) { e.preventDefault(); F[0].focus(); } return; }
+  if (((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) || (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && !e.target.isContentEditable)) { e.preventDefault(); if (!ROOMS.open) roomsOpen(true); else { const q = $('#jumpQ'); q && q.focus(); } } });
+/* a folded ticket remembers it's open through the live repaints */
+const FOLD = new Set(); document.addEventListener('toggle', e => { const d = e.target; if (!d || !d.dataset || !d.dataset.fold) return; if (d.open) FOLD.add(d.dataset.fold); else FOLD.delete(d.dataset.fold); }, true);
+const legStrip = L => `<span class="fl-strip" aria-hidden="true">${L.map(l => `<i class="${l.st === 'open' && l.game && (liveOf(l) || {}).state === 'in' ? 'live' : (FST[l.st] || FST.open)[1]}"></i>`).join('')}</span>`;
+/* the effects layer (sound, haptics, foil, the alerts and widget sheets) loads on its own once the page is up: if it can't, the app is the same app */
+let FX = null; const fxLoad = () => FX || (FX = import('./fx.js?v=1').then(m => { try { m.boot && m.boot(FXAPI); } catch (e) { } return m; }, e => { FX = null; throw e; }));
+const FXAPI = { S, store, toast, go: (t) => go(t, true), esc, deskDay, LEAGUE, teamName, clock, roomsClose, feed: () => S.feed, slate: () => S.slate, acct: () => acctPass(), cfg: () => CFG };
 const confirmQuit = (b, msg) => { if (b.dataset.sure === '1') return true; b.dataset.sure = '1'; b.textContent = msg || 'Tap again to quit'; return false; };
 /* ── The owner's dashboard (v3.1.1, Chris, Nov 15: "an admin dashboard … stats on users and names and balances … a subscriber
    inbox … how can I moderate without a moderate dashboard"). Owner only: the server refuses everyone else. */
@@ -2542,7 +2629,19 @@ async function viewGc() {
   if (S.tab !== 'gc' || S.gc !== g) return; GC_ON = key; GCM.mount(el, { sp: g.sp, id: g.id, back: gcBack, picksHtml: () => gcPicks(g) }); }
 const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, tix: viewTix, gc: viewGc, live: viewLive, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, admin: viewAdmin, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin, u: viewProfile };
 function render() { VIEWS[S.tab](); }
+let GO_N = 0, VT_ON = false;
+const VT_ORDER = ['today', 'slate', 'props', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'tix', 'me', 'join'];
 function go(tab, push) {
+  if (ROOMS.open) roomsClose(); if ((($('#infoLayer') || {}).innerHTML || '').trim()) infoClose(); S.fs = '';
+  const vt = GO_N++ > 0 && typeof document.startViewTransition === 'function' && !VT_ON && !document.hidden && (!navigator.webdriver || /[?&]vt=1/.test(location.search))
+    && !document.documentElement.classList.contains('calm') && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!vt) { goNow(tab, push); dockPaint(); return; }
+  const a = VT_ORDER.indexOf(S.tab), b = VT_ORDER.indexOf(String(tab).split('=')[0]);
+  document.documentElement.dataset.vt = a >= 0 && b >= 0 && b < a ? 'back' : 'fwd'; VT_ON = true;
+  try { document.startViewTransition(() => { goNow(tab, push); dockPaint(); }).finished.finally(() => { VT_ON = false; delete document.documentElement.dataset.vt; }); }
+  catch (e) { VT_ON = false; delete document.documentElement.dataset.vt; goNow(tab, push); dockPaint(); }
+}
+function goNow(tab, push) {
   /* v3.3 · #u=<name> opens a member's public record (the Open Scoreboard) */
   if (typeof tab === 'string' && tab.startsWith('u=')) { try { S.profile = decodeURIComponent(tab.slice(2)); } catch { S.profile = tab.slice(2); } tab = 'u'; }
   /* v58 · #lg=<id>: a shared league opens on the Leagues tab, its standings open, scrolled to and lit up */
@@ -2567,6 +2666,26 @@ document.addEventListener('click', async e => {
   const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, true); return; }
   const a = e.target.closest('[data-act]'); if (!a) return;
   const act = a.dataset.act; qpAnchor(a);
+  if (S.fs && a.closest('.fsheet')) FS_FOCUS = fsKey(a);
+  if (act === 'fsopen') { fsOpen(a.dataset.k, a); return; }
+  if (act === 'fsclose') { fsClose(); return; }
+  if (act === 'bfclear') { S.bf = { ...BF0, view: S.bf.view || 'time' }; store.set('bf', S.bf); S.openGame = ''; render(); return; }
+  if (act === 'bfx') { const k = a.dataset.k; S.bf[k] = BF0[k]; if (k === 'say') S.bf.lane = ''; store.set('bf', S.bf); S.openGame = ''; render(); return; }
+  if (act === 'pfx') { const k = a.dataset.k; S.pf[k] = k === 'min' ? 0 : 'all'; if (k === 'sp') S.pf.stat = 'all'; S.pN = P_STEP; store.set('pf', S.pf); render(); return; }
+  if (act === 'cxfx') { const k = a.dataset.k; CX.f[k] = k === 'd' ? 0 : k === 'sort' ? 'feat' : ''; CX.show = 24; store.set('cxf', CX.f); viewChallenges(); return; }
+  if (act === 'info') { infoOpen(a.dataset.k, a); return; }
+  if (act === 'infoclose') { infoClose(); return; }
+  if (act === 'rooms') { if (ROOMS.open) roomsClose(); else roomsOpen(false); return; }
+  if (act === 'roomsclose') { roomsClose(); return; }
+  if (act === 'dockedit') { ROOMS.edit = !ROOMS.edit; roomsLoad().then(m => m.repaint(), () => { }); return; }
+  if (act === 'dockpin') { const k = a.dataset.k, i = S.dock.indexOf(k);
+    if (i >= 0) { if (S.dock.length === 1) { toast('Keep at least one room on your dock'); return; } S.dock.splice(i, 1); }
+    else if (S.dock.length >= 4) { toast('Your dock holds 4: tap one to take it off first'); return; } else S.dock.push(k);
+    store.set('dock', S.dock); dockPaint(); roomsLoad().then(m => m.repaint(), () => { }); return; }
+  if (act === 'jumpcast') { S.castPick = a.dataset.v || ''; store.set('castpick', S.castPick); go('cast', true); return; }
+  if (act === 'jumpgame') { S.slateDay = 0; S.slateSp = 'all'; S.openGame = a.dataset.v; go('slate', true); setTimeout(() => { const n = document.querySelector(`#v-slate [data-act="game"][data-k="${CSS.escape(a.dataset.v)}"]`); if (n) n.scrollIntoView({ block: 'center' }); }, 420); return; }
+  if (act === 'qpjump') { roomsClose(); const q = document.createElement('button'); q.type = 'button'; q.hidden = true; q.dataset.act = 'qpopen'; q.dataset.ctx = 'wal'; document.body.appendChild(q); q.click(); q.remove(); return; }
+  if (act === 'cc' || act === 'ccwidget') { roomsClose(); fxLoad().then(m => m.openCC && m.openCC(act === 'ccwidget' ? 'widget' : ''), () => toast('Settings need a connection: try again in a moment')); return; }
   if (act === 'guide-close') { if (e.target === a) closeGuide(); return; }
   if (act === 'guide') openGuide(false);
   else if (act === 'guide-done') closeGuide();
@@ -2736,7 +2855,7 @@ document.addEventListener('click', async e => {
     store.set('bf', S.bf); S.openGame = ''; render(); }
   else if (act === 'bfscope') { /* from a game's 👑 line: every pick that #1 has in its kind of bet, across the sheet */
     S.bf = { ...S.bf, tier: 'all', bt: 'all', ch: 'all', cf: 0, fc: 'all', up: 'all', fav: 'all', say: 'top', lane: a.dataset.lab || '' }; store.set('bf', S.bf); S.openGame = ''; render();
-    const f = $('#v-slate .bf'); if (f) f.scrollIntoView({ block: 'start' }); }
+    const f = $('#v-slate .fs-bar'); if (f) f.scrollIntoView({ block: 'start' }); }
   else if (act === 'bfreset') { S.bf = { ...BF0, view: S.bf.view || 'time' }; store.set('bf', S.bf); render(); }
   else if (act === 'fav') { favToggle(a.dataset.v, a.dataset.k); render(); }
   else if (act === 'favgo') { S.bf = { ...S.bf, tier: 'all', fav: 'on' }; store.set('bf', S.bf); S.openGame = ''; go('slate', true); }
@@ -2776,6 +2895,7 @@ async function restartApp() {
   setTimeout(() => location.replace(location.pathname + '?fresh=' + Date.now() + location.hash), 400);
 }
 window.addEventListener('popstate', () => go((location.hash || '#today').slice(1), false));
+if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', e => { const d = e.data || {}; if (d.type === 'go' && d.url) { try { const h = new URL(d.url).hash.slice(1); if (h) go(h, true); } catch (er) { } } });   /* v88 · a tapped alert opens its room */
 
 /* the clocks on sealed slips; when one runs out, ask the desk for the opened slip */
 let fast = 0;
@@ -2824,6 +2944,7 @@ try { const q = new URLSearchParams(location.search), t = String(q.get('src') ||
 /* ?embed=1 · the chat inside the desk's own app: no header, no tabs */
 if (/[?&]embed=1/.test(location.search)) document.body.classList.add('embed');
 go((() => { try { const sp = TG && TG.initDataUnsafe && TG.initDataUnsafe.start_param; if (sp && TABS.includes(sp)) return sp; if (sp && /^lg_[a-z0-9]{1,24}$/i.test(sp)) return 'lg=' + sp.slice(3); } catch (e) { } return (location.hash || '#today').slice(1); })(), false);
+{ const idle = window.requestIdleCallback ? f => requestIdleCallback(f, { timeout: 2500 }) : f => setTimeout(f, 1200); if (!/[?&]fx=0/.test(location.search)) idle(() => fxLoad().catch(() => { })); }
 loadFeed(); liveTick(); /* scores straight away off the saved card: live legs shouldn't wait for a new publish or the minute loop */
 acctBadge(); acctLoad();
 (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => { loadSlate(); wireLoad(); });

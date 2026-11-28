@@ -3,6 +3,10 @@
    with that record beside its name; the half line on a closed row follows it on the half record. Real browser, the repo's files, an
    invented feed, no network. */
 const fs = require('fs'), path = require('path');
+/* v88 · the calm pass: the Slate's filters live in a sheet (open it first), and rooms off the dock are one tap away in Rooms */
+const fsSlate = async pg => { if (await pg.$('#v-slate .fs-wrap.open')) return; if (await pg.$('[data-act="fsopen"][data-k="slate"]')) { await pg.click('[data-act="fsopen"][data-k="slate"]'); await pg.waitForTimeout(250); } };
+const fsDone = async pg => { if (await pg.$('.fs-wrap.open')) { await pg.click('.fs-wrap.open .fs-done'); await pg.waitForTimeout(250); } };
+const tabGo = async (pg, t) => { const b = pg.locator(`.tabs [data-go="${t}"]`); if (await b.isVisible().catch(() => false)) return b.click(); await pg.click('.tabs .rooms-btn'); await pg.waitForSelector(`#roomsLayer .rm[data-go="${t}"]`, { timeout: 8000 }); await pg.click(`#roomsLayer .rm[data-go="${t}"]`); };
 let pw; try { pw = require('playwright'); } catch (e) { pw = require('/opt/npm-tools/node_modules/playwright'); }
 const W = __dirname; let pass = 0, fail = 0; const T = (n, c, x) => { c ? pass++ : fail++; console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  — ' + String(x || '').slice(0, 700))); };
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml' };
@@ -48,7 +52,7 @@ const SLATE = { v: 1, ts: AT - 10 * 60e3, tz: 'America/Chicago', ranks: {}, days
     let s = await st();
     T('the Slate has a 💰 Winning & up chip beside 👑 #1s only; its count is the games with a call from a character winning and up in that kind of bet (2 of 3)', s.chip && /💰 Winning & up 2$/.test(s.chip.txt) && s.chip.on === 'false', JSON.stringify(s.chip));
     T('…off by default: every game, the desk\'s colored picks, the full half line', s.games.length === 3 && /SA ML 1 on it/.test(s.games[0].half) && /SAC ML 1 on it|Over 114\.5 2 on it/.test(s.games[0].half), JSON.stringify(s.games.map(g => g.half)));
-    await p.click('#v-slate .bf [data-k="up"][data-v="win"]'); await p.waitForTimeout(400); s = await st();
+    await fsSlate(p); await p.click('#v-slate .bf [data-k="up"][data-v="win"]'); await p.waitForTimeout(400); s = await st();
     const names = s.games.map(g => g.teams);
     T('on: only the games with a winning-and-up call stay (Utah@LA is gone: 12–12 is not winning; unranked is not either)', s.chip.on === 'true' && s.games.length === 2 && !names.some(n => /Utah/.test(n)), JSON.stringify(names));
     const g1 = s.games.find(g => /San Antonio|SA\b/.test(g.teams)), g3 = s.games.find(g => /Milwaukee|MIL/.test(g.teams));
@@ -57,16 +61,16 @@ const SLATE = { v: 1, ts: AT - 10 * 60e3, tz: 'America/Chicago', ranks: {}, days
     T('…a winning record that\'s even on units (15–9, +0.0u) doesn\'t make it; a thin profit does (13–11, +0.4u)', g3 && g3.tags.length === 1 && /the judge/i.test(g3.tags[0]) && /13–11, \+0\.4u/.test(g3.tags[0]), JSON.stringify(g3));
     T('the half line follows it on the half record: the Closer\'s 1H SA ML (13–9, +2.4u) and the Judge\'s 1H over (20–15, +3.1u) stay; the Scout\'s (8–12) and the Dog\'s (8 graded) go', g1 && /SA ML 1 on it/.test(g1.half) && /Over 114\.5 1 on it/.test(g1.half) && !/SAC ML/.test(g1.half), g1 && g1.half);
     T('the note says what it keeps, in plain words', /winning record and up units/.test(s.note) && /12\+ graded/.test(s.note), s.note);
-    await p.click('#v-slate .bf [data-k="up"][data-v="win"]'); await p.waitForTimeout(400); s = await st();
+    await fsSlate(p); await p.click('#v-slate .bf [data-k="up"][data-v="win"]'); await p.waitForTimeout(400); s = await st();
     T('tap it again and it\'s off: all three games back, no records on the tags', s.chip.on === 'false' && s.games.length === 3 && !s.games.some(g => g.tags.some(t => /–\d+, [+−]/.test(t))), JSON.stringify(s.games.map(g => g.tags)));
-    await p.click('#v-slate .bf [data-k="up"][data-v="win"]'); await p.waitForTimeout(300);
-    await p.click('#v-slate .bf [data-k="tier"][data-v="all"]'); await p.waitForTimeout(300); s = await st();
+    await fsSlate(p); await p.click('#v-slate .bf [data-k="up"][data-v="win"]'); await p.waitForTimeout(300);
+    await fsSlate(p); await p.click('#v-slate .bf [data-k="tier"][data-v="all"]'); await p.waitForTimeout(300); s = await st();
     T('a strength chip goes back to the desk\'s colored picks (and turns it off)', s.chip.on === 'false' && s.games.length === 3, JSON.stringify(s.chip));
-    await p.click('#v-slate .bf [data-k="up"][data-v="win"]'); await p.waitForTimeout(300);
+    await fsSlate(p); await p.click('#v-slate .bf [data-k="up"][data-v="win"]'); await p.waitForTimeout(300);
     const kept = await p.evaluate(() => { try { return JSON.parse(localStorage.getItem('tdp.bf') || 'null'); } catch (e) { return 'x'; } });
     await p.reload({ waitUntil: 'load' }); await p.waitForTimeout(1800); s = await st();
     T('it stays on when the app opens again, like the other filters', s.chip && s.chip.on === 'true' && s.games.length === 2, JSON.stringify([kept, s.chip]));
-    const reset = await p.$('#v-slate .bf-reset'); if (reset) { await reset.click(); await p.waitForTimeout(300); } s = await st();
+    await fsSlate(p); const reset = await p.$('#v-slate .bf-reset'); if (reset) { await p.click('#v-slate .bf-reset'); await p.waitForTimeout(300); } s = await st();
     T('"Show everything" clears it', reset && s.chip.on === 'false' && s.games.length === 3);
     T('no page errors', errs.length === 0, errs.join(' | '));
   } catch (e) { T('test ran', false, String(e && e.stack || e).slice(0, 900)); }

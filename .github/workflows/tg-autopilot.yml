@@ -60,4 +60,5 @@ jobs:
           FREE3: ${{ vars.FREE3 }}                     # v3.3.2 · the daily Free 3 promo post (picture + words) — off until this is "on"
           FAMILY: ${{ vars.FAMILY }}                   # v3.5 · Bloodlines family news (births, graduations, evolutions, the North Star) — off until this is "on"
           FB_DM: ${{ vars.FB_DM }}                     # v3.3.2 · the Free 3 says "Comment FREE 3…" only once the Facebook inbox answers the public — "on"
+          CHAT_ADMIN_CODE: ${{ secrets.CHAT_ADMIN_CODE }}  # v88 · only to sign the pulse for device alerts (an HMAC of it is sent, never the code); masked, never printed
           SITE_TOKEN: ${{ secrets.SITE_TOKEN }}        # v3.3 · optional: a fine-grained token with Contents write on ironsilk-weekly-site only (else the card's own)

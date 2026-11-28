@@ -9,6 +9,7 @@ import { webcrypto as crypto, createHash } from 'node:crypto';
 import * as Soc from './social.mjs';
 import * as Mega from './megaphone.mjs';
 import * as F3 from './free3.mjs';   /* v3.3.2 · the daily Free 3 promo post (free3.mjs) */
+import * as Pu from './pulse.mjs';   /* v88 · the pulse: device alerts and widgets read the public card from the chat worker */
 import * as Gr from './growth.mjs';   /* v3.3 · the growth playbook: the debate, Receipts Sunday, recruiting links, game pages */   /* v2.99 · a post every 30 minutes: game questions + polls, streaks, line movers, the reactions goal */   /* v2.98 · the picture cards and the other outlets (Facebook, Instagram, Threads) */
 const env = process.env;
 const REPO = env.GITHUB_REPOSITORY, GH = env.GITHUB_TOKEN, TG = (env.TG_BOT_TOKEN || '').trim(), KEY = (env.AUTOPILOT_KEY || '').trim();
@@ -913,6 +914,7 @@ async function sitePut(site, text, deps) { const tok = (site && site.tok) || (si
   if (site.repo === SITE) siteSeen(r.status); return { ok: r.ok, status: r.status }; }
 export async function publishPublic(state, deps) { const now = deps?.now || Date.now(); const ds = Object.keys(state.posts || {}).sort(); const d = ds.reverse().find(x => state.posts[x] && state.posts[x].feed && state.posts[x].site);
   if (!d) return 0; const p = state.posts[d]; const V = publicView(p.feed, p.st, now); const sig = sigOf(JSON.stringify({ ...V, generated: 0 }));
+  if (d === new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })) await Pu.pulseSend(V, sig, now, deps, env);   /* v88 · whatever the site write does, the alerts hear it */
   state.pubSig = state.pubSig || {}; const prev = state.pubSig[d];
   if (prev === sig || (typeof prev === 'string' && prev.length > 64 && sigOf(prev) === sig)) { state.pubSig[d] = sig; return 0; }
   /* v3.5.9 · a day before today this worker holds no fingerprint for: the site may already show a newer page; never put an older one over it */

@@ -2,6 +2,10 @@
    (each sealed until 30 minutes before its game), every graded result, the day's slate — and nothing else. No engine code,
    no keys, no settings. Real browser (Playwright), the repo's own files served from disk, invented feeds, no network. */
 const fs = require('fs'), path = require('path');
+/* v88 · the calm pass: the Slate's filters live in a sheet (open it first), and rooms off the dock are one tap away in Rooms */
+const fsSlate = async pg => { if (await pg.$('#v-slate .fs-wrap.open')) return; if (await pg.$('[data-act="fsopen"][data-k="slate"]')) { await pg.click('[data-act="fsopen"][data-k="slate"]'); await pg.waitForTimeout(250); } };
+const fsDone = async pg => { if (await pg.$('.fs-wrap.open')) { await pg.click('.fs-wrap.open .fs-done'); await pg.waitForTimeout(250); } };
+const tabGo = async (pg, t) => { const b = pg.locator(`.tabs [data-go="${t}"]`); if (await b.isVisible().catch(() => false)) return b.click(); await pg.click('.tabs .rooms-btn'); await pg.waitForSelector(`#roomsLayer .rm[data-go="${t}"]`, { timeout: 8000 }); await pg.click(`#roomsLayer .rm[data-go="${t}"]`); };
 let pw; try { pw = require('playwright'); } catch (e) { pw = require('/opt/npm-tools/node_modules/playwright'); }
 const W = __dirname; let pass = 0, fail = 0; const T = (n, c, x) => { c ? pass++ : fail++; console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  — ' + String(x || '').slice(0, 300))); };
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json' };
@@ -113,7 +117,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   await v.p.click('[data-act="game"][data-k="nfl|WSH@NYG"]'); await v.p.waitForTimeout(300); t = await v.text();
   T('…tap a game: last five, moneyline, markets, projected score, line moves, the question for the lounge', /Last five/.test(t) && /Commanders \+120, Giants −142/.test(t) && /56% Giants/.test(t) && /Commanders 20, Giants 20/.test(t) && /total opened 47\.5, now 40\.5/.test(t) && /OVER OR UNDER 40\.5\?/i.test(t));
   T('…and TheDesk Power Rankings', /POWER RANKINGS/i.test(t) && /Jacksonville Jaguars/.test(t));
-  await v.p.click('.tabs [data-go="receipts"]'); await v.p.waitForTimeout(400); t = await v.text();
+  await tabGo(v.p, 'receipts'); await v.p.waitForTimeout(400); t = await v.text();
   T('Receipts: the record, hit rate and units, then every card with each result', /38–27/.test(t) && /58%/.test(t) && /\+1\.24u/.test(t) && /Knicks ML −160/.test(t) && /Sharks \+1\.5 −193/.test(t) && /Under 44\.5/.test(t), t.slice(0, 500));
   await v.p.click('.joinpill'); await v.p.waitForTimeout(400); t = await v.text();
   const hrefs = await v.p.evaluate(() => [...document.querySelectorAll('#v-join a[href]')].map(a => a.href));
@@ -121,7 +125,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   T('…the head start from the public timestamps (locked 2h before an unlock 10 min ago → about 1h 50m), the real record by the button', /HEAD START TODAY/i.test(t) && /1h (49|50)m/i.test(t) && /On the record: 38–27, \+1\.24 units since Oct 6/.test(t), t.slice(0, 700));
   T('…free vs VIP side by side (VIP: the card at lock, the Top 10, the parlays, the private Telegram)', (await v.p.locator('#v-join .cmp tbody tr').count()) === 9 && /The minute it locks/.test(t) && /30 min before each game/.test(t) && /Yearly plan/.test(t) && (await v.p.locator('#v-join .cmp td.v svg.y').count()) === 7 /* v82: the members' chatroom is live (it said Soon) */ && (await v.p.locator('#v-join .cmp td:not(.v) svg.n').count()) === 5);
   T('…and the straight answers: where picks land, no guarantees, cancel any time', /Where do the picks show up/.test(t) && /Do you guarantee wins/.test(t) && /Can I cancel/.test(t));
-  for (const tab of ['today', 'slate', 'props', 'receipts', 'join']) { await v.p.click(tab === 'join' ? '.joinpill' : `.tabs [data-go="${tab}"]`); await v.p.waitForTimeout(250); const o = await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (o > 0) T('no sideways scroll on ' + tab, false, o + 'px'); }
+  for (const tab of ['today', 'slate', 'props', 'receipts', 'join']) { await (tab === 'join' ? v.p.click('.joinpill') : tabGo(v.p, tab)); await v.p.waitForTimeout(250); const o = await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (o > 0) T('no sideways scroll on ' + tab, false, o + 'px'); }
   T('no sideways scroll on a phone, any tab', true); T('no script errors', v.errs.length === 0, v.errs.join(' | '));
   await v.ctx.close();
 
@@ -185,8 +189,8 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   v = await visit(BETA); t = await v.text();
   T('open beta: every Best 3 pick is face up at lock, and the page says it\'s open to everyone', (await v.p.locator('#v-today .slip.locked').count()) === 0 && /PISTONS −9\.5/i.test(t) && /UNDER 40\.5/i.test(t) && /Open to everyone during the beta/.test(t));
   T('Today teases Founder LongShot Parlays: the live ticket, with a link to the LongShots tab', /FOUNDER LONGSHOT PARLAYS/i.test(t) && /LONGSHOT · 3 LEGS/i.test(t) && /LongShots tab/.test(t) && (await v.p.locator('#v-today [data-act="tail"]').count()) === 1 && !/LONGSHOT · 2 LEGS/i.test(t));
-  T('one row of tabs on a phone, Props third, LongShots fourth, Compete fifth', await v.p.evaluate(() => { const b = [...document.querySelectorAll('.tabs button')]; const tops = new Set(b.map(x => Math.round(x.getBoundingClientRect().top))); return b.length === 8 && tops.size === 1 && b[2].dataset.go === 'props' && b[3].dataset.go === 'longshots' && b.every(x => x.scrollWidth <= x.clientWidth + 1); }), await v.p.evaluate(() => JSON.stringify([...document.querySelectorAll('.tabs button')].map(x => [x.dataset.go, Math.round(x.getBoundingClientRect().top), x.scrollWidth, x.clientWidth]))));
-  await v.p.click('.tabs [data-go="longshots"]'); await v.p.waitForTimeout(300); t = await v.text();
+  T('v88 · the dock on a phone: one row of five (Today, Slate, Props, the Characters and Rooms), every label fits; the other rooms wait in Rooms', await v.p.evaluate(() => { const b = [...document.querySelectorAll('.tabs button')].filter(x => x.offsetParent); const tops = new Set(b.map(x => Math.round(x.getBoundingClientRect().top))); return b.length === 5 && tops.size === 1 && b.map(x => x.dataset.go || (x.classList.contains('rooms-btn') ? 'rooms' : '')).join() === 'today,slate,props,cast,rooms' && b.every(x => x.scrollWidth <= x.clientWidth + 1) && document.querySelectorAll('.tabs [data-go]').length === 8; }), await v.p.evaluate(() => JSON.stringify([...document.querySelectorAll('.tabs button')].filter(x => x.offsetParent).map(x => [x.dataset.go || x.className, Math.round(x.getBoundingClientRect().top), x.scrollWidth, x.clientWidth]))));
+  await tabGo(v.p, 'longshots'); await v.p.waitForTimeout(300); t = await v.text();
   T('the LongShots tab: every founder ticket, leg by leg, the odds, what $10 pays, how many have cashed (never the losses, v83); the live one tails, the lost one doesn\'t', /FOUNDER LONGSHOT PARLAYS/i.test(t) && /🎯 3 LongShots cashed/i.test(t) && !/\d+ lost\b/i.test(t) && /A\. Edwards 25\+ points/.test(t) && /\+1,150/.test(t) && /\$10 pays \$125/.test(t) && /LONGSHOT · 2 LEGS/i.test(t) && (await v.p.locator('#v-longshots [data-act="tail"]').count()) === 1 && (await v.p.locator('.slip.founder img').count()) === 0, (t.match(/Founder LongShot Parlays[^]{0,300}/i) || [])[0]);
   await v.p.click('#v-longshots [data-act="tail"]'); await v.p.waitForTimeout(300); t = await v.text();
   T('…"Tail this" copies the legs, with a note to paste them into the book', /Copied/.test(t));
@@ -208,15 +212,15 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   T('…each pick opens "every character on it": who is with it, who is against, how sure, and why', /2 with · 1 against/.test(t) && /rested|fresh legs|night off|rest edge|slept/i.test(t) && /played last night|back-to-back|tired legs|running on fumes|no rest/i.test(t) && /On WSH \+9\.5\. [^\n]*(own this series|history between|number|usually walk away|head-to-head)/i.test(t) && (await v.p.locator('#v-today .calls li.off').count()) >= 1);
   T('Today: "Unanimous, Supreme & Strong" lists the strongest board picks with their tags and who is on them', /UNANIMOUS, SUPREME & STRONG/i.test(t) && /Giants ML/.test(t) && /Timberwolves −5\.5/.test(t) && /by The Coach, The Scout/.test(t) && /1 unanimous/.test(t), t.slice(t.indexOf('NANIMOUS, S') - 10, t.indexOf('NANIMOUS, S') + 400));
   T('…no heavy moneyline on Today (the −1500 Avalanche ML in the Top 10 never shows)', !/−1500|-1500|Avalanche ML/.test(t), (t.match(/.{80}(−1500|-1500|Avalanche ML).{40}/s)||[])[0]);
-  await v.p.click('.tabs [data-go="slate"]'); await v.p.waitForTimeout(500); t = await v.text();
+  await v.p.click('.tabs [data-go="slate"]'); await v.p.waitForTimeout(500); await fsSlate(v.p); t = await v.text();
   T('Slate in beta: games by start time, each slot with its counts, filters for time, strength, bet type and character', /🕒 \d{1,2}:\d\d [AP]M/.test(t) && /BY TIME/i.test(t) && /Not over yet/.test(t) && /Every pick/.test(t) && !/Heavy ML/.test(t) && (await v.p.locator('[data-change="bfch"] option').count()) === 4 && /1 supreme/.test(t), JSON.stringify([/BY TIME/i.test(t), /Not over yet/.test(t), /Every pick/.test(t), !/Heavy ML/.test(t), await v.p.locator('[data-change="bfch"] option').count(), /1 supreme/.test(t)]) + t.slice(t.indexOf('SHEET'), t.indexOf('SHEET') + 600));
   T('…a board game the sheet skipped still shows (Mavericks at Timberwolves), with its strong pick', /Timberwolves/.test(t) && /Timberwolves −5\.5 −110/.test(t));
-  await v.p.click('[data-act="bf"][data-k="tier"][data-v="unan"]'); await v.p.waitForTimeout(300); t = await v.text();
+  await fsSlate(v.p); await v.p.click('[data-act="bf"][data-k="tier"][data-v="unan"]'); await v.p.waitForTimeout(300); t = await v.text();
   T('…"★ Unanimous" keeps only games with a unanimous pick', /Giants/.test(t) && !/Timberwolves/.test(t));
-  await v.p.selectOption('[data-change="bfch"]', 'Trends'); await v.p.waitForTimeout(300); t = await v.text();
+  await fsSlate(v.p); await v.p.selectOption('[data-change="bfch"]', 'Trends'); await v.p.waitForTimeout(300); t = await v.text();
   T('…pick a character: only the games it called, showing its call', /Giants/.test(t) && !/Timberwolves/.test(t) && /The Historian/.test(t) && /Over 40\.5 −112/.test(t));
-  await v.p.click('[data-act="bfreset"]'); await v.p.waitForTimeout(300);
-  await v.p.locator('#v-slate .game > button', { hasText: 'Giants' }).first().click(); await v.p.waitForTimeout(300); t = await v.text();
+  await fsSlate(v.p); await v.p.click('[data-act="bfreset"]'); await v.p.waitForTimeout(300);
+  await fsDone(v.p); await v.p.locator('#v-slate .game > button', { hasText: 'Giants' }).first().click(); await v.p.waitForTimeout(300); t = await v.text();
   T('…tap a game: the desk\'s colored picks with tags, and who\'s with it, who\'s against it', /THE DESK.S COLORED PICKS/i.test(t) && /WHO.S WITH IT, WHO.S AGAINST IT/i.test(t) && /2–1 split/.test(t) && /2 with/.test(t) && /1 against/.test(t), t.slice(t.indexOf('OLORED') - 20, t.indexOf('OLORED') + 700));
   T('…each call shows its confidence and its rank in that kind of bet: 👑 #1 has the say, 🧊 the worst shouldn\'t', /#1 in NFL unders: has the say/.test(t) && /Worst in NFL overs: no say/.test(t) && /#4 of 9 in NFL unders/.test(t) && /30–12, \+14\.2u/.test(t) && /74%/.test(t) && /The Coach has the say, on Under 40\.5/.test(t), t.slice(t.indexOf('AGAINST IT'), t.indexOf('AGAINST IT') + 900));
   T('…no heavy moneyline anywhere on the game (not the −1200 pick, not the −1100 call)', !/−1200|−1100|-1200|-1100/.test(t));
@@ -239,7 +243,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
   T('…tapping it reloads the app fresh (and nothing saved is lost)', /[?&]fresh=\d+/.test(v.p.url()) && (await v.p.evaluate(() => localStorage.getItem('tdp.castpick'))) !== null, v.p.url());
   await v.p.click('.joinpill'); await v.p.waitForTimeout(400); t = await v.text();
   T('Join in beta: "Everything\'s free during the beta", the plans after the beta ($50 a month, $300 a year, $100 a league, $20 for 2 days, $2 a pick), no checkout', /EVERYTHING.S FREE DURING THE BETA/i.test(t) && /PLANS AFTER THE BETA/i.test(t) && ['$50', '$300', '$100', '$20', '$2'].every(x => t.includes(x)) && /Best value/i.test(t) && /What happens after the beta/.test(t) && !/HEAD START/i.test(t) && !(await v.p.evaluate(() => [...document.querySelectorAll('#v-join a[href]')].some(a => /whop/.test(a.href)))));
-  for (const tab of ['today', 'cast', 'join']) { await v.p.click(tab === 'join' ? '.joinpill' : `.tabs [data-go="${tab}"]`); await v.p.waitForTimeout(250); const o = await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (o > 0) T('beta: no sideways scroll on ' + tab, false, o + 'px'); }
+  for (const tab of ['today', 'cast', 'join']) { await (tab === 'join' ? v.p.click('.joinpill') : tabGo(v.p, tab)); await v.p.waitForTimeout(250); const o = await v.p.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (o > 0) T('beta: no sideways scroll on ' + tab, false, o + 'px'); }
   T('beta: no sideways scroll, no script errors', v.errs.length === 0, v.errs.join(' | '));
   await v.ctx.close();
 
@@ -331,20 +335,21 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
       r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) }); });
     await p.goto('https://desk.test/desk/#today', { waitUntil: 'load' }); await p.waitForTimeout(900);
     const bar = await p.evaluate(() => { const n = document.querySelector('.tabs'); const bs = [...n.querySelectorAll('button')]; return { n: bs.length, fits: bs.every(x => x.scrollWidth <= x.clientWidth + 1), labels: bs.map(x => x.innerText.trim()), over: document.documentElement.scrollWidth > innerWidth }; });
-    T('the bottom bar has a Compete tab, still one row, every label fits', bar.n === 8 && bar.labels.includes('Compete') && bar.fits && !bar.over, JSON.stringify(bar));
-    await p.click('.tabs [data-go="challenges"]'); await p.waitForTimeout(700); let t = await p.evaluate(() => document.querySelector('#v-challenges').innerText);
+    T('the bottom bar has a Compete tab (v88: in the page, pinnable, behind Rooms by default), still one row, every label fits', bar.n === 9 && bar.labels.includes('Compete') && bar.labels.includes('Rooms') && bar.fits && !bar.over, JSON.stringify(bar));
+    await tabGo(p, 'challenges'); await p.waitForTimeout(700); let t = await p.evaluate(() => document.querySelector('#v-challenges').innerText);
     T('Challenges: the player card (rank, XP to the next rank, trophies by tier, prizes), the challenge of the day, 1,000 to browse', /HUSTLER/i.test(t) && /860/.test(t) && /140 XP to Sharp/.test(t) && /LEGENDARY/i.test(t) && /D\$85 in prizes/.test(t) && /CHALLENGE OF THE DAY/i.test(t) && /1,000 of 1,000/.test(t), t.slice(0, 900));
     T('…24 cards at a time, each with its size, days, tier, rule, XP and D$ prize', (await p.locator('.cc2').count()) === 24 && /\+\d+ XP/.test(t) && /🏆 D\$\d+/.test(t));
+    await p.click('[data-act="fsopen"][data-k="challenges"]'); await p.waitForTimeout(250);
     await p.click('[data-act="cxf"][data-k="d"][data-v="30"]'); await p.waitForTimeout(250); await p.click('[data-act="cxf"][data-k="t"][data-v="legendary"]'); await p.waitForTimeout(300);
     t = await p.evaluate(() => document.querySelector('#v-challenges').innerText); const n30 = L.filter(c => c.days === 30 && c.tier === 'legendary').length;
     T('filters: 30 days + Legendary narrows the 1,000 to just those', new RegExp(`${n30} of 1,000`).test(t) && (await p.evaluate(() => [...document.querySelectorAll('.cc2')].every(x => /30 days/.test(x.innerText) && /LEGENDARY/i.test(x.innerText)))), t.match(/\d+ of 1,000/));
-    await p.click('[data-act="cxf"][data-k="d"][data-v="0"]'); await p.click('[data-act="cxf"][data-k="t"][data-v=""]'); await p.waitForTimeout(200);
+    await p.click('[data-act="cxf"][data-k="d"][data-v="0"]'); await p.click('[data-act="cxf"][data-k="t"][data-v=""]'); await p.waitForTimeout(200); await p.click('.fs-wrap.open .fs-done'); await p.waitForTimeout(250);
     await p.fill('.cxf-q', c7.name); await p.waitForTimeout(600);
     T('search finds a challenge by name', (await p.locator('.cc2').count()) >= 1 && (await p.locator('.cc2').first().innerText()).includes(c7.name));
-    await p.locator('.cc2').first().click(); await p.waitForTimeout(700); t = await p.evaluate(() => document.querySelector('.csheet').innerText);
+    await p.locator('.cc2').first().click(); await p.waitForTimeout(700); t = await p.evaluate(() => document.querySelector('#cxSheet .csheet').innerText);
     T('the sheet: number, why, the road map (six checkpoints to the vault), the day-by-day pace, every route with finish odds, the rules, XP and the D$ prize', new RegExp(`#${c7.n} OF 1,000`, 'i').test(t) && /WHY THIS ONE/i.test(t) && /The Corner/.test(t) && /The Vault/.test(t) && /Day 7/.test(t) && /PICK YOUR ROUTE/i.test(t) && (await p.locator('.csr').count()) === 8 && /best odds/i.test(t) && /\d+% bust/.test(t) && new RegExp(`\\+${c7.xp}`).test(t) && t.includes(`D$${c7.prize}`), t.slice(0, 700));
     /* css v38 · Nov 23: the sheet's notes (finish odds, who's running it) were cream on its cream paper */
-    const shInk = await p.evaluate(() => [...document.querySelectorAll('.csheet .note')].map(el => { const c = getComputedStyle(el).color.match(/\d+(\.\d+)?/g).map(Number); return Math.round((c[0] + c[1] + c[2]) / 3); }));
+    const shInk = await p.evaluate(() => [...document.querySelectorAll('#cxSheet .csheet .note')].map(el => { const c = getComputedStyle(el).color.match(/\d+(\.\d+)?/g).map(Number); return Math.round((c[0] + c[1] + c[2]) / 3); }));
     T('the sheet\'s notes write in ink on its paper (the finish-odds line was cream on cream)', shInk.length >= 1 && shInk.every(x => x < 90), JSON.stringify(shInk));
     T('D$ with cents always shows both digits on the sheet (D$931.90, never D$931.9)', /D\$[\d,]+\.\d\d/.test(t) && !/D\$[\d,]+\.\d(?!\d)/.test(t), (t.match(/D\$[\d,]+\.\d+/g) || []).slice(0, 8).join(' '));
     await p.click('.csr[data-route="snowball"]'); await p.waitForTimeout(300);
@@ -359,7 +364,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     T('Bet from this run → the Slate, the slip bets from the run', from && from[0] === 'run:run1' && /Wallet/.test(from[1][0]) && from[1][1].includes(c7.name), JSON.stringify(from));
     await p.fill('#ddStake', '25'); await p.click('[data-act="ddplace"]'); await p.waitForTimeout(500);
     T('…placing sends the run with the bet', posts.some(([u, bd]) => u === '/acct/bet' && bd.run === 'run1' && bd.stake === 25));
-    await p.click('.tabs [data-go="challenges"]'); await p.waitForTimeout(300); await p.click('.compsw [data-go="leagues"]'); await p.waitForTimeout(800); t = await p.evaluate(() => document.querySelector('#v-leagues').innerText);
+    await tabGo(p, 'challenges'); await p.waitForTimeout(300); await p.click('.compsw [data-go="leagues"]'); await p.waitForTimeout(800); t = await p.evaluate(() => document.querySelector('#v-leagues').innerText);
     T('Leagues: live, open and final leagues; prize pools and payouts, dates and countdowns, bankroll, players, sports; the hall of champions', /LIVE NOW/i.test(t) && /OPEN FOR SIGN-UPS/i.test(t) && /FINAL/i.test(t) && /D\$8,500/.test(t) && /🥇 D\$5,000/.test(t) && /left/.test(t) && /Starts in 8d|Starts in 9d/.test(t) && /41\/500/.test(t) && /HALL OF CHAMPIONS/i.test(t) && /LoungeLizard/.test(t) && /\+D\$2,000/.test(t), t.slice(0, 1200));
     T('…the owner gets "Open a league"', /Open a league/.test(t));
     /* v63 · Nov 23, Chris: "to sign up for leagues there should be a signup fee (D$25 for starters)" */
@@ -371,7 +376,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: { nfl: [{ rk: 1, ab
     await p.evaluate(() => localStorage.setItem('tdp.ddslip', JSON.stringify([{ k: 'nfl|WSH@NYG', mk: 'ml', side: 'home', sp: 'nfl', price: -130, pick: 'NYG ML' }]))); await p.reload({ waitUntil: 'load' }); await p.waitForTimeout(1200);
     await p.click('[data-act="lguse"]'); await p.waitForTimeout(600); await p.fill('#ddStake', '25'); await p.click('[data-act="ddplace"]'); await p.waitForTimeout(500);
     T('a league bet sends the league with it', posts.some(([u, bd]) => u === '/acct/bet' && bd.league === 'g1'));
-    await p.click('.tabs [data-go="challenges"]'); await p.waitForTimeout(300); await p.click('.compsw [data-go="leagues"]'); await p.waitForTimeout(500);
+    await tabGo(p, 'challenges'); await p.waitForTimeout(300); await p.click('.compsw [data-go="leagues"]'); await p.waitForTimeout(500);
     await p.click('.lgnew summary'); await p.fill('form[data-form="lgsnew"] input[name="name"]', 'Bowl Season Bash'); await p.fill('form[data-form="lgsnew"] input[name="prizes"]', '20000, 5000');
     /* v36 · Nov 23 ("the text is unseeable"): the page runs color-scheme:dark, so a field with no color of its own wrote light text on the cream paper */
     const ink = await p.evaluate(() => [...document.querySelectorAll('form[data-form="lgsnew"] input:not([type="checkbox"]), form[data-form="lgsnew"] select, form[data-form="lgsnew"] textarea')].map(el => { const c = getComputedStyle(el).color.match(/\d+(\.\d+)?/g).map(Number), b = getComputedStyle(el).backgroundColor.match(/\d+(\.\d+)?/g).map(Number); const L = x => 0.2126 * x[0] + 0.7152 * x[1] + 0.0722 * x[2]; return { n: el.name || el.type, fg: Math.round(L(c)), bg: Math.round(L(b)) }; }));

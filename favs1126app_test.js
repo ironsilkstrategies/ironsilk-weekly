@@ -3,6 +3,10 @@
    “store as fav” option when they are on the characters profiles…which doubles as a filter on slates so they can filter down and see what
    their favs picked across the board". Real browser (iPhone 14), the repo's files, an invented open-beta feed, no network. */
 const fs = require('fs'), path = require('path');
+/* v88 · the calm pass: the Slate's filters live in a sheet (open it first), and rooms off the dock are one tap away in Rooms */
+const fsSlate = async pg => { if (await pg.$('#v-slate .fs-wrap.open')) return; if (await pg.$('[data-act="fsopen"][data-k="slate"]')) { await pg.click('[data-act="fsopen"][data-k="slate"]'); await pg.waitForTimeout(250); } };
+const fsDone = async pg => { if (await pg.$('.fs-wrap.open')) { await pg.click('.fs-wrap.open .fs-done'); await pg.waitForTimeout(250); } };
+const tabGo = async (pg, t) => { const b = pg.locator(`.tabs [data-go="${t}"]`); if (await b.isVisible().catch(() => false)) return b.click(); await pg.click('.tabs .rooms-btn'); await pg.waitForSelector(`#roomsLayer .rm[data-go="${t}"]`, { timeout: 8000 }); await pg.click(`#roomsLayer .rm[data-go="${t}"]`); };
 let pw; try { pw = require('playwright'); } catch (e) { pw = require('/opt/npm-tools/node_modules/playwright'); }
 const W = __dirname; let pass = 0, fail = 0; const T = (n, c, x) => { c ? pass++ : fail++; console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  — ' + String(x || '').slice(0, 600))); };
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json' };
@@ -47,9 +51,9 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: {}, days: [{ d: day
     /* the filter with no favs yet */
     await p.goto('https://desk.test/desk/#slate', { waitUntil: 'load' }); await p.waitForTimeout(1200);
     T('the Slate has a ⭐ My favs chip beside 💰 Winning & up', await p.locator('.bf [data-k="fav"]').count() === 1 && /My favs/.test(await p.locator('.bf [data-k="fav"]').innerText()));
-    await p.click('.bf [data-k="fav"]'); await p.waitForTimeout(300);
+    await fsSlate(p); await p.click('.bf [data-k="fav"]'); await p.waitForTimeout(300);
     T('…on with no favs yet: it says how to star one (and points to the Cast)', /No favs yet/.test(await p.locator('.bf-note').innerText()) && await p.locator('.bf-note [data-go="cast"]').count() === 1, await p.locator('.bf-note').innerText());
-    await p.click('.bf [data-k="fav"]'); await p.waitForTimeout(200);
+    await fsSlate(p); await p.click('.bf [data-k="fav"]'); await p.waitForTimeout(200);
     /* a profile: every lane with its record, rank and a star */
     await p.goto('https://desk.test/desk/#cast', { waitUntil: 'load' }); await p.waitForTimeout(900);
     await p.selectOption('#castSel', 'Most common'); await p.waitForTimeout(400);
@@ -71,14 +75,14 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: {}, days: [{ d: day
     /* the Slate: only your favs, in their lanes */
     await p.goto('https://desk.test/desk/#slate', { waitUntil: 'load' }); await p.waitForTimeout(1000);
     T('…the chip counts the games where a fav has a pick in a starred lane (all 3)', /My favs 3/.test((await p.locator('.bf [data-k="fav"]').innerText()).replace(/\s+/g, ' ')), await p.locator('.bf [data-k="fav"]').innerText());
-    await p.click('.bf [data-k="fav"]'); await p.waitForTimeout(400);
+    await fsSlate(p); await p.click('.bf [data-k="fav"]'); await p.waitForTimeout(400);
     const rows = await slateRows(), note = await p.locator('.bf-note').innerText();
     T('⭐ My favs on: the Scorekeeper\'s Wolves ML, the Judge\'s NHL over, the Grinder\'s dog ML (matched by its label) — nothing else', rows.length === 3 && /Timberwolves ML/.test(rows[0]) && /Scorekeeper/i.test(rows[0]) && !/Coach|Judge/i.test(rows[0]) && /Over 6\.5/.test(rows[1]) && !/Maple Leafs ML|Scorekeeper/i.test(rows[1]) && /North Dakota ML|UND ML/.test(rows[2]) && /Grinder/i.test(rows[2]), JSON.stringify(rows));
     T('…each call shows its lane record and a ⭐', /The Scorekeeper 71% 41–19, \+8\.2u ⭐/i.test(rows[0]), rows[0]);
     T('…and the note adds the starred lanes up: 3 lanes, 3 picks, 118–78, +29.1u together', /Your 3 starred lanes: 3 picks on this sheet\. Together they’re 118–78, \+29\.1u in those lanes/.test(note), note);
     /* star or drop one straight from a game */
-    await p.click('.bf [data-k="fav"]'); await p.waitForTimeout(300);
-    await p.click('#v-slate .game >> nth=0 >> button[data-act="game"]'); await p.waitForTimeout(400);
+    await fsSlate(p); await p.click('.bf [data-k="fav"]'); await p.waitForTimeout(300);
+    await fsDone(p); await p.click('#v-slate .game >> nth=0 >> button[data-act="game"]'); await p.waitForTimeout(400);
     const coachStar = p.locator('#v-slate .won li', { hasText: 'The Coach' }).locator('.favb');
     T('in an open game, every call in "Who\'s with it" has its own ☆ (starred ones ★)', await p.locator('#v-slate .won li .favb').count() === 3 && (await p.locator('#v-slate .won li', { hasText: 'The Scorekeeper' }).locator('.favb').getAttribute('aria-pressed')) === 'true' && (await coachStar.getAttribute('aria-pressed')) === 'false');
     await coachStar.click(); await p.waitForTimeout(300);

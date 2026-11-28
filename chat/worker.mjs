@@ -15,8 +15,10 @@ const MAX_TEXT = 500, KEEP = 400, PAGE = 80, PASS_DAYS = 30;
 const BAD = ['fuck', 'shit', 'bitch', 'cunt', 'nigger', 'nigga', 'faggot', 'fag', 'retard', 'whore', 'slut', 'dick', 'pussy', 'asshole', 'bastard', 'motherfucker'];
 import { get as chal, inLib, checkpoints, ROUTES, ruleCheck, tierOf, rankOf } from './chal-lib.mjs';
 import { fbHook, Inbox } from './fb-inbox.mjs';
+import { Push } from './push-do.mjs';   /* v88 · device alerts: the bell in the app, the pulse from the autopilot */
 import { DR_FMT, DR_SINGLE, DR_PARLAY, DR_PICK_MS, DR_OPEN_MS, DR_DAYS, DR_FEES, DR_XP_WIN, DR_XP_PLAY, drSnake, drPool, drAutoPick, drBoardGame, drCallers, drAssign, drAutoLegs, drDay, drStatus, drRank } from './draft-lib.mjs';   /* v3.3.2 · the Facebook inbox: comment FREE 3 → a private reply; the Page's inbox → an automated first reply */
 export { Inbox };
+export class PushBox extends Push { constructor(ctx, env) { super(ctx, env, { cors: req => cors(req, env) }); } }
 const RESERVED = /^(thedesk|the desk|admin|owner|moderator|mod|system|the (simulator|judge|coach|scorekeeper|oracle|historian|crowd|commissioner|underdog spotter|scout|banker|brain))$/i;
 export const clean = t => BAD.reduce((s, w) => s.replace(new RegExp(`\\b${w}(s|es|ed|ing|er|ers)?\\b`, 'gi'), m => m[0] + '*'.repeat(m.length - 1)), t);
 /* v3.3 · where a member came from (?src= on their first visit): a short tag, letters/numbers/-/_ only */
@@ -33,6 +35,7 @@ const json = (o, status, h) => new Response(JSON.stringify(o), { status, headers
 export default { async fetch(req, env, ctx) { const url = new URL(req.url);
   if (url.pathname.startsWith('/fb/')) return fbHook(req, env, ctx);   /* Meta's webhooks: no CORS, no cookies, signed with the app secret */
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req, env) });
+  if ((url.pathname.startsWith('/push/') || url.pathname === '/pulse') && env.PUSH) return env.PUSH.get(env.PUSH.idFromName('push')).fetch(req);   /* v88 */
   if (url.pathname.startsWith('/acct/') && env.ACCT) return env.ACCT.get(env.ACCT.idFromName('members')).fetch(req);
   if (!url.pathname.startsWith('/chat/')) return json({ error: 'not found' }, 404, cors(req, env));
   const room = env.ROOM.get(env.ROOM.idFromName('lounge')); return room.fetch(req); } };

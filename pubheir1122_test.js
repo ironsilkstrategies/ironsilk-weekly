@@ -40,7 +40,7 @@ const SLATE = { v: 1, ts: now, tz: 'America/Chicago', ranks: {}, days: [] };
   }
   let v = await visit(FEED); let t = await v.text(), h = await v.html();
   T('the Cast page: a newborn gets a "New on the desk" banner with its crest, its parents and its birthday', /New on the desk: The Architect/i.test(t) && /Child of The Simulator and The Judge/i.test(t) && (await v.p.locator('#v-cast .newheir svg.crest').count()) === 1, t.slice(0, 300));
-  T('…its card on the roster wears its crest and its rookie badge (the other characters\' cards don\'t)', (await v.p.locator('#v-cast .castcard.kid svg.cc-crest').count()) === 1 && /🍼 Rookie/.test(await v.p.locator('#v-cast .castcard.kid').innerText()) && (await v.p.locator('#v-cast .castcard:not(.kid) svg').count()) === 0);
+  T('…its card on the roster wears its crest and its rookie badge (the other characters\' cards don\'t)', (await v.p.locator('#v-cast .castcard.kid svg.cc-crest').count()) === 1 && /🍼 Rookie/.test(await v.p.locator('#v-cast .castcard.kid').innerText()) && (await v.p.locator('#v-cast .castcard:not(.kid) svg:not(.fx-const)').count()) === 0   /* v88 · every card has its constellation (the effects layer); the crest is the heir's alone */);
   T('…the crest is split in its parents\' colors', /fill="#FFD75E"/.test(h) && /fill="#f5a524"/.test(h));
   T('…and the womb gets its line under the roster: who\'s expecting, what kind of child, since when', /The womb/i.test(t) && /The Coach × The Historian/.test(t) && /a Steady All-rounder/.test(t) && /Expecting/i.test(t), (t.match(/The womb[\s\S]{0,200}/i) || [''])[0]);
   await v.p.click('#v-cast .newheir .nh'); await v.p.waitForTimeout(400); t = await v.text();

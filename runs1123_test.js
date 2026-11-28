@@ -8,6 +8,10 @@
    Real browser, the repo's own files, invented feeds and account, no network. The clock is fixed at Nov 23, 8:40 PM Central.
    node runs1123_test.js [shots-dir] → also saves screenshots. */
 const fs = require('fs'), path = require('path');
+/* v88 · the calm pass: the Slate's filters live in a sheet (open it first), and rooms off the dock are one tap away in Rooms */
+const fsSlate = async pg => { if (await pg.$('#v-slate .fs-wrap.open')) return; if (await pg.$('[data-act="fsopen"][data-k="slate"]')) { await pg.click('[data-act="fsopen"][data-k="slate"]'); await pg.waitForTimeout(250); } };
+const fsDone = async pg => { if (await pg.$('.fs-wrap.open')) { await pg.click('.fs-wrap.open .fs-done'); await pg.waitForTimeout(250); } };
+const tabGo = async (pg, t) => { const b = pg.locator(`.tabs [data-go="${t}"]`); if (await b.isVisible().catch(() => false)) return b.click(); await pg.click('.tabs .rooms-btn'); await pg.waitForSelector(`#roomsLayer .rm[data-go="${t}"]`, { timeout: 8000 }); await pg.click(`#roomsLayer .rm[data-go="${t}"]`); };
 let pw; try { pw = require('playwright'); } catch (e) { pw = require('/opt/npm-tools/node_modules/playwright'); }
 const W = __dirname, SHOTS = process.argv[2] || ''; let pass = 0, fail = 0; const T = (n, c, x) => { c ? pass++ : fail++; console.log((c ? 'PASS ' : 'FAIL ') + n + (c ? '' : '  — ' + String(x || '').slice(0, 500))); };
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml' };
@@ -170,7 +174,7 @@ const RUN = { rid: 'r1', cid: CJ, name: 'Tester', ts: AT - 3 * 36e5, ends: AT + 
     if (SHOTS) { const box = await p.$('.won'); if (box) await box.screenshot({ path: path.join(SHOTS, 'quotes.png') }); }
     T('no script errors on the Slate', errs.length === 0, errs.join(' | '));
     /* ── 2 · finals with the margin and the total, everywhere a game settled ── */
-    await p.click('.tabs [data-go="longshots"]'); await p.waitForTimeout(1500);
+    await tabGo(p, 'longshots'); await p.waitForTimeout(1500);
     t = await p.evaluate(() => document.querySelector('#v-longshots').innerText.replace(/\s+/g, ' '));
     T('LongShots: a settled leg shows its final, who won by how much, and the total (it showed nothing)', /Over 145\.5[^]*SFA at UVU[^]*Final SFA 70–81 UVU · UVU by 11 · total 151/.test(t), (t.match(/Over 145\.5.{0,160}/) || [])[0]);
     T('…the other settled leg too, once its game is final (TEM 77–80)', /Over 141\.5[^]*Final TEM 77–80 UTM · UTM by 3 · total 157/.test(t) && !/already clinched/.test(t), (t.match(/Over 141\.5.{0,180}/) || [])[0]);

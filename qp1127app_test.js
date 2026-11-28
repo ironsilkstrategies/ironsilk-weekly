@@ -91,12 +91,12 @@ const ME = { name: 'Tester', xp: 300, rank: { name: 'Runner', next: 500, nextNam
     await p.waitForTimeout(600);
     const g = await p.evaluate(() => { const tb = document.querySelector('.tabs').getBoundingClientRect(), last = document.querySelector('.tabs button:last-child').getBoundingClientRect(), tx = document.querySelector('#tixBtn').getBoundingClientRect(), ac = document.querySelector('#acctBtn').getBoundingClientRect();
       return { iw: innerWidth, tabs: Math.round(tb.width), last: Math.round(last.right), tix: Math.round(tx.right), acct: Math.round(ac.right), n: [...document.querySelectorAll('.tabs button')].filter(x => { const r = x.getBoundingClientRect(); return r.width && r.left >= 0 && r.right <= innerWidth + 1; }).length }; });
-    T('something 800px wide on a page no longer widens it: all 8 tabs on the bottom bar, My tickets and your account in the top bar (the bar ran 816px wide and showed half its tabs)', g.iw === 390 && g.tabs === 390 && g.n === 8 && g.last <= 390 && g.tix <= 390 && g.acct <= 390, JSON.stringify(g));
+    T('something 800px wide on a page no longer widens it: the whole dock (four rooms + Rooms) on screen, My tickets and your account in the top bar (the bar ran 816px wide and showed half its tabs)', g.iw === 390 && g.tabs <= 390 && g.tabs >= 360 && g.n === 5 && g.last <= 390 && g.tix <= 390 && g.acct <= 390, JSON.stringify(g));
     await p.evaluate(() => { location.hash = '#tix'; }); await p.waitForTimeout(800);
     await p.evaluate(() => { const d = document.createElement('div'); d.style.cssText = 'display:flex;gap:8px'; d.innerHTML = '<b style="white-space:nowrap">' + 'Thanksgiving Week Classic '.repeat(6) + '</b>'; document.querySelector('#v-tix').prepend(d); });
     await p.waitForTimeout(500);
     const g2 = await p.evaluate(() => ({ iw: innerWidth, tabs: Math.round(document.querySelector('.tabs').getBoundingClientRect().width) }));
-    T('…a long line that won\'t wrap (a league name six times over) on My tickets: same, the page stays the phone\'s width', g2.iw === 390 && g2.tabs === 390, JSON.stringify(g2));
+    T('…a long line that won\'t wrap (a league name six times over) on My tickets: same, the page stays the phone\'s width', g2.iw === 390 && g2.tabs <= 390 && g2.tabs >= 360, JSON.stringify(g2));
     T('no script errors', errs.length === 0, errs.join(' | '));
   } catch (e) { T('test ran', false, e.stack); }
   await b.close(); console.log(`${pass}/${pass + fail} passed`); process.exit(fail ? 1 : 0);

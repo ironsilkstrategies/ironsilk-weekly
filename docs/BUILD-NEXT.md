@@ -285,3 +285,36 @@ Lead: Ashley Wu (sign-off) · With: everyone
 - The womb/storage incident of Nov 26 is fixed (v3.5.37): storage merges all the way down; pages without saved history leave
   the womb, calibration rows and power history alone.
 - The December launch brief (audit, backtest, beta-exit plan, positioning) is a Claude Doc Chris has.
+
+---
+
+## v88 · What got built (Nov 27, night)
+
+**Noah's field report (Firecrawl research, Nov 27).** Kept: felt, paper slips, brass and foil, the big display type. Adopted from 2026's platform and design shifts:
+Interop 2026 (view transitions, dialogs/popovers, anchor positioning, scroll-driven animations, scroll snap all cross-browser), Apple's Liquid Glass
+(glass for the control layer only: header, dock, sheets; never the content), Material 3 Expressive (springs, done here with CSS `linear()`),
+Declarative Web Push (Safari 18.4+: the notification shows even when iOS has put the service worker away), Document Picture-in-Picture (an
+always-on-top mini desk on Chrome/Edge desktop), the Windows 11 Widgets Board (Adaptive Cards from the manifest), and Scriptable for real iPhone
+Home/Lock Screen widgets without an App Store app. Passed on: WebGPU/3D (battery, no gain), AI portraits for characters (new heirs are born
+daily; generated constellations scale and show bloodlines), streak-pressure nags and near-miss theatrics (deceptive patterns in betting UX).
+
+**The calm pass (Chris: "pop up filters pages… compartmentalize… don't lose any of the tech and options").**
+- Dock: four rooms the member chooses + Rooms (every room, live badges, Jump search across rooms, today's teams and the characters). `rooms.js`, loaded on first tap.
+- Filter sheets on the Slate, Props and Challenges: the very same controls and handlers, inside a sheet that rises from a Filters button with a count; every filter that's on rides under it as a pill you tap off; the Slate's note rides under the pills.
+- Explainers (howTo) are a one-line card; the tips open in an ⓘ sheet. Long reads clamp to three lines; LongShot tickets past four legs fold to a strip of dots.
+- Page turns: same-document view transitions, direction-aware (off under Reduce Motion, Calm, and in automated browsers unless `?vt=1`).
+- Test: `calm1127app_test.js` (27) counts every filter in the sheets so nothing can go missing.
+
+**Noah's layer (`desk/fx.js`, lazy; `?fx=0` never loads it).** Synthesized sound (ambient audio session: under music, silenced by the
+silent switch), haptics (Android vibrate; iPhone's switch tick on real taps), foil + tilt (pointer on desktop, the phone's motion once allowed),
+seal-break and stamp bursts (gold for a win, an honest stamp and a low note for a loss), live pulse, score bump, a constellation per character
+(an heir's stars from both parents), and the bell's sheet: Alerts · Sound & feel · My Desk.
+
+**Device alerts.** `chat/push-lib.mjs` (RFC 8291/8292 by hand; passes the RFC's own vector byte for byte), `chat/push-do.mjs` (the PushBox DO,
+migration v4: subscribe, test, pulse in, events out, quiet hours in the member's zone, ten a day, eight per wake-up for the free plan's limits,
+GET /pulse for widgets). The autopilot posts the pulse (`autopilot/pulse.mjs`, signed with an HMAC of CHAT_ADMIN_CODE) whenever the public
+card changes; the service worker shows it, taps open its room, re-subscribes on its own, and keeps the Windows widget fresh.
+Tests: `push1127_test.mjs` (20), `pushdo1127_test.mjs` (20).
+
+**My Desk widgets.** `desk/widget.html` + `widget.js`: the preview, the pop-out mini desk (Document PiP), embed code, a see-through OBS
+overlay, the iPhone Scriptable script (generated from My Desk), and the Windows 11 widget (`widget/today.json`).
