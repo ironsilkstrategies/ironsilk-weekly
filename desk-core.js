@@ -461,6 +461,31 @@ function cpxState(){const d=today();const S=get(CPX_KEY,{})||{};if(S[d]&&S[d].lo
    erases two and a half wins, and the calls priced there beat the closing line by the least. */
 const DESK_B3_LO=-200;
 function pickFit(x,sp,o,R){o=o||pickConf(x,sp);if(!o)return 0;return o.cf*deskLaneMult(o.best,x.sp||sp,mkNorm(x.m||x.market),R||deskLaneRec());}
+/* v3.5.38 · THE PROVEN LANES. Nov 27, Chris: "is there a way with all this data we've collected to find a new ideology for the free 3
+   picks that may give us better results going into next month?" The Best 3 keeps every gate it has (an official call, priced −200 to
+   +400, worth its price, lane open, model not fighting the market, one sport each first) but it ranked by confidence × the top
+   character's league-and-market record, and that confidence mostly tracks the price: over its life the card's near-even picks (−114 to
+   +114) went 32-17 for +12.2u while its favorites at −150 or shorter went 24-26 for −12.8u. From Dec 1 it ranks by WHO HAS BEEN PAYING
+   IN EXACTLY THIS BET: for every character on the pick, its last 21 days in that sport × market × role (college hoops spread dogs,
+   college football unders…), units per call shrunk toward zero (20 calls of nothing in front, 15 calls at least), the best two added.
+   Replayed walk-forward on the ledger (each day only from the days before it) with the same gates: 31-16, +11.7% from Oct 28 to Nov 26
+   (+9.2% through Nov 13, +13.3% after) where the old ranking went −5.9%, and positive under all 81 settings tried (14/21/30 days, three
+   shrinks, three minimums, the best one, two or three characters). The old ranking stays one switch away (d4.b3lane = false). */
+const B3_LANE_FROM='2026-12-01',B3_LANE_KEY='d4.b3lane',B3_LANE_DAYS=21,B3_LANE_K=20,B3_LANE_N=15;
+function b3LaneOn(){try{return today()>=B3_LANE_FROM&&get(B3_LANE_KEY,true)!==false;}catch(e){return false;}}
+const b3LaneRole=(m,side,line,price)=>m==='total'?(/under/i.test(String(side))?'under':'over'):m==='spread'?(line!=null&&line!==''&&+line<0?'fav':'dog'):(+price<0?'fav':'dog');
+let B3LT_C=null;
+function b3LaneTable(){const d=today();const V=roGet(VOICES_KEY,[],30e3)||[];const sig=d+'|'+V.length+'|'+(V.length?V[V.length-1].id:'');if(B3LT_C&&B3LT_C.sig===sig)return B3LT_C;
+  const from=dayShift(d,-B3_LANE_DAYS),U=new Map(),B=new Map();
+  V.forEach(c=>{if(!c||!CHARS[c.voice]||META_VOICES.has(c.voice)||CHARS[c.voice].kid)return;const m=mkNorm(c.market);if(m!=='ml'&&m!=='spread'&&m!=='total')return;
+    const p=+c.price;if(c.price==null||c.price===''||!isFinite(p)||Math.abs(p)<100)return;const cd=String(c.date||'').slice(0,10);
+    if(cd===d){const k=c.sp+'|'+c.game+'|'+m+'|'+c.side;let s=B.get(k);if(!s){s=new Set();B.set(k,s);}s.add(c.voice);return;}
+    if(cd<from||cd>=d||!c.graded||c.hit==null)return;
+    const k=c.voice+'|'+c.sp+'|'+m+'|'+b3LaneRole(m,c.side,c.line,p),o=U.get(k)||{n:0,u:0};o.n++;o.u+=c.push?0:c.hit?americanToDecimal(p)-1:-1;U.set(k,o);});
+  B3LT_C={sig,U,B};return B3LT_C;}
+function b3LaneScore(x,s0){const T=b3LaneTable(),m=mkNorm(x.m||x.market),sd=x.sd||x.side,sp=x.sp||s0,who=T.B.get(sp+'|'+x.game+'|'+m+'|'+sd);if(!who)return{s:0,by:[]};
+  const role=b3LaneRole(m,sd,x.line,x.price),L=[];who.forEach(v=>{const o=T.U.get(v+'|'+sp+'|'+m+'|'+role);if(o&&o.n>=B3_LANE_N)L.push({v,n:o.n,u:+o.u.toFixed(2),s:o.u/(o.n+B3_LANE_K)});});
+  L.sort((a,b)=>b.s-a.s);return{s:+(L.slice(0,2).reduce((t,o)=>t+o.s,0)+0.001*who.size).toFixed(4),by:L.slice(0,2).map(o=>({v:o.v,n:o.n,u:o.u})),role};}
 /* a card locked by a pre-v1.73 build keeps the rules it was locked under */
 function best3PoolLegacy(by,sp){const pool=[];Object.entries(by).forEach(([s0,B])=>{if(sp&&s0!==sp)return;(B.picks||[]).forEach(x0=>{const x={...x0,sp:x0.sp||s0};const p=best5Prob(x);const ev=best3Ev(x);
     if(x.price==null||x.price<-200||x.price>BEST3_HI||x.incoherent||x.suspect||best3Tier(x)<1||p==null||p<0.45||ev==null||ev<1)return;pool.push({...x,p,ev});});});
@@ -477,11 +502,14 @@ function best3Pool(by,sp,opts){opts=opts||{};if(opts.ignoreTime)return best3Pool
     const o=pickConf(x,s0)||ruleFloorAdmit(x,s0);if(!o){why.conf++;return;}
     const p=o.cf,ev=(p*americanToDecimal(+x.price)-1)*100;if(ev<0.5){why.ev++;return;}
     pool.push({...x,p,ev,cf:p,conf:o.n,confBy:o.who,fit:pickFit(x,s0,o,R),...(o.tuned?{tuned:true}:{})});});});
-  pool.sort((a,b)=>b.fit-a.fit||b.ev-a.ev);
+  /* v3.5.38 · from Dec 1: ranked by the proven lanes of the characters on it (the gates above are unchanged) */
+  const LN=b3LaneOn();if(LN)pool.forEach(x=>{const o=b3LaneScore(x,x.sp);x.lane=o.s;x.laneBy=o.by;});
+  const rk=LN?(a,b)=>b.lane-a.lane||b.fit-a.fit||b.ev-a.ev:(a,b)=>b.fit-a.fit||b.ev-a.ev;
+  pool.sort(rk);
   /* v2.50 · one sport can't take all three while another has a qualifying pick: each sport's best first, then the best of the rest */
   const u=new Set(),per=new Set(),out=[];for(const x of pool){if(out.length===3)break;const k=x.sp+'|'+x.game;if(u.has(k)||per.has(x.sp))continue;u.add(k);per.add(x.sp);out.push(x);}
   for(const x of pool){if(out.length===3)break;const k=x.sp+'|'+x.game;if(u.has(k))continue;u.add(k);out.push(x);}
-  out.sort((a,b)=>b.fit-a.fit||b.ev-a.ev);out.why=why;return out;}
+  out.sort(rk);out.why=why;if(LN)out.rank='lane';return out;}
 /* v2.80.5 · OPTIONAL — spread the Best 3 across sports (the 🌐 switch on the Best tab). Off by default: the card never
    forces a pick. On: when a sport with games still to play today has no pick that clears the full bar, its best
    near-miss can take the slot of the weakest pick from a sport holding two. The near-miss must pass every safety rule
