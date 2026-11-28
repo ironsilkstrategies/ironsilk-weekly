@@ -1551,3 +1551,7 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .qp-filt>summary::-webkit-details-marker{display:none}
 .qp-filt>summary small{padding:3px 7px;border-radius:99px;background:var(--foil);color:#1b1405;font:800 11px/1 var(--text)}
 .qp-filt[open] .qp-fw{display:none}
+/* v86 · the Quick Pick sheet holds its full height while you build (it grew from the bottom with each leg, moving everything) */
+.csheet.qps{height:92vh;height:min(92vh,calc(100dvh - var(--topsafe) - 26px))}
+@media (min-width:760px){.csheet.qps{height:min(88vh,calc(100dvh - var(--topsafe) - 26px))}}
+.csheet.still{animation:none}

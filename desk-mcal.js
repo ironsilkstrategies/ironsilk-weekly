@@ -53,7 +53,8 @@ function mcalPropRows(P,graded){const G={};
     out.push({key:'p|'+g+'|'+T,t:'p',sp:at[0].sp,d:at[0].d,player:at[0].player,team:at[0].team,k:at[0].k,thr:T,pm:+mcSig(pm).toFixed(4),nge,v:at.map(x=>x.voice).sort().join(','),y});});});
   return out;}
 /* fold the newly graded legs into the stack — never counted twice; older than 150 days let go */
-function mcalStack(){const S=get(MCAL_ROWS,null)||{v:MCAL_V,rows:{}};const R=S.rows||{};let add=0;
+function mcalStack(){if(typeof storeDegraded==='function'&&storeDegraded())return{add:0,n:0};   /* v3.5.37 · a page without your saved history can't see the rows: it never saves a thin copy (Nov 26 one did) */
+  const S=get(MCAL_ROWS,null)||{v:MCAL_V,rows:{}};const R=S.rows||{};let add=0;
   const put=r=>{if(r.y==null)return;if(!R[r.key])add++;const o={...r};delete o.key;R[r.key]=o;};
   try{mcalTeamRows(roGet(VOICES_KEY,[],30e3)||[],true).forEach(put);}catch(e){console.warn('mcal team rows',e);}
   try{mcalPropRows(roGet(typeof CPROP_KEY!=='undefined'?CPROP_KEY:'d4.charprops',[],30e3)||[],true).forEach(put);}catch(e){console.warn('mcal prop rows',e);}

@@ -17,10 +17,23 @@
   var WHY_K='d4.__storewhy',DG_K='d4.__dgkeys',PREV='__prev:',DEGRADED=false;
   function note(why,ms){try{RLS.setItem(WHY_K,JSON.stringify({ts:Date.now(),why:String(why||''),ms:ms||0}));}catch(e){}}
   function idOf(x){return x&&typeof x==='object'?(x.id!=null?'i:'+x.id:x.ts!=null&&x.d==null&&x.date==null?'t:'+x.ts+':'+JSON.stringify(x).length:'j:'+JSON.stringify(x)):'j:'+JSON.stringify(x);}
+  /* v3.5.37 · ALL THE WAY DOWN. The merge was one level deep: a record shaped {v, litters, kids} or {v, ts, rows} took the thin copy's
+     whole `litters` / `rows`. Nov 26, evening: a page opened before the big store answered, saw an empty womb, empty calibration rows and
+     one day of power ranks, and saved those; the next morning's merge put them over the full ones (the womb's three families in progress,
+     7,751 calibration rows, two weeks of NFL, NHL and college basketball power history). Now records merge key by key at every level;
+     a list of records that carry ids merges by id at any depth (an empty list never empties a full one); any other list, and every
+     plain value, is the newer copy's. */
+  function plain(x){return!!x&&typeof x==='object'&&!Array.isArray(x);}
+  function ids(a){for(var i=0;i<a.length;i++){if(!plain(a[i])||a[i].id==null)return false;}return true;}
+  function deep(A,B){
+    if(Array.isArray(A)&&Array.isArray(B)){if(!ids(A)||!ids(B))return B;var out=A.slice(),pos=new Map();out.forEach(function(x,i){pos.set(String(x.id),i);});
+      B.forEach(function(x){var k=String(x.id);if(pos.has(k))out[pos.get(k)]=x;else{pos.set(k,out.length);out.push(x);}});return out;}
+    if(plain(A)&&plain(B)){var o={},k;for(k in A)o[k]=A[k];for(k in B)o[k]=Object.prototype.hasOwnProperty.call(A,k)?deep(A[k],B[k]):B[k];return o;}
+    return B;}
   function merge(a,b){var A,B;try{A=JSON.parse(a);B=JSON.parse(b);}catch(e){return null;}
     if(Array.isArray(A)&&Array.isArray(B)){var out=A.slice(),pos=new Map();out.forEach(function(x,i){pos.set(idOf(x),i);});
       B.forEach(function(x){var k=idOf(x);if(pos.has(k))out[pos.get(k)]=x;else{pos.set(k,out.length);out.push(x);}});return JSON.stringify(out);}
-    if(A&&B&&typeof A==='object'&&typeof B==='object'&&!Array.isArray(A)&&!Array.isArray(B)){var o={},k;for(k in A)o[k]=A[k];for(k in B)o[k]=B[k];return JSON.stringify(o);}
+    if(plain(A)&&plain(B))return JSON.stringify(deep(A,B));
     return null;}
   window.addEventListener('load',function(){LOADED=true;});
   function open(){return new Promise(function(res,rej){var r=indexedDB.open('thedesk',1);r.onupgradeneeded=function(){r.result.createObjectStore('kv');};r.onsuccess=function(){res(r.result);};r.onerror=function(){rej(r.error);};r.onblocked=function(){rej(new Error('blocked'));};});}
@@ -81,15 +94,23 @@
           if(iv!==lv&&(dg[k]||lv.length>=BIG||iv.length>lv.length*2)){var mv=merge(iv,lv);if(mv==null)mv=iv.length>=lv.length?iv:lv;
             if(!m.has(PREV+k))stash.push([PREV+k,iv]);MEM.set(k,mv);fix.push(k);continue;}}
         MEM.set(k,lv);}
+      /* v3.5.37 · once: the two records the Nov 26 merge thinned get their kept-aside full copy merged back under what's there now
+         (every calibration row and every day of power ranks either copy has; today's copy wins where both have one). The womb's
+         families come back in desk-womb.js, by the womb's own rules. */
+      var RM_K='d4store.remerged',rm={},again=[];try{rm=JSON.parse(RLS.getItem(RM_K)||'{}')||{};}catch(e){rm={};}
+      ['d4.mcalrows','d4.pwrhist'].forEach(function(k){var pv=m.get(PREV+k),cur=MEM.get(k);if(rm[k]||pv==null||cur==null)return;rm[k]=Date.now();
+        var mv=merge(pv,cur);if(mv!=null&&mv!==cur){MEM.set(k,mv);again.push(k);}});
+      if(Object.keys(rm).length)try{RLS.setItem(RM_K,JSON.stringify(rm));}catch(e){}
       try{Object.defineProperty(window,'localStorage',{configurable:true,get:function(){return proxy;}});}catch(e){throw e;}
       if(window.localStorage!==proxy)throw new Error('could not take over localStorage');
       ON=true;
       stash.forEach(function(p){queue(p[0],p[1]);});
+      again.forEach(function(k){var v=MEM.get(k);if(v.length<BIG){try{RLS.setItem(k,v);}catch(e){}queue(k,null);}else queue(k,v);});
       /* a merged value smaller than the big-store size lives on the small shelf (and its big copy goes) */
       fix.forEach(function(k){var v=MEM.get(k);if(v!=null&&v.length<BIG){try{RLS.setItem(k,v);}catch(e){}queue(k,null);}});
       /* move every big value that is still on the small shelf (merged ones included) */
       MEM.forEach(function(v,k){if(v!=null&&v.length>=BIG&&RLS.getItem(k)!=null)queue(k,v);});
-      try{RLS.removeItem(DG_K);}catch(e){}note(fix.length?'ok · merged '+fix.length+' records written while it was off':'ok',Date.now()-t0);if(fix.length)window.__D4_MERGED=fix.slice();
+      try{RLS.removeItem(DG_K);}catch(e){}note((fix.length?'ok · merged '+fix.length+' records written while it was off':'ok')+(again.length?' · '+again.length+' thinned records filled back in':''),Date.now()-t0);if(fix.length)window.__D4_MERGED=fix.slice();if(again.length)window.__D4_REMERGED=again.slice();
       try{BC=new BroadcastChannel('d4store');BC.onmessage=function(e){var d=e.data||{};if(d.k==null)return;if(d.v===null)MEM.delete(d.k);else MEM.set(d.k,d.v);
         try{window.dispatchEvent(new StorageEvent('storage',{key:d.k,newValue:d.v}));}catch(_){}};}catch(e){}
       document.addEventListener('visibilitychange',function(){if(document.hidden)flush();});

@@ -42,6 +42,13 @@ const ME = { name: 'Tester', xp: 300, rank: { name: 'Runner', next: 500, nextNam
     const legs = () => p.evaluate(() => [...document.querySelectorAll('.qps .qp-legs li')].map(li => (li.classList.contains('held') ? '🔒' : '') + li.querySelector('.qp-b b').innerText.replace(/\s+/g, ' ').replace(/ [+−-]\d+$/, '')));
     const shuf = () => p.evaluate(() => { const s = document.querySelector('.qps [data-act="qpshuf"]'); return s ? (s.disabled ? 'off:' + (s.title || '') : 'on') : 'gone'; });
     await p.click('.qps .qp-tune > summary'); await p.waitForTimeout(200);
+    /* v86 · "the screen jump[s] when I click + to add legs": the + stays where it was, tap after tap */
+    const plusTop = () => p.evaluate(() => Math.round(document.querySelector('.qps [data-act="qpk"][data-d="1"]').getBoundingClientRect().top));
+    await p.evaluate(() => { const b = document.querySelector('.qps [data-act="qpk"][data-d="1"]'), sh = document.querySelector('.qps'); sh.scrollTop += b.getBoundingClientRect().top - innerHeight * 0.6; });
+    await p.waitForTimeout(150); const tops = [await plusTop()];
+    for (let i = 0; i < 3; i++) { await p.click('.qps [data-act="qpk"][data-d="1"]'); await p.waitForTimeout(150); tops.push(await plusTop()); }
+    const sheetTop = await p.evaluate(() => Math.round(document.querySelector('.qps').getBoundingClientRect().top));
+    T('tapping + to add legs keeps the + under your finger (no jump), and the sheet holds its height', tops.every(x => Math.abs(x - tops[0]) <= 2), JSON.stringify({ tops, sheetTop }));
     for (let i = 0; i < 10; i++) { const plus = p.locator('.qps [data-act="qpk"][data-d="1"]'); if (await plus.isDisabled()) break; await plus.click(); await p.waitForTimeout(120); }
     let L = await legs(); const plusOff = await p.locator('.qps [data-act="qpk"][data-d="1"]').isDisabled(), kShown = await p.evaluate(() => document.querySelector('.qps .qp-step b').innerText);
     T('Legs go up to 10 now (it stopped at 8), and + switches off there', L.length === 10 && kShown === '10' && plusOff, JSON.stringify([L.length, kShown, plusOff]));

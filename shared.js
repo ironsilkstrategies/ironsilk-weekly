@@ -3602,7 +3602,7 @@ function sportSlipToggle(sport,gid,label,price,extra){
 }
 const SPORT_PAGE={mlb:'mlb.html',nfl:'nfl.html',ncaaf:'cfb.html',nhl:'nhl.html',nba:'nba.html',ncaab:'ncaab.html'};
 /* Bump with every deploy. Sport-to-sport taps carry it so Safari fetches the new page instead of a cached one. */
-const PAGE_BUILD='20261127b',DESK_VER='3.5.36';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
+const PAGE_BUILD='20261127c',DESK_VER='3.5.37';const pageUrl=sp=>SPORT_PAGE[sp]?SPORT_PAGE[sp]+'?b='+PAGE_BUILD:null;
 function doSportSwitch(sport){
   /* The app is now split across three pages, each loading only the engine it
      needs — mlb.html never loads football-engine.js at all, and nfl.html /
@@ -22929,7 +22929,7 @@ function pwrMarket(sp,base,h){const out={},seen={};const C=PIDX_CFG[sp];const ca
   return out;}
 const PWR_HIST_KEY='d4.pwrhist';
 function pwrHistPrev(sp,ranks){const H=get(PWR_HIST_KEY,{})||{};const S=H[sp]||(H[sp]={});const t=today();S[t]=ranks;
-  Object.keys(S).forEach(d=>{if(d<dayShift(t,-21))delete S[d];});set(PWR_HIST_KEY,H);
+  Object.keys(S).forEach(d=>{if(d<dayShift(t,-21))delete S[d];});if(!storeDegraded())set(PWR_HIST_KEY,H);   /* v3.5.37 · a page without your saved history only sees today's ranks: it never saves them over the full history */
   const days=Object.keys(S).filter(d=>d<t).sort();const wk=days.filter(d=>d<=dayShift(t,-7)).pop()||days[0];return wk?{d:wk,r:S[wk]}:null;}
 function pwrIndexBuild(sp){const C=PIDX_CFG[sp];const G=pwrAllGames(sp);const ST=pwrStandings(sp);const meta={...((pwrB(sp)||{}).meta||{})};
   try{Object.entries((ST&&ST.meta)||{}).forEach(([k,v])=>{if(!meta[k])meta[k]=v;});}catch(e){}

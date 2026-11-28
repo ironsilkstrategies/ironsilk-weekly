@@ -1835,7 +1835,7 @@ function stepSheet() { const c = chal(SX.cid); if (!c) return ''; const cps = ch
     <div class="sx-nav">${i ? nav(i - 1, '← ' + esc(cps[i - 1].name)) : '<span></span>'}${i < cps.length - 1 ? nav(i + 1, esc(cps[i + 1].name) + ' →') : ''}</div>
     <p class="note">Desk Dollars, play money. The chances are a quick simulation at the rule’s usual prices; real tickets cash at their own prices, and the sheet works it out again from the balance they leave.</p></section>`; }
 function stepPaint() { const n = $('#cxSheet'); if (!n) return; const c0 = n.querySelector('.csheet'), y = c0 ? c0.scrollTop : 0, same = n.dataset.sx === SX.cid + '|' + SX.i + '|' + SX.rid;
-  n.innerHTML = SX.i >= 0 ? stepSheet() : CX.open ? chalSheet(CX.open) : ''; n.dataset.sx = SX.cid + '|' + SX.i + '|' + SX.rid; const c2 = n.querySelector('.csheet'); if (c2 && same) c2.scrollTop = y;
+  n.innerHTML = SX.i >= 0 ? stepSheet() : CX.open ? chalSheet(CX.open) : ''; n.dataset.sx = SX.cid + '|' + SX.i + '|' + SX.rid; const c2 = n.querySelector('.csheet'); if (c2 && same) { c2.classList.add('still'); c2.scrollTop = y; }
   document.body.classList.toggle('sheet-on', !!n.innerHTML.trim()); }
 /* ── v64 · Nov 23, 11:26 PM, Chris: "if you can activate the ghost runs where you can run the challenge side by side with the top character
    in the particular lane the challenge focuses on". 👻 Race a ghost: the character with the most units in the run's lane (its rule and
@@ -2207,7 +2207,15 @@ function qpFiltHtml(Q) { const F = Q.F, own = !!Q.own, E = own ? qpOwnGames(Q.c,
     ${rows}
     <div class="qp-tl qp-fend"><span>${n(F)} game${n(F) === 1 ? '' : 's'} fit</span>${nOn ? '<button type="button" class="btn ghost sm" data-act="qpfclear">Clear the filters</button>' : ''}${own ? '' : `<span class="qp-save"><input id="qpBuildName" maxlength="28" placeholder="Name this build" aria-label="Name this build"><button type="button" class="btn line sm" data-act="qpbuildsave">💾 Save</button></span>`}</div></details>`; }
 /* Quick Pick opens from any tab (a run, the Slate, a league, a draft room): its own layer on the page */
-function qpPaint() { let n = $('#qpLayer'); if (!n) { n = document.createElement('div'); n.id = 'qpLayer'; document.body.appendChild(n); } const y = (n.querySelector('.csheet') || {}).scrollTop || 0; n.innerHTML = qpOpen() ? qpSheet() : ''; const c2 = n.querySelector('.csheet'); if (c2) c2.scrollTop = y;
+/* v86 · Chris, Nov 27: "Something's glitchy that makes the screen jump when I click + to add legs". Every tap repaints the sheet: a new leg
+   grows the ticket above the button (and a short sheet grows from the bottom), so the button slid out from under the finger. The control you
+   tapped is the anchor now: after the repaint the sheet scrolls so it sits exactly where it was. */
+let QP_ANCHOR = null;
+const qpAnchor = el => { if (!el || !el.closest || !el.closest('.qps')) { QP_ANCHOR = null; return; } const D = el.dataset || {}, keys = ['act', 'change', 'k', 'v', 'd', 'id', 'i'].filter(k => D[k] != null);
+  QP_ANCHOR = keys.length ? { sel: keys.map(k => `[data-${k}="${CSS.escape(String(D[k]))}"]`).join(''), top: el.getBoundingClientRect().top } : null; };
+function qpPaint() { let n = $('#qpLayer'); if (!n) { n = document.createElement('div'); n.id = 'qpLayer'; document.body.appendChild(n); } const c1 = n.querySelector('.csheet'), y = (c1 || {}).scrollTop || 0, A = QP_ANCHOR; QP_ANCHOR = null; n.innerHTML = qpOpen() ? qpSheet() : ''; const c2 = n.querySelector('.csheet');
+  /* the sheet slid up 40px and faded in on every repaint (its opening animation replayed with each tap): only the first open moves now */
+  if (c2) { if (c1) c2.classList.add('still'); c2.scrollTop = y; const e2 = A && c2.querySelector('.qps ' + A.sel); if (e2) c2.scrollTop += e2.getBoundingClientRect().top - A.top; }
   const cx = $('#cxSheet'); document.body.classList.toggle('sheet-on', qpOpen() || !!(cx && cx.innerHTML.trim())); }
 function chalFiltered() { const F = CX.f, q = (F.q || '').toLowerCase().trim(), by = (CX.board && CX.board.by) || {};
   let L = library().filter(c => (!F.d || c.days === F.d) && (!F.t || c.tier === F.t) && (!F.r || c.rule === F.r) && (!F.s || c.sport === F.s) && (!q || (c.name + ' ' + c.why + ' ' + RULES[c.rule].lab + ' ' + SPORTS[c.sport]).toLowerCase().includes(q)));
@@ -2548,7 +2556,7 @@ function go(tab, push) {
 document.addEventListener('click', async e => {
   const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go, true); return; }
   const a = e.target.closest('[data-act]'); if (!a) return;
-  const act = a.dataset.act;
+  const act = a.dataset.act; qpAnchor(a);
   if (act === 'guide-close') { if (e.target === a) closeGuide(); return; }
   if (act === 'guide') openGuide(false);
   else if (act === 'guide-done') closeGuide();
@@ -2588,7 +2596,7 @@ document.addEventListener('click', async e => {
   else if (act === 'qpown') { qpReset({ rid: a.dataset.rid }); QP.src = 'own'; SX.i = -1; qpPaint(); if (!S.slate) loadSlate().then(qpPaint, qpPaint); }
   else if (act === 'chalopen') { CX.open = a.dataset.id; const n = $('#cxSheet'); if (n) { n.innerHTML = chalSheet(CX.open); document.body.classList.add('sheet-on'); } }
   else if (act === 'chalclose') { CX.open = ''; const n = $('#cxSheet'); if (n) n.innerHTML = ''; document.body.classList.remove('sheet-on'); }
-  else if (act === 'chalroute') { CX.route = [a.dataset.id, a.dataset.route]; const n = $('#cxSheet'); if (n) { const y = (n.querySelector('.csheet') || {}).scrollTop || 0; n.innerHTML = chalSheet(CX.open); const c2 = n.querySelector('.csheet'); if (c2) c2.scrollTop = y; } }
+  else if (act === 'chalroute') { CX.route = [a.dataset.id, a.dataset.route]; const n = $('#cxSheet'); if (n) { const y = (n.querySelector('.csheet') || {}).scrollTop || 0; n.innerHTML = chalSheet(CX.open); const c2 = n.querySelector('.csheet'); if (c2) { c2.classList.add('still'); c2.scrollTop = y; } } }
   else if (act === 'chaljoin') { const P = acctPass(); if (!P) { CX.open = ''; document.body.classList.remove('sheet-on'); go('me', true); toast('Sign in to take a challenge'); return; }
     try { const j = await acctApi('/acct/chal/join', { token: P.token, id: a.dataset.id, route: a.dataset.route }); if (AC.me) { AC.me.runs = [j.run, ...(AC.me.runs || [])]; if (j.wallet) AC.me.wallet = j.wallet; } S.ddFrom = 'run:' + j.run.rid; store.set('ddfrom', S.ddFrom); CX.open = ''; document.body.classList.remove('sheet-on'); CX.at = 0; viewChallenges(); window.scrollTo(0, 0); toast(`${CHN(j.run.cid)} is live: ${dd$(j.run.start)} from your wallet, ${dd$(j.run.goal)} to hit. Your slip now bets from it.`); } catch (e) { toast(e.message); } }
   else if (act === 'runuse') { S.ddFrom = 'run:' + a.dataset.rid; store.set('ddfrom', S.ddFrom); go('slate', true); toast(`Tap any line on the Slate: the slip bets from ${CHN((liveRuns().find(r => r.rid === a.dataset.rid) || {}).cid) || 'this run'}`); }
@@ -2744,7 +2752,7 @@ let adT = 0; document.addEventListener('input', e => { const q = e.target.closes
 let cxT = 0; document.addEventListener('input', e => { const q = e.target.closest('[data-input="cxq"]'); if (!q) return; clearTimeout(cxT); cxT = setTimeout(() => { CX.f.q = q.value; CX.show = 24; store.set('cxf', CX.f); const pos = q.selectionStart; viewChallenges(); const n = document.querySelector('[data-input="cxq"]'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (er) { } } }, 220); });
 document.addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.toggle === 'ghfield') ghPrefSet(d.dataset.rid, 'f', d.open ? '1' : ''); if (d.dataset && d.dataset.toggle === 'qptune') QP.tune = d.open; if (d.dataset && d.dataset.toggle === 'qpfilt') QP.filt = d.open; if (d.classList && d.classList.contains('myinbox')) AC.inboxOpen = d.open; if (d.classList && d.classList.contains('myinbox') && d.open && AC.me && AC.me.inbox && AC.me.inbox.unread) { const P = acctPass(); AC.me.inbox.unread = 0; acctBadge(); if (P) acctApi('/acct/inbox/read', { token: P.token }).catch(() => { }); } }, true);
 document.addEventListener('change', async e => { const df = e.target.closest('[data-change="ddfrom"]'); if (df) { S.ddFrom = df.value; store.set('ddfrom', S.ddFrom); render(); return; }
-  const qf = e.target.closest('[data-change="qpfch"]'); if (qf) { QP.f.ch = qf.value || 'all'; QP.off = 0; QP.base = []; QP.filt = true; qpPaint(); return; }
+  const qf = e.target.closest('[data-change="qpfch"]'); if (qf) { qpAnchor(qf); QP.f.ch = qf.value || 'all'; QP.off = 0; QP.base = []; QP.filt = true; qpPaint(); return; }
   const cf = e.target.closest('[data-change="cxf"]'); if (cf) { CX.f[cf.dataset.k] = cf.value; CX.show = 24; store.set('cxf', CX.f); viewChallenges(); return; }
   const as = e.target.closest('[data-change="adsort"]'); if (as) { AD.sort = as.value; viewAdmin(); return; }
   const gr = e.target.closest('[data-change="ghrace"]'); if (gr) { gr.blur(); ghPrefSet(gr.dataset.rid, 'v', gr.value); if (ghPref(gr.dataset.rid, 't') === gr.value) ghPrefSet(gr.dataset.rid, 't', ''); runsRepaint(); return; }
