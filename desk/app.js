@@ -2480,7 +2480,7 @@ function dockPaint() { const bar = $('.tabs'); if (!bar) return; const pinned = 
   if (pill) { if (!cur || !bar.offsetParent) { pill.style.opacity = '0'; return; } const B = bar.getBoundingClientRect(), C = cur.getBoundingClientRect();
     pill.style.opacity = '1'; pill.style.width = C.width + 'px'; pill.style.transform = `translateX(${(C.left - B.left).toFixed(1)}px)`; requestAnimationFrame(() => pill.classList.add('ready')); } }
 addEventListener('resize', () => dockPaint());
-let RM = null; const roomsLoad = () => RM || (RM = import('./rooms.js?v=1').then(m => { m.init(RMAPI); return m; }, e => { RM = null; throw e; }));
+let RM = null; const roomsLoad = () => RM || (RM = import('./rooms.js?v=2').then(m => { m.init(RMAPI); return m; }, e => { RM = null; throw e; }));
 const RMAPI = { S, ROOMS, store, esc, toast, $, acctPass: () => acctPass(), cTitle: c => cTitle(c), deskDay, teamName: (sp, ab) => teamName(sp, ab), LEAGUE, fin, clock, dockPaint: () => dockPaint(), settle: () => fsSettle() };
 function roomsOpen(f) { roomsLoad().then(m => m.open(f), () => toast('Rooms need a connection: try again in a moment')); }
 function roomsClose() { if (!ROOMS.open) return; ROOMS.open = false; ROOMS.edit = false; const n = $('#roomsLayer'); if (n) n.innerHTML = ''; dockPaint(); fsSettle(); try { const r = $('.tabs .rooms-btn'); r && r.offsetParent && r.focus({ preventScroll: true }); } catch (e) { } }
@@ -2495,7 +2495,7 @@ document.addEventListener('keydown', e => {
 const FOLD = new Set(); document.addEventListener('toggle', e => { const d = e.target; if (!d || !d.dataset || !d.dataset.fold) return; if (d.open) FOLD.add(d.dataset.fold); else FOLD.delete(d.dataset.fold); }, true);
 const legStrip = L => `<span class="fl-strip" aria-hidden="true">${L.map(l => `<i class="${l.st === 'open' && l.game && (liveOf(l) || {}).state === 'in' ? 'live' : (FST[l.st] || FST.open)[1]}"></i>`).join('')}</span>`;
 /* the effects layer (sound, haptics, foil, the alerts and widget sheets) loads on its own once the page is up: if it can't, the app is the same app */
-let FX = null; const fxLoad = () => FX || (FX = import('./fx.js?v=1').then(m => { try { m.boot && m.boot(FXAPI); } catch (e) { } return m; }, e => { FX = null; throw e; }));
+let FX = null; const fxLoad = () => FX || (FX = import('./fx.js?v=2').then(m => { try { m.boot && m.boot(FXAPI); } catch (e) { } return m; }, e => { FX = null; throw e; }));
 const FXAPI = { S, store, toast, go: (t) => go(t, true), esc, deskDay, LEAGUE, teamName, clock, roomsClose, feed: () => S.feed, slate: () => S.slate, acct: () => acctPass(), cfg: () => CFG };
 const confirmQuit = (b, msg) => { if (b.dataset.sure === '1') return true; b.dataset.sure = '1'; b.textContent = msg || 'Tap again to quit'; return false; };
 /* ── The owner's dashboard (v3.1.1, Chris, Nov 15: "an admin dashboard … stats on users and names and balances … a subscriber
