@@ -452,7 +452,7 @@ function founderHtml(page) {
   const F = S.feed && S.feed.founder; if (!F || !Array.isArray(F.tix) || !F.tix.length) return '';
   const R = F.rec || {}, card = founderCard;
   if (!page) return `<section class="vsec" id="founder"><div class="vh"><h2 class="h2">Founder LongShot Parlays</h2>${vipBadge()}</div><p class="note">The founder’s live tickets are on the <button type="button" class="link" data-go="longshots">LongShots tab</button>.</p><div class="fgrid">${F.tix.filter(t => t.res === 'live' || t.res === 'open').slice(0, 1).map(card).join('')}</div></section>`;
-  return `<section class="vsec" id="founder"><div class="vh">${vipBadge()}${lsHits(R) ? `<span class="f-rec">🎯 <b>${lsHits(R)}</b> LongShot${lsHits(R) === 1 ? '' : 's'} cashed</span>` : ''}</div>
+  return `<section class="vsec" id="founders"><div class="vh">${vipBadge()}${lsHits(R) ? `<span class="f-rec">🎯 <b>${lsHits(R)}</b> LongShot${lsHits(R) === 1 ? '' : 's'} cashed</span>` : ''}</div>
     <div class="fgrid">${F.tix.map(card).join('')}</div></section>`;
 }
 /* ── Desk Dollars (v3.0.22). D$1,000 on sign-up, play money only. Open a game on the Slate → tap a line → it lands on your
@@ -2433,7 +2433,7 @@ const fsBar = (k, pills, right = '') => `<div class="fs-bar" data-fsbar="${k}">$
 function fsSheet(k, title, body, done) {
   const on = S.fs === k;
   return `<div class="fs-wrap${on ? ' open' : ''}" data-fs="${k}"${on ? '' : ' hidden'}><div class="sheet-bg" data-act="fsclose"></div>
-    <section class="csheet fsheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="fs-h"><h3>${esc(title)}</h3><button type="button" class="fs-x" data-act="fsclose" aria-label="Close">✕</button></div>
+    <section class="csheet fsheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="fs-h"><h2>${esc(title)}</h2><button type="button" class="fs-x" data-act="fsclose" aria-label="Close">✕</button></div>
     <div class="fs-body">${body}</div><div class="fs-f"><button type="button" class="btn foil fs-done" data-act="fsclose">${done}</button></div></section></div>`;
 }
 /* a room redraws on every tap in its sheet: the new sheet keeps the old one's scroll and focus, and doesn't slide in again */
@@ -2465,7 +2465,7 @@ function bfPills(F) { const L = (A, v) => ((A.find(([k]) => String(k) === String
 const INFO = {}; let INFO_RET = null;
 function infoOpen(k, from) { const o = INFO[k]; if (!o) return; let n = $('#infoLayer'); if (!n) { n = document.createElement('div'); n.id = 'infoLayer'; document.body.appendChild(n); }
   INFO_RET = from || document.activeElement;
-  n.innerHTML = `<div class="sheet-bg" data-act="infoclose"></div><section class="csheet infosheet" role="dialog" aria-modal="true" aria-label="${esc(o.title)}"><button type="button" class="cs-x" data-act="infoclose" aria-label="Close">✕</button><h3>${esc(o.title)}</h3><div class="info-b">${o.html}</div><button type="button" class="btn line info-ok" data-act="infoclose">Got it</button></section>`;
+  n.innerHTML = `<div class="sheet-bg" data-act="infoclose"></div><section class="csheet infosheet" role="dialog" aria-modal="true" aria-label="${esc(o.title)}"><button type="button" class="cs-x" data-act="infoclose" aria-label="Close">✕</button><h2>${esc(o.title)}</h2><div class="info-b">${o.html}</div><button type="button" class="btn line info-ok" data-act="infoclose">Got it</button></section>`;
   fsSettle(); const x = n.querySelector('.cs-x'); try { x && x.focus({ preventScroll: true }); } catch (e) { } }
 function infoClose() { const n = $('#infoLayer'); if (n) n.innerHTML = ''; fsSettle(); try { INFO_RET && INFO_RET.isConnected && INFO_RET.focus({ preventScroll: true }); } catch (e) { } }
 

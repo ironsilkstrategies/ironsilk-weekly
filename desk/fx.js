@@ -58,7 +58,7 @@ export function cue(name, o = {}) { if (!P.sound || document.hidden || !CUES[nam
   const c = audio(); if (!c) return; if (c.state === 'suspended') { c.resume().catch(() => { }); return; } try { CUES[name](c.currentTime + 0.005 + (o.delay || 0), o); } catch (e) { } }
 /* haptics: Android vibrates; on an iPhone a real tap on a hidden switch gives the system's light tick (it can't be fired from code) */
 const VIB = { tap: 5, tick: 4, select: 10, chip: [8, 28, 8], nav: 5, open: 7, close: 5, cash: [14, 50, 26], cashbig: [16, 40, 16, 40, 40], miss: 22, push: 12, seal: [8, 36, 18], on: 8, off: 6 };
-function buzz(n) { if (!P.haptics || !navigator.vibrate) return; try { navigator.vibrate(VIB[n] || 0); } catch (e) { } }
+function buzz(n) { if (!P.haptics || !navigator.vibrate || (navigator.userActivation && !navigator.userActivation.hasBeenActive)) return; try { navigator.vibrate(VIB[n] || 0); } catch (e) { } }
 const IOS_HX = !navigator.vibrate && touch && (() => { try { const i = document.createElement('input'); i.type = 'checkbox'; return 'switch' in i; } catch (e) { return false; } })();
 const HX_SEL = '.tabs button,[data-act="game"],[data-act="ddpick"],[data-act="pslip"],[data-act="tail"],.fs-btn,.btn.foil,[data-act="qpopen"],.rm';
 function hxArm(root) { if (!IOS_HX || !P.haptics || !root.querySelectorAll) return; const L = root.matches && root.matches(HX_SEL) ? [root, ...$$(HX_SEL, root)] : $$(HX_SEL, root);
@@ -167,22 +167,22 @@ async function pushOff() { const st = await pushState(); if (st.sub) { try { awa
 async function pushSync() { const st = await pushState(); if (st.sub) try { await post('/push/sub', subBody(st.sub)); } catch (e) { } }
 const sw = (k, on, lab, sub) => `<label class="cc-sw"><span><b>${lab}</b>${sub ? `<small>${sub}</small>` : ''}</span><input type="checkbox" switch data-ccx="${k}"${on ? ' checked' : ''}></label>`;
 function alertsHtml() { const st = CC.push || {};
-  if (!st.can) { if (st.ios && !st.sa) return `<div class="cc-card"><h4>First, put TheDesk on your Home Screen</h4><p>iPhone sends alerts only to apps on the Home Screen. It takes a few seconds:</p>
+  if (!st.can) { if (st.ios && !st.sa) return `<div class="cc-card"><h3 class="cc-t">First, put TheDesk on your Home Screen</h3><p>iPhone sends alerts only to apps on the Home Screen. It takes a few seconds:</p>
       <ol class="cc-steps"><li>In Safari, tap <b>•••</b> (or the Share button) at the bottom.</li><li>Tap <b>Share</b>, then scroll and tap <b>Add to Home Screen</b>.</li><li>Leave <b>Open as Web App</b> on and tap <b>Add</b>.</li><li>Open TheDesk from your Home Screen and tap the 🔔 again.</li></ol></div>`;
-    return `<div class="cc-card"><h4>This browser can’t take alerts</h4><p>Open TheDesk in Chrome, Edge, Firefox or Safari (on an iPhone, from the Home Screen) to get them.</p></div>`; }
+    return `<div class="cc-card"><h3 class="cc-t">This browser can’t take alerts</h3><p>Open TheDesk in Chrome, Edge, Firefox or Safari (on an iPhone, from the Home Screen) to get them.</p></div>`; }
   const on = !!st.sub && st.perm === 'granted';
-  return `<div class="cc-card hero${on ? ' on' : ''}"><div><h4>${on ? 'Alerts are on' : 'Get alerts on this device'}</h4><p>${on ? 'You’ll hear from the desk when it matters, and never in your quiet hours.' : 'The card locking, each pick opening 30 minutes before its game, and every result as it lands.'}</p></div>
+  return `<div class="cc-card hero${on ? ' on' : ''}"><div><h3 class="cc-t">${on ? 'Alerts are on' : 'Get alerts on this device'}</h3><p>${on ? 'You’ll hear from the desk when it matters, and never in your quiet hours.' : 'The card locking, each pick opening 30 minutes before its game, and every result as it lands.'}</p></div>
       <button type="button" class="btn ${on ? 'line' : 'foil'} sm" data-act="ccx" data-k="${on ? 'pushoff' : 'pushon'}"${CC.busy ? ' disabled' : ''}>${CC.busy ? 'One moment…' : on ? 'Turn off' : 'Turn on alerts'}</button></div>
     ${st.perm === 'denied' ? '<p class="cc-warn">Notifications are blocked for TheDesk in this browser’s settings. Allow them there, then come back.</p>' : ''}${CC.msg ? `<p class="cc-msg">${esc(CC.msg)}</p>` : ''}
-    <h5>What to send</h5>${sw('a.lock', ALP.lock, 'The card locks', 'Each morning, when the Best 3 are set')}${sw('a.open', ALP.open, 'A pick opens', '30 minutes before its game')}${sw('a.graded', ALP.graded, 'Results', 'Each pick as it’s graded')}
+    <h3 class="cc-k">What to send</h3>${sw('a.lock', ALP.lock, 'The card locks', 'Each morning, when the Best 3 are set')}${sw('a.open', ALP.open, 'A pick opens', '30 minutes before its game')}${sw('a.graded', ALP.graded, 'Results', 'Each pick as it’s graded')}
     ${sw('a.final', ALP.final, 'The day’s final', 'How the card finished')}${sw('a.longshot', ALP.longshot, 'LongShots', 'When one of the founder’s tickets cashes')}${sw('a.heir', ALP.heir, 'New characters', 'When an heir is born')}
-    <h5>Quiet hours</h5><div class="cc-row"><label>From <select data-ccx="q0">${hrs(ALP.quiet[0])}</select></label><label>to <select data-ccx="q1">${hrs(ALP.quiet[1])}</select></label></div>
+    <h3 class="cc-k">Quiet hours</h3><div class="cc-row"><label>From <select data-ccx="q0">${hrs(ALP.quiet[0])}</select></label><label>to <select data-ccx="q1">${hrs(ALP.quiet[1])}</select></label></div>
     <p class="cc-fine">Your sports and characters in My Desk filter these too.${on ? ' <button type="button" class="link" data-act="ccx" data-k="pushtest">Send me a test</button>' : ''}</p>`; }
 const hrs = v => Array.from({ length: 24 }, (_, h) => `<option value="${h}"${+v === h ? ' selected' : ''}>${h === 0 ? '12 AM' : h < 12 ? h + ' AM' : h === 12 ? '12 PM' : h - 12 + ' PM'}</option>`).join('');
 function feelHtml() { return `${sw('p.sound', P.sound, 'Sound', 'Felt ticks, chips, the deal, brass for a win. Your phone’s silent switch silences it.')}
     <div class="cc-vol"><label for="ccVol">Volume</label><input id="ccVol" type="range" min="0" max="1" step="0.05" value="${P.vol}" data-ccx="vol"><button type="button" class="btn line sm" data-act="ccx" data-k="hear">Hear it</button></div>
     ${sw('p.haptics', P.haptics, 'Haptics', navigator.vibrate ? 'A light buzz on taps and results' : IOS_HX ? 'A light tick on taps (iPhone)' : 'Not on this device')}
-    <h5>Motion</h5><div class="cc-seg" role="group" aria-label="Motion">${[['full', 'Full'], ['calm', 'Calm']].map(([v, l]) => `<button type="button" data-act="ccx" data-k="motion" data-v="${v}" aria-pressed="${P.motion === v}">${l}</button>`).join('')}</div>
+    <h3 class="cc-k">Motion</h3><div class="cc-seg" role="group" aria-label="Motion">${[['full', 'Full'], ['calm', 'Calm']].map(([v, l]) => `<button type="button" data-act="ccx" data-k="motion" data-v="${v}" aria-pressed="${P.motion === v}">${l}</button>`).join('')}</div>
     <p class="cc-fine">${reduced() ? 'Your device asks for reduced motion, so TheDesk stays calm either way.' : 'Calm keeps every screen still: no foil, no confetti, no page turns.'}</p>
     ${touch ? sw('p.gyro', P.gyro && GYRO_OK, 'Tilt the foil with your phone', 'The cards catch the light as you move') : sw('p.tilt', P.tilt, 'Tilt the cards', 'They follow your pointer')}`; }
 const mdUrl = (mode, ex) => { const c = btoa(unescape(encodeURIComponent(JSON.stringify({ sp: MD.sp, ch: MD.ch, show: MD.show, theme: MD.theme, size: MD.size })))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -190,12 +190,12 @@ const mdUrl = (mode, ex) => { const c = btoa(unescape(encodeURIComponent(JSON.st
 function deskHtml() { const C = ((A.feed() || {}).characters) || [];
   const chip = (k, v, l, on) => `<button type="button" class="cc-chip" data-act="ccx" data-k="${k}" data-v="${esc(v)}" aria-pressed="${on}">${l}</button>`;
   return `<p class="cc-lede">Build the desk you want on your screen. It drives your widget, your pop-out, your overlay and the alerts you get.</p>
-    <h5>Sports</h5><div class="cc-chips">${chip('md.sp', '', 'All sports', !MD.sp.length)}${Object.entries(SPORTS).map(([k, l]) => chip('md.sp', k, l, MD.sp.includes(k))).join('')}</div>
-    <h5>Characters</h5><div class="cc-chips">${chip('md.ch', '', 'Every character', !MD.ch.length)}${C.slice(0, 40).map(c => chip('md.ch', c.v, esc(c.name), MD.ch.includes(c.v))).join('')}</div>
-    <h5>What to show</h5><div class="cc-chips">${[['best3', 'Today’s Best 3'], ['live', 'Live scores'], ['longshots', 'LongShots'], ['record', 'The record'], ['tix', 'My tickets']].map(([k, l]) => chip('md.show', k, l, !!MD.show[k])).join('')}</div>
-    <h5>Look</h5><div class="cc-chips">${[['felt', 'Felt'], ['midnight', 'Midnight'], ['gold', 'Gold']].map(([k, l]) => chip('md.theme', k, l, MD.theme === k)).join('')}<span class="cc-gap"></span>${[['s', 'Small'], ['m', 'Medium'], ['l', 'Large']].map(([k, l]) => chip('md.size', k, l, MD.size === k)).join('')}</div>
+    <h3 class="cc-k">Sports</h3><div class="cc-chips">${chip('md.sp', '', 'All sports', !MD.sp.length)}${Object.entries(SPORTS).map(([k, l]) => chip('md.sp', k, l, MD.sp.includes(k))).join('')}</div>
+    <h3 class="cc-k">Characters</h3><div class="cc-chips">${chip('md.ch', '', 'Every character', !MD.ch.length)}${C.slice(0, 40).map(c => chip('md.ch', c.v, esc(c.name), MD.ch.includes(c.v))).join('')}</div>
+    <h3 class="cc-k">What to show</h3><div class="cc-chips">${[['best3', 'Today’s Best 3'], ['live', 'Live scores'], ['longshots', 'LongShots'], ['record', 'The record'], ['tix', 'My tickets']].map(([k, l]) => chip('md.show', k, l, !!MD.show[k])).join('')}</div>
+    <h3 class="cc-k">Look</h3><div class="cc-chips">${[['felt', 'Felt'], ['midnight', 'Midnight'], ['gold', 'Gold']].map(([k, l]) => chip('md.theme', k, l, MD.theme === k)).join('')}<span class="cc-gap"></span>${[['s', 'Small'], ['m', 'Medium'], ['l', 'Large']].map(([k, l]) => chip('md.size', k, l, MD.size === k)).join('')}</div>
     <div class="cc-prev"><iframe title="Your widget, live" src="${esc(mdUrl('embed', '&prev=1'))}" loading="lazy"></iframe></div>
-    <h5>Put it on your screen</h5><div class="cc-outs">
+    <h3 class="cc-k">Put it on your screen</h3><div class="cc-outs">
       <button type="button" class="cc-out" data-act="ccx" data-k="pop"><i>🪟</i><span><b>Pop out a mini desk</b><small>${'documentPictureInPicture' in window ? 'Floats over every other window on this computer' : 'A small window you can keep open'}</small></span></button>
       <button type="button" class="cc-out" data-act="ccx" data-k="ios"><i>📱</i><span><b>iPhone home or lock screen</b><small>Through the free Scriptable app: copy, paste, add the widget</small></span></button>
       <button type="button" class="cc-out" data-act="ccx" data-k="embed"><i>🧩</i><span><b>Embed it on a site</b><small>Copies the code for your page</small></span></button>
@@ -204,7 +204,7 @@ function deskHtml() { const C = ((A.feed() || {}).characters) || [];
     <div id="ccHow"></div>`; }
 function ccHtml() { const T = [['alerts', '🔔 Alerts'], ['feel', '🎚 Sound & feel'], ['desk', '🧩 My Desk']];
   return `<div class="sheet-bg" data-act="ccclose"></div><section class="csheet fsheet ccsheet" role="dialog" aria-modal="true" aria-label="Alerts and settings">
-    <div class="fs-h"><h3>Your desk</h3><button type="button" class="fs-x" data-act="ccclose" aria-label="Close">✕</button></div>
+    <div class="fs-h"><h2>Your desk</h2><button type="button" class="fs-x" data-act="ccclose" aria-label="Close">✕</button></div>
     <div class="cc-tabs" role="tablist">${T.map(([k, l]) => `<button type="button" role="tab" aria-selected="${CC.tab === k}" data-act="ccx" data-k="tab" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="cc-body">${CC.tab === 'alerts' ? alertsHtml() : CC.tab === 'feel' ? feelHtml() : deskHtml()}</div>
     <p class="cc-rg">Entertainment only, 21+. If betting stops being fun, call or text 1-800-MY-RESET.</p></section>`; }
@@ -292,8 +292,8 @@ body.cc-on{overflow:hidden}
 .ccsheet .cc-tabs{display:flex;gap:6px;margin:6px 0 12px;padding:4px;border-radius:16px;background:rgba(0,0,0,.3)}
 .ccsheet .cc-tabs button{flex:1;min-height:40px;border:0;border-radius:12px;background:none;color:var(--cream-2);font:700 13.5px/1.1 var(--text);cursor:pointer}
 .ccsheet .cc-tabs button[aria-selected="true"]{background:linear-gradient(180deg,rgba(242,208,103,.28),rgba(242,208,103,.12));color:var(--foil);box-shadow:inset 0 0 0 1px rgba(242,208,103,.45)}
-.ccsheet h5{margin:18px 0 8px;font:800 15px/1 var(--display);letter-spacing:.07em;text-transform:uppercase;color:var(--foil)}
-.cc-card{padding:14px 16px;border-radius:16px;background:rgba(0,0,0,.28);box-shadow:inset 0 0 0 1px rgba(255,244,214,.12)}.cc-card h4{margin:0 0 4px;font:900 20px/1.1 var(--display);letter-spacing:.02em;color:var(--cream)}.cc-card p{margin:0;color:var(--cream-2);font-size:14.5px;line-height:1.45}
+.ccsheet .cc-k{margin:18px 0 8px;font:800 15px/1 var(--display);letter-spacing:.07em;text-transform:uppercase;color:var(--foil)}
+.cc-card{padding:14px 16px;border-radius:16px;background:rgba(0,0,0,.28);box-shadow:inset 0 0 0 1px rgba(255,244,214,.12)}.cc-card .cc-t{margin:0 0 4px;font:900 20px/1.1 var(--display);letter-spacing:.02em;color:var(--cream)}.cc-card p{margin:0;color:var(--cream-2);font-size:14.5px;line-height:1.45}
 .cc-card.hero{display:flex;align-items:center;gap:12px;justify-content:space-between}.cc-card.hero.on{box-shadow:inset 0 0 0 1.5px rgba(127,214,164,.6)}.cc-card.hero .btn{flex:none}
 .cc-steps{margin:10px 0 0;padding-left:22px;display:grid;gap:8px;color:var(--cream);font-size:14.5px;line-height:1.45}
 .cc-sw{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 0;border-bottom:1px solid rgba(255,244,214,.08);cursor:pointer}.cc-sw b{display:block;font:700 15px/1.2 var(--text);color:var(--cream)}.cc-sw small{display:block;margin-top:2px;font-size:12.5px;color:var(--cream-3)}

@@ -36,6 +36,8 @@ try {
   r = await call('/push/pulse', { body: { sig: 's0', pulse: pu0 } });
   T('a pulse without the key is refused', r.s === 403);
   const K = await pushKeyOf(CODE);
+  r = await call('/push/pulse', { body: { sig: 'b0', pulse: { v: 1, day: '2026-11-30', picks: [] } }, h: { 'x-push-key': K } });
+  T('the very first pulse only sets the baseline (no burst of old news)', r.s === 200 && r.j.events.length === 0 && store._alarm() == null);
   r = await call('/push/pulse', { body: { sig: 's0', pulse: pu0 }, h: { 'x-push-key': K } });
   T('the autopilot\'s pulse (HMAC of the owner code, never the code itself): kept, and the day\'s "set" event queued', r.s === 200 && r.j.events.join() === 'lock' && store._alarm() === NOW && K.length === 64 && !K.includes(CODE));
   await P.alarm();

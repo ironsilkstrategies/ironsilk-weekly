@@ -31,11 +31,11 @@ const jumpHtml = q => { const H = jumpHits(q); if (!String(q || '').trim()) retu
   return H.length ? `<div class="jump-hits" role="listbox" aria-label="Jump to">${H.map(h => `<button type="button" class="jh" role="option" ${h.go ? `data-go="${h.go}"` : `data-act="${h.act}"${h.v != null ? ` data-v="${esc(String(h.v))}"` : ''}`}><i aria-hidden="true">${h.ic}</i><span><b>${esc(h.t)}</b><small>${esc(h.d)}</small></span></button>`).join('')}</div>` : `<p class="jump-none">Nothing called “${esc(q)}”. Try a team, a character or a room.</p>`; };
 export function open(focusSearch) { ROOMS.open = true; ROOMS.edit = false; let n = $('#roomsLayer'); if (!n) { n = document.createElement('div'); n.id = 'roomsLayer'; document.body.appendChild(n); }
   n.innerHTML = `<div class="sheet-bg" data-act="roomsclose"></div><section class="csheet fsheet roomsheet" role="dialog" aria-modal="true" aria-label="Rooms">
-    <div class="fs-h"><h3>Rooms</h3><button type="button" class="fs-x" data-act="roomsclose" aria-label="Close">✕</button></div>
+    <div class="fs-h"><h2>Rooms</h2><button type="button" class="fs-x" data-act="roomsclose" aria-label="Close">✕</button></div>
     <label class="jump"><span class="sr">Jump to a room, team or character</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input type="search" id="jumpQ" placeholder="Jump to a team, character or room" autocomplete="off" enterkeyhint="go" value="${esc(ROOMS.q)}"></label>
     <div id="jumpHits">${jumpHtml(ROOMS.q)}</div><div id="roomsBody">${roomsBody()}</div>
     <div class="rm-foot"><button type="button" class="btn line sm" data-act="dockedit" aria-pressed="false">Choose your dock</button><button type="button" class="btn line sm" data-act="cc">🔔 Alerts &amp; settings</button></div></section>`;
   dockPaint(); settle(); const f = focusSearch ? $('#jumpQ') : n.querySelector('.fs-x'); try { f && f.focus({ preventScroll: true }); } catch (e) { } }
 export function repaint() { const b = $('#roomsBody'); if (b) b.innerHTML = roomsBody(); const e = $('[data-act="dockedit"]'); if (e) { e.setAttribute('aria-pressed', String(ROOMS.edit)); e.textContent = ROOMS.edit ? 'Done' : 'Choose your dock'; }
-  const h = $('.roomsheet h3'); if (h) h.textContent = ROOMS.edit ? 'Your dock: pick up to 4' : 'Rooms'; }
+  const h = $('.roomsheet h2'); if (h) h.textContent = ROOMS.edit ? 'Your dock: pick up to 4' : 'Rooms'; }
 

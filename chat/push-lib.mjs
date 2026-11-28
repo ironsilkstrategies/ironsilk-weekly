@@ -51,11 +51,13 @@ const no = i => `No. ${i + 1}`;
 const units = p => { p = +p; return !isFinite(p) || !p ? 0.91 : p > 0 ? p / 100 : 100 / -p; };
 const odds = p => { p = +p; return !isFinite(p) || !p ? '' : p > 0 ? '+' + p : '−' + Math.abs(p); };
 export function events(prev, cur, now = Date.now()) {
-  const E = []; if (!cur || !cur.day) return E; const same = prev && prev.day === cur.day, P = (same && prev.picks) || [], C = cur.picks || [];
+  const E = []; if (!cur || !cur.day || !prev) return E;   /* the very first pulse only sets the baseline: never a burst of old news */
+  const same = prev.day === cur.day, P = (same && prev.picks) || [], C = cur.picks || [];
   const id = (k, x) => `${cur.day}|${k}|${x}`;
-  if (cur.locked && C.length && !(same && prev.locked)) E.push({ id: id('lock', ''), kind: 'lock', day: cur.day, n: C.length, first: Math.min(...C.map(x => Date.parse(x.start) || Infinity)), sps: [...new Set(C.map(x => x.sp))] });
+  const first = Math.min(...C.map(x => Date.parse(x.start) || Infinity));
+  if (cur.locked && C.length && !(same && prev.locked) && first > now) E.push({ id: id('lock', ''), kind: 'lock', day: cur.day, n: C.length, first, sps: [...new Set(C.map(x => x.sp))] });   /* "set" only before the first game */
   C.forEach((x, i) => { const w = P[i];
-    if (!x.sealed && x.pick && !x.res && ((w && w.sealed) || (cur.beta && !x.res && Date.parse(x.start) - now <= 32 * 60e3 && Date.parse(x.start) > now - 5 * 60e3)))
+    if (!x.sealed && x.pick && !x.res && Date.parse(x.start) > now - 10 * 60e3 && ((w && w.sealed) || (cur.beta && !x.res && Date.parse(x.start) - now <= 32 * 60e3 && Date.parse(x.start) > now - 5 * 60e3)))
       E.push({ id: id('open', i), kind: 'open', i, sp: x.sp, pick: x.pick, price: x.price, game: x.game, start: x.start, who: x.who || [] });
     if (x.res && !(w && w.res)) E.push({ id: id('graded', i), kind: 'graded', i, sp: x.sp, pick: x.pick, price: x.price, res: x.res, who: x.who || [] }); });
   if (C.length && C.every(x => x.res) && !(P.length === C.length && P.every(x => x.res))) { const w = C.filter(x => x.res === 'win').length, l = C.filter(x => x.res === 'loss').length, pu = C.filter(x => x.res === 'push').length;
