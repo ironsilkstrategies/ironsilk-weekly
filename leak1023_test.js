@@ -24,7 +24,8 @@ let html=fs.readFileSync(path.join(W,'nhl.html'),'utf8');html=html.replace(/<scr
   T('a public lane reads like a person wrote it', w.eval(`pubLaneName('nhl|spread|fav')`)==='NHL favorites on the spread'&&w.eval(`pubLaneName('nba|ml|dog')`)==='NBA underdogs on the moneyline');
   w.eval(`set('d4.pubbeta',false)`);
   const F=w.eval('publicFeed()');const txt=JSON.stringify(F);
-  T('beta switched off: back to free vs VIP (no beta flag, no VIP sections)',F.beta===false&&!F.vip&&!F.characters&&!F.bloodlines);
+  /* v3.5.39 · the roster stays public after the beta (records, lanes, past results), today's calls sealed like the card */
+  T('beta switched off: back to free vs VIP (no beta flag, no VIP sections, no bloodlines; the roster stays with today\'s calls sealed)',F.beta===false&&!F.vip&&!F.bloodlines&&!F.board&&!F.founder&&!F.props&&(F.characters||[]).every(c=>(c.picks||[]).every(p=>p.hidden||p.hit!=null||p.push||(Date.parse(p.start)-30*60e3)<=Date.now())),JSON.stringify((F.characters||[]).map(c=>(c.picks||[]).map(p=>p.hidden?'h':p.pick))));
   T('3 hours before the first unlock every pick is hidden on the card',F.today&&F.today.picks.length===3&&F.today.picks.every(x=>x.hidden));
   T("today's card is not in the public history list",!(F.history||[]).some(h=>h.d===D),JSON.stringify((F.history||[]).map(h=>h.d)));
   T('…so no locked pick (or its price) appears anywhere in the public file',!/DAL ML|MIN ML|BOS ML/.test(txt),(txt.match(/(DAL|MIN|BOS) ML/)||[''])[0]);

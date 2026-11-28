@@ -1555,3 +1555,6 @@ em.own,em.sus{font:800 9.5px/1 var(--text);font-style:normal;letter-spacing:.06e
 .csheet.qps{height:92vh;height:min(92vh,calc(100dvh - var(--topsafe) - 26px))}
 @media (min-width:760px){.csheet.qps{height:min(88vh,calc(100dvh - var(--topsafe) - 26px))}}
 .csheet.still{animation:none}
+/* v87 · after the beta: a way in on every sealed pick, and members-only rooms that say so */
+.slip-back .getnow{position:relative;z-index:1;margin-top:2px}
+.vipgate{margin:18px 0 0}

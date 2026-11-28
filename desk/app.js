@@ -183,7 +183,7 @@ function withGame(p) { if (!p || p.game || !p.team || !p.sp) return p; const t =
   /* the team's game on today's scoreboard first; otherwise one that hasn't finished (never yesterday's final) */
   const k = K.find(k => S.live[k].ymd === td) || K.find(k => S.live[k].state !== 'post');
   return k ? { ...p, game: k.slice(p.sp.length + 1) } : p; }
-const castPicks = () => ((S.feed && S.feed.characters) || []).flatMap(c => (c.picks || []).filter(p => p && p.sp && p.hit == null && !p.push));
+const castPicks = () => ((S.feed && S.feed.characters) || []).flatMap(c => (c.picks || []).filter(p => p && p.sp && !p.hidden && p.hit == null && !p.push));
 /* v67 · Nov 24, 7:34 PM, Chris: "Trying to put a price on the box". Every score refresh repainted the whole tab (every 30 s during
    games, and again as each league's scores landed), the slip's stake box with it: the box being typed in was swapped for a fresh one
    mid-number, the keyboard dropped and the number went back. A repaint the page makes on its own now waits while a box on the page has
@@ -300,6 +300,7 @@ function slipHtml(x0, i, key, opt = {}) {
       <div class="plate">${LOCK}${u ? 'Opens ' + esc(clock(u)) : 'Opens 30 min before'}</div>
       ${u ? `<div class="count" data-until="${u}">${esc(left(u - Date.now()))}</div>` : ''}
       <p>${fin(ms(x0.start)) ? `The game starts <b>${esc(whenLabel(x0.start).replace(/^(Today|Tonight) /, 'at '))}</b>. ` : ''}${opt.vip || ''}</p>
+      ${opt.cta ? `<button type="button" class="btn foil sm getnow" data-go="join">Get it now</button>` : ''}
     </div></article>`;
   }
   const x = liveGrade(x0), L = liveOf(x), R = readPick(x), graded = x.hit != null || x.push, was = S.seen[key];
@@ -364,7 +365,7 @@ function viewToday() {
   const onrec = n ? `<p class="onrec"><span>On the record: <b>${R.w}–${R.l}${R.pu ? '–' + R.pu : ''}</b>, <b>${signed(+R.u || 0, 1)} units</b>${R.first ? ' since ' + esc(monthDay(R.first)) : ''}</span><button type="button" data-go="receipts">Every result</button></p>` : '<p class="onrec"></p>';
   const vipLine = anyHidden && T ? `VIP has had it since ${esc(clock(T.lockedAt))}.` : '';
   const keys = picks.map((x, i) => `${T.d}|${i}`);
-  const slips = picks.length ? `<div class="slips${S.first ? ' deal' : ''}${picks.length < 3 ? ' few' : ''}">${picks.map((x, i) => slipHtml(x, i, keys[i], { vip: vipLine })).join('')}</div>` : '';
+  const slips = picks.length ? `<div class="slips${S.first ? ' deal' : ''}${picks.length < 3 ? ' few' : ''}">${picks.map((x, i) => slipHtml(x, i, keys[i], { vip: vipLine, cta: F.beta === false })).join('')}</div>` : '';
 
   /* props and the Banker's parlay ride along when the desk publishes them */
   const props = (T && T.props) || [];
@@ -433,7 +434,14 @@ function founderSum(t) { const L = t.legs || []; if (L.length < 2) return ''; co
    An older feed still carrying the 30-day cashed/lost pair shows its cashed count the same way, never the losses. */
 const lsHits = R => { const n = R && fin(+R.hits) ? +R.hits : R && fin(+R.cashed) ? +R.cashed : 0; return n > 0 ? Math.round(n) : 0; };
 /* v76 · the founder's LongShot tickets, one card each (the LongShots tab, Today, and his own profile and My tickets) */
-const founderTix = () => { const F = S.feed && S.feed.beta !== false && S.feed.founder; return F && Array.isArray(F.tix) ? F.tix : []; };
+/* v87 · after the beta a members-only room says so, and how to get in, instead of an empty page that reads like it's broken */
+function vipGate(title, body, alt) {
+  const sub = okUrl((S.feed || {}).subscribe);
+  return `<div class="vipstrip vipgate"><div><h3>${esc(title)}</h3><p>${esc(body)}</p></div>
+    <div class="row">${sub ? `<a class="btn foil" href="${esc(sub)}" target="_blank" rel="noopener">Join VIP</a>` : ''}<button type="button" class="btn line" data-go="join">What you get</button>${alt === 'today' ? '<button type="button" class="btn line" data-go="today">Today’s card</button>' : ''}</div></div>`;
+}
+/* v87 · the machine decides what goes public (after the beta it stops publishing VIP blocks); the app shows whatever the feed carries */
+const founderTix = () => { const F = S.feed && S.feed.founder; return F && Array.isArray(F.tix) ? F.tix : []; };
 function founderCard(t0) { const t = effTicket(t0); const n = t.legs.length, done = t.legs.filter(l => l.st === 'hit' || l.st === 'miss' || l.st === 'push').length;
   const chip = t.res === 'cashed' ? '<span class="fchip win">Cashed</span>' : t.res === 'lost' ? '<span class="fchip loss">Lost</span>' : t.res === 'live' ? `<span class="fchip live">● Live · ${t.hit} of ${n} hit</span>` : '<span class="fchip">Pending</span>';
   return `<article class="slip founder nostub ${t.res}"><div class="slip-head"><span>${esc(t.name || 'LongShot')} · ${n} legs</span>${chip}</div><div class="slip-main">
@@ -441,7 +449,7 @@ function founderCard(t0) { const t = effTicket(t0); const n = t.legs.length, don
     ${founderSum(t)}<ol class="fl-list">${t.legs.map(founderLeg).join('')}</ol>
     ${t.res === 'open' || t.res === 'live' ? `<div class="row"><button type="button" class="btn foil" data-act="tail" data-id="${esc(t.id)}">📋 Tail this</button></div>` : ''}</div></article>`; }
 function founderHtml(page) {
-  const F = S.feed && S.feed.beta !== false && S.feed.founder; if (!F || !Array.isArray(F.tix) || !F.tix.length) return '';
+  const F = S.feed && S.feed.founder; if (!F || !Array.isArray(F.tix) || !F.tix.length) return '';
   const R = F.rec || {}, card = founderCard;
   if (!page) return `<section class="vsec" id="founder"><div class="vh"><h2 class="h2">Founder LongShot Parlays</h2>${vipBadge()}</div><p class="note">The founder’s live tickets are on the <button type="button" class="link" data-go="longshots">LongShots tab</button>.</p><div class="fgrid">${F.tix.filter(t => t.res === 'live' || t.res === 'open').slice(0, 1).map(card).join('')}</div></section>`;
   return `<section class="vsec" id="founder"><div class="vh">${vipBadge()}${lsHits(R) ? `<span class="f-rec">🎯 <b>${lsHits(R)}</b> LongShot${lsHits(R) === 1 ? '' : 's'} cashed</span>` : ''}</div>
@@ -615,7 +623,7 @@ function propFill(x) { if (!x || (x.opp && x.start) || !x.team || !x.sp) return 
   if (g) { const home = ab(x.sp, g.h.ab) === t; return { ...x, opp: x.opp || (home ? g.a.ab : g.h.ab), home: x.opp ? x.home : home, start: x.start || (g.t ? new Date(g.t).toISOString() : '') }; }
   const w = withGame({ sp: x.sp, team: x.team }); if (w && w.game) { const [a, h] = w.game.split('@'), home = ab(x.sp, h) === t; return { ...x, opp: x.opp || (home ? a : h), home: x.opp ? x.home : home }; }
   return x; }
-function propsAll() { const P = S.feed && S.feed.beta !== false && S.feed.props; return P && Array.isArray(P.props) ? P.props.map(x => { const y = propFill(x); return { ...y, score: pScore(y) }; }) : []; }
+function propsAll() { const P = S.feed && S.feed.props; return P && Array.isArray(P.props) ? P.props.map(x => { const y = propFill(x); return { ...y, score: pScore(y) }; }) : []; }
 function lensOk(x, l) { const r10 = pRate(x.l10), lastHit = x.streak > 0;
   if (l === 'live') { const PL2 = propLeg(x), lv = PL2.game ? liveOf(PL2) : null; return !!(lv && lv.state === 'in'); }
   return l === 'room' ? x.votes >= 3 : l === 'heat' ? x.streak >= 4 : l === 'bounce' ? !lastHit && r10 >= 0.6 : l === 'home' ? x.home === true : l === 'road' ? x.home === false : true; }
@@ -675,17 +683,18 @@ function viewProps() {
     <div class="ptools"><label class="pmin">Desk Score <b>${f.min || 0}+</b><input type="range" min="0" max="90" step="5" value="${f.min || 0}" data-act="pmin" aria-label="Minimum Desk Score"></label>
       <div class="pview">${['cards', 'sheet'].map(v => `<button type="button" class="${f.view === v ? 'on' : ''}" data-act="pf" data-k="view" data-v="${v}">${v === 'cards' ? 'Cards' : 'Sheet'}</button>`).join('')}</div></div>
     ${L.length ? (f.view === 'sheet' ? propSheet(L.slice(0, S.pN)) : `<div class="pgrid">${L.slice(0, S.pN).map(propCard).join('')}</div>`) + (L.length > S.pN ? `<div class="pmore"><button type="button" class="btn line" data-act="pmore">Show ${Math.min(P_STEP, L.length - S.pN)} more <small>${S.pN} of ${L.length}</small></button></div>` : '') : `<div class="paper blank"><b>Nothing through this lens</b><p>Try another lens, or lower the Desk Score.</p></div>`}`
+    : F.beta === false && !F.props ? vipGate('Today’s prop board is for members', `Members get every prop the characters like, the minute the card locks. The Best ${((F.today || {}).props || []).length || 3} props on Today open 30 minutes before their games.`, 'today')
     : `<div class="paper blank"><b>Props post when the desk publishes today’s card</b><p>Check back closer to game time.</p></div>`}
     ${slipBar()}${footHtml()}`;
 }
 /* the LongShots tab: every founder ticket from the last week, live */
 function viewLongshots() {
   const el = $('#v-longshots'), F = S.feed;
-  const body = F ? founderHtml(true) : '', R = (F && F.beta !== false && F.founder && F.founder.rec) || {};
+  const body = F ? founderHtml(true) : '', R = (F && F.founder && F.founder.rec) || {};
   /* v82 audit · the empty page said only "No LongShots up right now": yesterday's tickets come down when today's card locks (Chris, Nov 15),
      so say that. v83: and how many have cashed, never the losses (lsHits) */
   el.innerHTML = `<h1 class="title">Founder LongShot Parlays</h1><p class="lede">Real tickets the founder placed: big odds, posted as he plays them, graded live leg by leg. Tap “Tail this” to copy one, then paste it into your book.</p>
-    ${body || (F || S.feedErr ? `<div class="paper blank"><b>No LongShot ticket up yet today</b><p>The founder’s next ticket lands here the moment it’s in. Yesterday’s tickets come down when today’s card locks.</p>${lsHits(R) ? `<p class="f-rec">🎯 <strong>${lsHits(R)}</strong> LongShot${lsHits(R) === 1 ? '' : 's'} cashed so far</p>` : ''}</div>` : '<div class="shimmer"></div>')}${footHtml()}`;
+    ${body || (F && F.beta === false && !F.founder ? vipGate('The founder’s LongShots are for members now', 'Members get every LongShot ticket the moment it’s placed, graded live leg by leg.') : '') || (F || S.feedErr ? `<div class="paper blank"><b>No LongShot ticket up yet today</b><p>The founder’s next ticket lands here the moment it’s in. Yesterday’s tickets come down when today’s card locks.</p>${lsHits(R) ? `<p class="f-rec">🎯 <strong>${lsHits(R)}</strong> LongShot${lsHits(R) === 1 ? '' : 's'} cashed so far</p>` : ''}</div>` : '<div class="shimmer"></div>')}${footHtml()}`;
 }
 function tailText(t) { return [`TheDesk · ${t.name || 'Founder LongShot Parlay'} (${t.legs.length} legs${t.dec ? ', ' + decAm(t.dec) : ''})`, ...t.legs.map((l, i) => `${i + 1}. ${legText(l)}${l.price != null ? ' (' + odds(l.price) + ')' : ''}${l.game ? ' · ' + matchup(l) : ''}`), CFG.home || 'https://ironsilkweekly.com/desk/'].join('\n'); }
 async function copyText(txt, ok) { try { await navigator.clipboard.writeText(txt); toast(ok); return; } catch (e) { }
@@ -855,7 +864,7 @@ const winOf = t => { const h = hourCT(t); return h < 13 ? 'early' : h < 17 ? 'af
 /* no heavy moneylines (−1000 or shorter) on the public site, even if an older feed still carries one */
 const HEAVY = -1000, isHeavy = (m, price) => m === 'ml' && price != null && isFinite(+price) && +price <= HEAVY;
 let BOARD_SRC = null, BOARD_CLEAN = null;
-const boardOf = () => { const B = S.feed && S.feed.beta !== false && S.feed.board && Array.isArray(S.feed.board.games) ? S.feed.board : null; if (!B) return null; if (B === BOARD_SRC) return BOARD_CLEAN;
+const boardOf = () => { const B = S.feed && S.feed.board && Array.isArray(S.feed.board.games) ? S.feed.board : null; if (!B) return null; if (B === BOARD_SRC) return BOARD_CLEAN;
   /* v50 · no line, no listing: a pick or a call without a real price never shows (an older card may still carry one) */
   const games = B.games.map(g => { const calls = {}; for (const [m, L] of Object.entries(g.calls || {})) { const k = (L || []).filter(c => fin(c.price) && !isHeavy(m, c.price)); if (k.length) calls[m] = k; }
     return { ...g, picks: (g.picks || []).filter(p => fin(p.price) && !isHeavy(p.m, p.price)), calls }; }).filter(g => g.picks.length || Object.keys(g.calls).length);
@@ -1506,7 +1515,8 @@ function viewCast() {
   const c = C.find(x => x.v === pick), g = c.record || {}, pr = c.props || {}, lines = cells.filter(x => x.v === c.v), PS = parSum(c.par);
   const games = (c.picks || []).filter(p => p.kind !== 'prop'), props = (c.picks || []).filter(p => p.kind === 'prop');
   /* graded live on the phone, like every ticket: score + clock + live chance while it plays, ✓/✗ the moment it's decided */
-  const pickRow = (p0, pi) => { const cv = pick, g = withGame(p0), p = g.game ? liveGrade(g) : g, c = stateOf(p), lv = p.game ? liveOf(p) : null, on = c === 'o' && lv && lv.state === 'in';
+  const pickRow = (p0, pi) => { if (p0 && p0.hidden) { const u = p0.unlockAt; return `<div class="leg"><div class="li"><span class="mk h">•</span><span class="pk">Sealed ${p0.kind === 'prop' ? 'prop' : 'pick'}<small>${esc([LEAGUE[p0.sp], u ? 'opens ' + clock(u) : 'members only until it’s graded'].filter(Boolean).join(' · '))}</small></span><span class="u"${u ? ` data-until="${u}"` : ''}>${u ? esc(left(u - Date.now())) : ''}</span></div></div>`; }
+    const cv = pick, g = withGame(p0), p = g.game ? liveGrade(g) : g, c = stateOf(p), lv = p.game ? liveOf(p) : null, on = c === 'o' && lv && lv.state === 'in';
     return `<div class="leg${on ? ' is-live' : ''}"><div class="li"><span class="mk ${c}">${c === 'w' ? '✓' : c === 'l' ? '✗' : c === 'p' ? '=' : on ? '●' : '•'}</span><span class="pk">${esc(p.kind === 'prop' ? p.pick : readPick(p).big)}${p.price != null ? ' ' + esc(odds(p.price)) : ''}<small>${esc([LEAGUE[p.sp], p.gl || p.team, p.kind !== 'prop' && c === 'o' && !on && p.start ? whenLabel(p.start) : ''].filter(Boolean).join(' · '))}</small>${lv && lv.state !== 'pre' ? `<small class="lv">${scoreBit(p, lv)}${on ? ' · ' + qBit(p, true) : ''}</small>` : ''}</span><span class="u">${p.p != null ? pct(p.p) + '%' : ''}</span></div>${`<p class="why1 vq" title="${esc(p.note || '')}">“${esc(voiceOf(cv, p, pi))}”</p>`}</div>`; };
   const wl = o => (o && o.w + o.l ? `${o.w}–${o.l}` : '—');
   el.innerHTML = `<button type="button" class="link back" data-act="castpick" data-v="">← All characters</button>${sel}
