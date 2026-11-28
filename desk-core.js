@@ -464,8 +464,8 @@ function pickFit(x,sp,o,R){o=o||pickConf(x,sp);if(!o)return 0;return o.cf*deskLa
 /* v3.5.38 · THE PROVEN LANES. Nov 27, Chris: "is there a way with all this data we've collected to find a new ideology for the free 3
    picks that may give us better results going into next month?" The Best 3 keeps every gate it has (an official call, priced −200 to
    +400, worth its price, lane open, model not fighting the market, one sport each first) but it ranked by confidence × the top
-   character's league-and-market record, and that confidence mostly tracks the price: over its life the card's near-even picks (−114 to
-   +114) went 32-17 for +12.2u while its favorites at −150 or shorter went 24-26 for −12.8u. From Dec 1 it ranks by WHO HAS BEEN PAYING
+   character's league-and-market record, and that confidence mostly tracks the price: over its life the card's published near-even picks
+   (−114 to +114) went 29-15 for +11.5u while its favorites at −150 or shorter went 21-20 for −8.6u. From Dec 1 it ranks by WHO HAS BEEN PAYING
    IN EXACTLY THIS BET: for every character on the pick, its last 21 days in that sport × market × role (college hoops spread dogs,
    college football unders…), units per call shrunk toward zero (20 calls of nothing in front, 15 calls at least), the best two added.
    Replayed walk-forward on the ledger (each day only from the days before it) with the same gates: 31-16, +11.7% from Oct 28 to Nov 26
