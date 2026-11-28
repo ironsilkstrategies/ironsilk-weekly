@@ -177,7 +177,8 @@ function alertsHtml() { const st = CC.push || {};
     <h3 class="cc-k">What to send</h3>${sw('a.lock', ALP.lock, 'The card locks', 'Each morning, when the Best 3 are set')}${sw('a.open', ALP.open, 'A pick opens', '30 minutes before its game')}${sw('a.graded', ALP.graded, 'Results', 'Each pick as it’s graded')}
     ${sw('a.final', ALP.final, 'The day’s final', 'How the card finished')}${sw('a.longshot', ALP.longshot, 'LongShots', 'When one of the founder’s tickets cashes')}${sw('a.heir', ALP.heir, 'New characters', 'When an heir is born')}
     <h3 class="cc-k">Quiet hours</h3><div class="cc-row"><label>From <select data-ccx="q0">${hrs(ALP.quiet[0])}</select></label><label>to <select data-ccx="q1">${hrs(ALP.quiet[1])}</select></label></div>
-    <p class="cc-fine">Your sports and characters in My Desk filter these too.${on ? ' <button type="button" class="link" data-act="ccx" data-k="pushtest">Send me a test</button>' : ''}</p>`; }
+    ${on ? `<div class="cc-test"><button type="button" class="btn line sm" data-act="ccx" data-k="pushtest"${CC.busy ? ' disabled' : ''}>${CC.busy ? 'Sending…' : 'Send me a test'}</button></div>` : ''}
+    <p class="cc-fine">Your sports and characters in My Desk filter these too.</p>`; }
 const hrs = v => Array.from({ length: 24 }, (_, h) => `<option value="${h}"${+v === h ? ' selected' : ''}>${h === 0 ? '12 AM' : h < 12 ? h + ' AM' : h === 12 ? '12 PM' : h - 12 + ' PM'}</option>`).join('');
 function feelHtml() { return `${sw('p.sound', P.sound, 'Sound', 'Felt ticks, chips, the deal, brass for a win. Your phone’s silent switch silences it.')}
     <div class="cc-vol"><label for="ccVol">Volume</label><input id="ccVol" type="range" min="0" max="1" step="0.05" value="${P.vol}" data-ccx="vol"><button type="button" class="btn line sm" data-act="ccx" data-k="hear">Hear it</button></div>
@@ -242,7 +243,10 @@ async function ccAct(k, v, el) {
   if (k === 'tab') { CC.tab = v; CC.msg = ''; ccPaint(false); if (v === 'alerts') { CC.push = await pushState(); ccPaint(true); } return; }
   if (k === 'pushon' || k === 'pushoff') { CC.busy = true; ccPaint(true); try { CC.push = k === 'pushon' ? await pushOn() : await pushOff(); CC.msg = k === 'pushon' ? (CC.push.sub ? 'Done. A quiet test is on its way.' : '') : 'Alerts are off on this device.';
       if (k === 'pushon' && CC.push.sub) post('/push/test', { endpoint: CC.push.sub.endpoint }).catch(() => { }); } catch (e) { CC.msg = 'That didn’t go through: ' + (e.message || 'try again'); } CC.busy = false; ccPaint(true); badge(); return; }
-  if (k === 'pushtest') { try { const st = await pushState(); if (st.sub) await post('/push/test', { endpoint: st.sub.endpoint }); toast('Test sent'); } catch (e) { toast('The test didn’t go through'); } return; }
+  if (k === 'pushtest') { if (CC.busy) return; CC.busy = true; CC.msg = ''; ccPaint(true);
+    try { const st = await pushState(); if (!st.sub) CC.msg = 'Alerts aren’t on for this device yet: tap Turn on alerts.'; else { await post('/push/test', { endpoint: st.sub.endpoint }); CC.msg = 'Test sent. It should land in a few seconds.'; } }
+    catch (e) { CC.msg = /minute/i.test(e.message || '') ? 'One test a minute: the last one just went out. Try again in a minute.' : 'That test didn’t go through: ' + (e.message || 'try again') + '.'; }
+    CC.busy = false; ccPaint(true); return; }
   if (k === 'hear') { cue('select'); setTimeout(() => cue('cash'), 380); return; }
   if (k === 'motion') { P.motion = v; savePrefs(); ccPaint(true); return; }
   if (k === 'md.sp' || k === 'md.ch') { const key = k.slice(3); MD[key] = !v ? [] : MD[key].includes(v) ? MD[key].filter(x => x !== v) : MD[key].concat(v); mdSave(); return; }
@@ -299,7 +303,7 @@ body.cc-on{overflow:hidden}
 .cc-sw{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 0;border-bottom:1px solid rgba(255,244,214,.08);cursor:pointer}.cc-sw b{display:block;font:700 15px/1.2 var(--text);color:var(--cream)}.cc-sw small{display:block;margin-top:2px;font-size:12.5px;color:var(--cream-3)}
 .cc-sw input{flex:none;width:46px;height:28px;accent-color:#d9ab3c}
 .cc-row{display:flex;gap:12px;flex-wrap:wrap}.cc-row label{display:flex;align-items:center;gap:8px;color:var(--cream-2);font-size:14px}.cc-row select{min-height:40px;border-radius:10px;border:1px solid rgba(242,208,103,.35);background:#0d1812;color:var(--cream);padding:0 10px;font:600 14px var(--text)}
-.cc-fine{margin:12px 0 0;font-size:12.5px;color:var(--cream-3);line-height:1.45}.cc-fine .link{color:var(--foil)}.cc-warn{margin:10px 0 0;color:#ffb4a8;font-size:13.5px}.cc-msg{margin:10px 0 0;color:#a8e6c1;font-size:13.5px}
+.cc-test{margin:14px 0 0}.cc-fine{margin:12px 0 0;font-size:12.5px;color:var(--cream-3);line-height:1.45}.cc-fine .link{color:var(--foil)}.cc-warn{margin:10px 0 0;color:#ffb4a8;font-size:13.5px}.cc-msg{margin:10px 0 0;color:#a8e6c1;font-size:13.5px}
 .cc-vol{display:flex;align-items:center;gap:12px;margin:6px 0 4px}.cc-vol label{color:var(--cream-2);font-size:14px}.cc-vol input{flex:1;accent-color:#d9ab3c}
 .cc-seg{display:inline-flex;padding:3px;border-radius:99px;border:1px solid rgba(244,236,216,.22)}.cc-seg button{min-height:36px;padding:0 18px;border:0;border-radius:99px;background:none;color:var(--cream-2);font:700 14px var(--text);cursor:pointer}.cc-seg button[aria-pressed="true"]{background:var(--cream);color:#14231b}
 .cc-lede{margin:4px 0 0;color:var(--cream-2);font-size:14.5px;line-height:1.45}

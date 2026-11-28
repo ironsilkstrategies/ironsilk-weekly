@@ -1674,3 +1674,14 @@ html[data-vt=back]::view-transition-old(page){animation:vtOutR .16s cubic-bezier
 .fs-pill.clear{background:none;box-shadow:inset 0 0 0 1px rgba(242,208,103,.45);color:var(--foil)}
 /* v88 audit · contrast that axe measured short of 4.5:1 */
 .hmrow .lv-on{color:#ff8f80}.paper .g-t.live,.game .g-t.live{color:#b3261e}.lens.on small{opacity:1;color:#4d3f12}.slip-head .fchip.live,.fchip.live{color:#fff;background:#b3261e}
+.whisper:hover .wh-track,.whisper:active .wh-track{animation-play-state:paused}html.calm .wh-track{animation-play-state:paused}
+/* v90 · Chris, Nov 27 (with a screenshot): "sometimes the bar is unseeable in certain backgrounds". Over a paper card the glass went
+   pale and the cream labels vanished: the dock is now dark glass that stays dark whatever scrolls under it, the labels brighter.
+   And iPhone drew the new buttons with its own button look (no gold on Filters when it was on): every new button opts out of it. */
+@media (max-width:919.98px){
+  .tabs{background:linear-gradient(180deg,rgba(18,54,38,.9),rgba(4,20,12,.95));-webkit-backdrop-filter:blur(22px) saturate(1.5);backdrop-filter:blur(22px) saturate(1.5);
+    border-color:rgba(255,244,214,.2);box-shadow:0 18px 40px -10px rgba(0,0,0,.75),0 0 0 1px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,246,220,.24),inset 0 -1px 0 rgba(0,0,0,.4)}
+  .tabs button,.tabs .rooms-btn{color:rgba(243,238,223,.82)}
+  .tabs button[aria-current="page"],.tabs .rooms-btn.here,.tabs .rooms-btn[aria-expanded="true"]{color:var(--foil)}
+}
+.fs-btn,.fs-pill,.fs-x,.howto-open,.howto.mini .howx,.jh,.rm,.cc-out,.cc-chip,.ccsheet .cc-tabs button,.cc-seg button,.fs-done{-webkit-appearance:none;appearance:none}

@@ -678,7 +678,8 @@ function viewProps() {
   const sps = [...new Set(all.map(x => x.sp))], stats = [...new Set(all.filter(x => f.sp === 'all' || x.sp === f.sp).map(x => x.lab))];
   el.innerHTML = `<h1 class="title">Props</h1><p class="lede">Every prop the characters like today: his last 10 against the line, the run he's on, who's at the table, and one Desk Score to read it all.</p>
     ${howTo('props', 'How to read a prop card', ['<b>The Desk Score</b> (0–100) sums it all up: higher is stronger.', '<b>Gold bars</b> are his last 10 games: gold means he cleared the line that night. During his game a meter shows his number live.', 'Tap <b>＋ Add to slip</b> on a few cards to build your own ticket, then track it.'])}
-    ${W.length ? `<div class="whisper" aria-label="Whispers"><div class="wh-track">${[...W, ...W].map(t => `<span>${esc(t)}</span>`).join('')}</div></div>` : ''}
+    ${W.length ? (() => { const W2 = W.slice(0, 14), sec = Math.max(30, Math.round(W2.reduce((s, t) => s + String(t).length * 7.4 + 36, 0) / 38));   /* v90 · Chris, Nov 27: “the props scroll is going a million miles a minute”: a fixed 48 s for any number of whispers ran 250+ px a second on a big night; now about 38 px a second, however many there are */
+      return `<div class="whisper" aria-label="Whispers"><div class="wh-track" style="animation-duration:${sec}s">${[...W2, ...W2].map(t => `<span>${esc(t)}</span>`).join('')}</div></div>`; })() : ''}
     ${all.length ? `<div class="lenses" role="toolbar" aria-label="Lenses">${Object.entries(PL).map(([k, t]) => { const n = all.filter(x => lensOk(x, k)).length; return k === 'live' && !n && f.lens !== 'live' ? '' : chip('lens', k, t, n); }).join('')}</div>
     ${fsBar('props', pfPills(f), `<div class="pview">${['cards', 'sheet'].map(v => `<button type="button" class="${f.view === v ? 'on' : ''}" data-act="pf" data-k="view" data-v="${v}">${v === 'cards' ? 'Cards' : 'Sheet'}</button>`).join('')}</div>`)}
     ${fsSheet('props', 'Filter the props', `<h4 class="fs-k">Sport</h4><div class="lenses sub wrap">${chip('sp', 'all', 'All sports')}${sps.map(s => chip('sp', s, LEAGUE[s] || s)).join('')}</div>
@@ -1738,7 +1739,7 @@ window.addEventListener('appinstalled', () => { S.canPrompt = null; closeGuide()
 
 /* ── shell ───────────────────────────────────────────────────────────────── */
 function toast(msg) {
-  let t = $('#toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); t.style.cssText = 'position:fixed;left:50%;bottom:calc(var(--tabs) + 22px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;background:#15130F;color:#F6F1E4;padding:11px 16px;border-radius:10px;font-weight:650;font-size:14.5px;box-shadow:0 10px 24px rgba(0,0,0,.45);max-width:88vw;text-align:center'; document.body.appendChild(t); }
+  let t = $('#toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); t.style.cssText = 'position:fixed;left:50%;bottom:calc(var(--tabs) + 22px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:96;background:#15130F;color:#F6F1E4;padding:11px 16px;border-radius:10px;font-weight:650;font-size:14.5px;box-shadow:0 10px 24px rgba(0,0,0,.45);max-width:88vw;text-align:center'; document.body.appendChild(t); }
   t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2600);
 }
 async function share() {
@@ -2495,7 +2496,7 @@ document.addEventListener('keydown', e => {
 const FOLD = new Set(); document.addEventListener('toggle', e => { const d = e.target; if (!d || !d.dataset || !d.dataset.fold) return; if (d.open) FOLD.add(d.dataset.fold); else FOLD.delete(d.dataset.fold); }, true);
 const legStrip = L => `<span class="fl-strip" aria-hidden="true">${L.map(l => `<i class="${l.st === 'open' && l.game && (liveOf(l) || {}).state === 'in' ? 'live' : (FST[l.st] || FST.open)[1]}"></i>`).join('')}</span>`;
 /* the effects layer (sound, haptics, foil, the alerts and widget sheets) loads on its own once the page is up: if it can't, the app is the same app */
-let FX = null; const fxLoad = () => FX || (FX = import('./fx.js?v=2').then(m => { try { m.boot && m.boot(FXAPI); } catch (e) { } return m; }, e => { FX = null; throw e; }));
+let FX = null; const fxLoad = () => FX || (FX = import('./fx.js?v=3').then(m => { try { m.boot && m.boot(FXAPI); } catch (e) { } return m; }, e => { FX = null; throw e; }));
 const FXAPI = { S, store, toast, go: (t) => go(t, true), esc, deskDay, LEAGUE, teamName, clock, roomsClose, feed: () => S.feed, slate: () => S.slate, acct: () => acctPass(), cfg: () => CFG };
 const confirmQuit = (b, msg) => { if (b.dataset.sure === '1') return true; b.dataset.sure = '1'; b.textContent = msg || 'Tap again to quit'; return false; };
 /* ── The owner's dashboard (v3.1.1, Chris, Nov 15: "an admin dashboard … stats on users and names and balances … a subscriber
