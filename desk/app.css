@@ -1685,3 +1685,9 @@ html[data-vt=back]::view-transition-old(page){animation:vtOutR .16s cubic-bezier
   .tabs button[aria-current="page"],.tabs .rooms-btn.here,.tabs .rooms-btn[aria-expanded="true"]{color:var(--foil)}
 }
 .fs-btn,.fs-pill,.fs-x,.howto-open,.howto.mini .howx,.jh,.rm,.cc-out,.cc-chip,.ccsheet .cc-tabs button,.cc-seg button,.fs-done{-webkit-appearance:none;appearance:none}
+/* v91 · the room shows at once after a tap and fades in quickly (no page-turn snapshots); solid colors under every gradient, so
+   nothing can paint pale if a gradient doesn't */
+.view:not([hidden]){animation:viewIn .16s ease-out}@keyframes viewIn{from{opacity:.001}}
+html.calm .view:not([hidden]){animation:none}@media (prefers-reduced-motion:reduce){.view:not([hidden]){animation:none}}
+@media (max-width:919.98px){.tabs{background-color:#0a2417}}
+.joinpill,.acctbtn.in,.fs-btn.on{background-color:#ddb04a}

@@ -121,6 +121,13 @@ iPhone: run the Scriptable script from the bell → My Desk → iPhone on a real
 sealed pick shows "opens 7:10 PM" and never the pick.
 **Done when.** Screenshots from both devices are in this file under item 10.
 
+## 10b · Page turns, carefully
+
+The v88 page turn (a same-document view transition) was removed in v91: on Chris's iPhone the header and the dock lost their fills
+while it ran and the room came in late behind its sound. Tabs now switch at once (a room that's been open shows its last look and
+redraws a frame later). If page turns come back, test on a real iPhone first and keep the header and dock out of the snapshot.
+First visits to Slate and Props still take 0.3–0.5 s at phone speed: profile `viewSlate` and `viewProps` and cut the work.
+
 ## 11 · Check the Cloudflare plan
 
 **Why.** The Push object sends eight per wake-up to fit the free plan (10 ms CPU, 50 subrequests).
@@ -129,6 +136,8 @@ sealed pick shows "opens 7:10 PM" and never the pick.
 
 ## 12 · Steady the flaky tests
 
-perf_test, sync1123, slow_test, home1123 and sgp_match_test fail now and then under load. Find each one's timing assumption
+perf_test, sync1123, slow_test, home1123 and sgp_match_test fail now and then under load. pubapp1112 (the live-leg and "scores keep
+updating" checks) and relayloop1016 also fail just after midnight Central (seen at 12:05 AM Nov 28 on the old build too): they read the real
+clock for "today". Pin their clocks. Find each one's timing assumption
 (fixed sleeps, wall-clock budgets) and wait for a condition instead.
 **Done when.** Ten full runs in a row are green.

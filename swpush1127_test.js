@@ -27,6 +27,6 @@ let pass = 0, fail = 0; const T = (n, c, x) => { c ? pass++ : fail++; console.lo
   posts.length = 0; H.pushsubscriptionchange({ oldSubscription: { endpoint: 'https://fcm.googleapis.com/old' }, waitUntil: p => { w = p; } }); await w;
   const sub = posts.find(x => /\/push\/sub$/.test(x.u)), un = posts.find(x => /\/push\/unsub$/.test(x.u));
   T('the push service rotated the address: the worker subscribes again with the member\'s own switches, zone and sports, and drops the old one', sub && sub.b.sub.endpoint === 'https://fcm.googleapis.com/new' && sub.b.tz === 'America/New_York' && sub.b.desk.sp[0] === 'nba' && sub.b.prefs.graded === false && un && un.b.endpoint === 'https://fcm.googleapis.com/old', JSON.stringify(posts.map(x => x.u)));
-  T('the shell caches the new pieces (Rooms, the effects layer, the widget page) under a new version', /thedesk-shell-v93/.test(src) && ['rooms.js?v=2', 'fx.js?v=3', 'widget.html', 'widget.js?v=1', 'app.js?v=90', 'app.css?v=68'].every(f => src.includes(`'${f}'`)));
+  T('the shell caches the new pieces (Rooms, the effects layer, the widget page) under a new version', /thedesk-shell-v94/.test(src) && ['rooms.js?v=2', 'fx.js?v=3', 'widget.html', 'widget.js?v=1', 'app.js?v=91', 'app.css?v=69'].every(f => src.includes(`'${f}'`)));
 } catch (e) { T('harness', false, e.stack); }
 console.log(`\n${pass}/${pass + fail} passed`); process.exit(fail ? 1 : 0); })();

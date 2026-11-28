@@ -2630,18 +2630,13 @@ async function viewGc() {
   if (S.tab !== 'gc' || S.gc !== g) return; GC_ON = key; GCM.mount(el, { sp: g.sp, id: g.id, back: gcBack, picksHtml: () => gcPicks(g) }); }
 const VIEWS = { today: viewToday, slate: viewSlate, props: viewProps, me: viewMe, tix: viewTix, gc: viewGc, live: viewLive, longshots: viewLongshots, challenges: viewChallenges, leagues: viewLeagues, admin: viewAdmin, cast: viewCast, chat: viewChat, receipts: viewReceipts, join: viewJoin, u: viewProfile };
 function render() { VIEWS[S.tab](); }
-let GO_N = 0, VT_ON = false;
-const VT_ORDER = ['today', 'slate', 'props', 'longshots', 'challenges', 'leagues', 'cast', 'chat', 'receipts', 'tix', 'me', 'join'];
+/* v91 · Chris, Nov 27 (iPhone): the bar went pale and the gold buttons lost their fill during a page turn, and a tab's room came in
+   late behind its sound. The page turn (a view transition) is gone: a tap shows the room at once, and the room fades in over 0.16 s. */
 function go(tab, push) {
   if (ROOMS.open) roomsClose(); if ((($('#infoLayer') || {}).innerHTML || '').trim()) infoClose(); S.fs = '';
-  const vt = GO_N++ > 0 && typeof document.startViewTransition === 'function' && !VT_ON && !document.hidden && (!navigator.webdriver || /[?&]vt=1/.test(location.search))
-    && !document.documentElement.classList.contains('calm') && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (!vt) { goNow(tab, push); dockPaint(); return; }
-  const a = VT_ORDER.indexOf(S.tab), b = VT_ORDER.indexOf(String(tab).split('=')[0]);
-  document.documentElement.dataset.vt = a >= 0 && b >= 0 && b < a ? 'back' : 'fwd'; VT_ON = true;
-  try { document.startViewTransition(() => { goNow(tab, push); dockPaint(); }).finished.finally(() => { VT_ON = false; delete document.documentElement.dataset.vt; }); }
-  catch (e) { VT_ON = false; delete document.documentElement.dataset.vt; goNow(tab, push); dockPaint(); }
+  goNow(tab, push); dockPaint();
 }
+let GO_RAF = 0;
 function goNow(tab, push) {
   /* v3.3 · #u=<name> opens a member's public record (the Open Scoreboard) */
   if (typeof tab === 'string' && tab.startsWith('u=')) { try { S.profile = decodeURIComponent(tab.slice(2)); } catch { S.profile = tab.slice(2); } tab = 'u'; }
@@ -2656,7 +2651,11 @@ function goNow(tab, push) {
   for (const t of TABS) $('#v-' + t).hidden = t !== tab;
   for (const b of $$('[data-go]')) { if (b.closest('.tabs,.nav-top') || b.id === 'tixBtn') { if (b.dataset.go === tab || (b.dataset.also || '').split(' ').includes(tab)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); } }
   const hash = '#' + (tab === 'u' ? 'u=' + encodeURIComponent(S.profile) : tab === 'gc' ? `gc=${S.gc.sp}:${S.gc.id}` : tab); if (push && location.hash !== hash) history.pushState(null, '', hash);
-  render(); window.scrollTo(0, 0);
+  /* v91 · a room that's been open before shows at once (its last look), and redraws a frame later: the tap answers in one frame
+     instead of after a full redraw (a quarter to half a second on a phone) */
+  const VW = $('#v-' + tab); window.scrollTo(0, 0);
+  if (VW && VW.childElementCount > 1 && typeof requestAnimationFrame === 'function') { cancelAnimationFrame(GO_RAF); GO_RAF = requestAnimationFrame(() => setTimeout(() => { if (S.tab === tab) { render(); window.scrollTo(0, 0); } }, 0)); }
+  else render();
   try { if (TG && TG.BackButton) { if (tab === 'today') TG.BackButton.hide(); else TG.BackButton.show(); } } catch (e) { }
   if (tab === 'slate') { if (!S.slate) loadSlate(); else slateLive(); }
   if (tab === 'props') { if (!S.slate) loadSlate().then(() => { if (S.tab === 'props') whenFree(render); }, () => { }); if (Date.now() - (S.liveAt || 0) > 20e3) liveTick(); }   /* v81 · the cards find their games and follow them */

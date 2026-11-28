@@ -1,8 +1,8 @@
 /* TheDesk public app — offline shell. Pages and assets: network first, so a new deploy shows up at once; the cached
    copy only answers when the network can't. The picks feed, the slate and live scores always go to the network
    (the page keeps its own last good copy). */
-const V = 'thedesk-shell-v93';
-const SHELL = ['./', 'index.html', 'app.css?v=68', 'app.js?v=90', 'rooms.js?v=2', 'fx.js?v=3', 'widget.html', 'widget.js?v=1', 'gamecast.js?v=1', 'wire.js?v=1', 'voice.js?v=3', 'chal-lib.js?v=1', 'privacy.html', 'manifest.webmanifest', 'fonts/big-shoulders.woff2', 'fonts/franklin.woff2', 'fonts/franklin-italic.woff2', '../brand/badge-112.png', '../brand/icon-192.png'];
+const V = 'thedesk-shell-v94';
+const SHELL = ['./', 'index.html', 'app.css?v=69', 'app.js?v=91', 'rooms.js?v=2', 'fx.js?v=3', 'widget.html', 'widget.js?v=1', 'gamecast.js?v=1', 'wire.js?v=1', 'voice.js?v=3', 'chal-lib.js?v=1', 'privacy.html', 'manifest.webmanifest', 'fonts/big-shoulders.woff2', 'fonts/franklin.woff2', 'fonts/franklin-italic.woff2', '../brand/badge-112.png', '../brand/icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('thedesk-shell-') && k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim()).then(() => widgetsAll())); });
 self.addEventListener('fetch', e => {
